@@ -1,0 +1,145 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Icons\back-office-icon-13.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Icons\back-office-icon-13.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.0.143" />
+    <PackageReference Include="DevExpress.Dashboard.Core" Version="23.1.5" />
+    <PackageReference Include="DevExpress.Drawing" Version="23.1.5" />
+    <PackageReference Include="DevExpress.ExpressApp.Chart.Win" Version="23.1.5" />
+    <PackageReference Include="DevExpress.ExpressApp.Dashboards.Win" Version="23.1.5" />
+    <PackageReference Include="DevExpress.Printing.Core" Version="23.1.5" />
+    <PackageReference Include="DevExpress.Win" Version="23.1.5" />
+    <PackageReference Include="DevExpress.Win.Design" Version="23.1.5" />
+    <PackageReference Include="DevExpress.Win.Printing" Version="23.1.5" />
+    <PackageReference Include="EPPlus" Version="6.2.8" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.100" />
+    <PackageReference Include="System.Data.Odbc" Version="7.0.0" />
+    <PackageReference Include="ZXing.Net" Version="0.16.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="FrmClosingYear.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Frmlogin.cs" />
+    <Compile Update="frmPending.cs" />
+    <Compile Update="Laporan\rptDaftarTagihanKreditBarang.cs" />
+    <Compile Update="Laporan\rptFakturJual.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptFakturPenjualan.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptTagihanPinjaman_nik.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptTagihanKreditBarang_nik.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptKreditBarangPiutang.cs" />
+    <Compile Update="Laporan\rptPenjualanKredit.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPenjualanTempo.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPenjualanTunai.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPinjamanTunaiPiutang.cs" />
+    <Compile Update="Laporan\rptSimulasiAngsuran.cs" />
+    <Compile Update="Laporan\rptSimulasiAngsuranSub.cs" />
+    <Compile Update="Laporan\rptTagihan_PenjualanDetails_NIK.cs" />
+    <Compile Update="Laporan\rptTagihan_PenjualanDetails.cs" />
+    <Compile Update="PaymentForm.cs" />
+    <Compile Update="ProductForm.cs" />
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="UC\Finance\ucDaftarKAS.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucKAS_AddEdit.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Pembelian\ucDaftarPembelian.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucPenerimaanPembayaran.cs" />
+    <Compile Update="UC\Finance\ucUnitKerja.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Pembelian\ucPembelianEdit.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Pembelian\ucPembelian.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucAnalisaLabaRugi.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucLabaRugi.cs" />
+    <Compile Update="UC\Penjualan\ucPenjualanEdit.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucKartuStock.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucDaftarSO.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucLaporanPersediaan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucBarangRusak.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucLaporanMaster.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucSettings.cs" />
+    <Compile Update="UC\Finance\ucPinjaman.cs" />
+    <Compile Update="UC\Penjualan\ucPenjualanTunai.cs" />
+    <Compile Update="UC\Finance\ucDaftarPinjaman.cs" />
+    <Compile Update="View\frmEditFakturPembelian.cs" />
+    <Compile Update="View\frmEditFakturPinjaman.cs" />
+    <Compile Update="View\frmKAS.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\frmViewFakturPenjualan.cs">
+      <SubType>Form</SubType>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Icons\defaultimage.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

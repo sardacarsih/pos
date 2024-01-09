@@ -1,0 +1,19 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Penjualan.Model
+{
+    public class DTOAngsuranKreditBarang
+    {
+        public Int32 PERIODE { get; set; }
+        public string NO_TRANSAKSI { get; set; }
+        public DateTime TANGGALJATUHTEMPO { get; set; }
+        public int ANGSURANKE { get; set; }
+        public decimal SALDOAWAL { get; set; }
+        public decimal ANGSURAN { get; set; }
+        public decimal SALDOAKHIR { get; set; }
+    }
+}

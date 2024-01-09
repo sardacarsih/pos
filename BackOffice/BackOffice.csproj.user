@@ -1,0 +1,181 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <_LastSelectedProfileId>D:\Project\BackOffice\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Update="BackOffice.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="FrmClosing.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="frmfixedform.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Frmlogin.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="frmPending.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptDaftarTagihanKreditBarang.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptDaftarTagihanPinjamanTunai.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptkartustock.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptKreditBarangPiutang.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptKTA.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptktafile.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptLaporanKartuStokBarang.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPembelianRekap.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPembelianDetail.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPenjualan.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPenjualanRekap.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPinjamanTunai.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptPinjamanTunaiPiutang.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptRekapbyUnitKerja.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptRekapJual.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptSimulasiAngsuran.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptSimulasiAngsuranSub.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptTagihan_Penjualan.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptTagihan_PenjualanDetails.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptTagihan_PenjualanDetails_NIK.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptStockOpname.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="PaymentForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ProductForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucTagihan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucDaftarPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucLabaRugi.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucPenjualanPending.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucReturPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucDaftarPersediaan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucStockOpname.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucDaftarPinjaman.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucLaporanPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucDaftarBarang.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucDashBoard.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucLaporan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucMasterAnggota.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucPenerimaanPembayaran.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Penjualan\ucPenjualanTunai.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucMasterBarang.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucPeriode.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Finance\ucPinjaman.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\Persediaan\ucSatuan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucSettings.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="View\frmEditFakturPembelian.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\frmEditFakturPenjualan.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\frmEditFakturPinjaman.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\FrmJurnal.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\frmMasterBarang.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="View\rptparameter.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="WaitForm1.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="WaitForm1.Designer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="WaitForm1.resx">
+      <SubType>Code</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

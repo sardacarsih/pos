@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <_LastSelectedProfileId>D:\Project\Penjualan\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Update="Frmlogin.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="frmPending.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptFakturPenjualan.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptRekapJual.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptSimulasiAngsuran.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="Laporan\rptSimulasiAngsuranSub.cs">
+      <SubType>XtraReport</SubType>
+    </Compile>
+    <Compile Update="PaymentForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="PenjualanKasir.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ProductForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UC\ucDaftarPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucDashBoard.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucLaporan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucPembayaran.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UC\ucReturPenjualan.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+  </ItemGroup>
+</Project>
