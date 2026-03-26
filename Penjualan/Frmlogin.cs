@@ -121,88 +121,52 @@ namespace Penjualan
                     XtraMessageBox.Show("3 Kesempatan Gagal digunakan - Hubungi Manager Anda", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
-                //jika user dan password admin masuk menu
-                if (txtuserid.Text == "Admin" && txtpwd.Text == "admin123")
+                string pwd = txtpwd.Text;
+                using OracleCommand cmd = new("SELECT * FROM VLOGIN where userid=:USERID  AND APPID='' ", con);
+
+                if (con.State != ConnectionState.Open)
                 {
-                    Hide();
-                    new PenjualanKasir().Show();
+                    con.Open();
                 }
-                else
+                cmd.Parameters.Add(":USERID", OracleDbType.Varchar2, 25).Value = txtuserid.Text.ToLower();
+
+                OracleDataReader dr;
+                dr = cmd.ExecuteReader();
+                if (dr.HasRows)
                 {
-                    string pwd = txtpwd.Text;
-                    using OracleCommand cmd = new("SELECT * FROM VLOGIN where userid=:USERID  AND APPID='' ", con);
+                    dt = new DataTable();
+                    dt.Load(dr);
+                    string hashPass = dt.Rows[0]["PASSWORD"].ToString();
 
-                    if (con.State != ConnectionState.Open)
+                    var p = new PasswordCryptographyPbkdf2();
+
+                    bool masuk = p.IsValidPassword(pwd, hashPass);
+                    if (masuk)
                     {
-                        con.Open();
-                    }
-                    cmd.Parameters.Add(":USERID", OracleDbType.Varchar2, 25).Value = txtuserid.Text.ToLower();
+                        LoginInfo.role = dt.Rows[0]["AKSESROLE"].ToString();
+                        LoginInfo.userID = dt.Rows[0]["USERID"].ToString();
 
-                    OracleDataReader dr;
-                    dr = cmd.ExecuteReader();
-                    if (dr.HasRows)
-                    {
-                        dt = new DataTable();
-                        dt.Load(dr);
-                        string hashPass = dt.Rows[0]["PASSWORD"].ToString();
-
-                        var p = new PasswordCryptographyPbkdf2();
-
-                        bool masuk = p.IsValidPassword(pwd, hashPass);
-                        // bool masuk = true;
-                        if (masuk)
-                        {
-
-                            if (dt.Rows.Count > 1)
-                            {
-                                //LoginInfo.role = dt.Rows[0]["AKSESROLE"].ToString();
-                                //LoginInfo.userID = dt.Rows[0]["USERID"].ToString();
-
-                                //Hide();
-                                //new FrmLokasi().Show();
-                            }
-                            else
-                            {
-                                //LoginInfo.role = dt.Rows[0]["AKSESROLE"].ToString();
-                                //LoginInfo.userID = dt.Rows[0]["USERID"].ToString();
-                                //CompanyInfo.INIT = dt.Rows[0]["IDDATA"].ToString();
-                                //CompanyInfo.JENIS_AKUNTING = dt.Rows[0]["JENIS_AKUNTANSI"].ToString();
-                                //CompanyInfo.NAMAPT = dt.Rows[0]["NAMAPT"].ToString();
-                                //CompanyInfo.WILAYAH = dt.Rows[0]["WILAYAH"].ToString();
-
-                                //Acct.TahunMin = AccountServices.MinTahunCOA(CompanyInfo.INIT);
-                                //Acct.TahunMax = AccountServices.MaxTahunCOA(CompanyInfo.INIT);
-                                //Acct.PeriodeMin = AccountServices.GetMinPeriode(CompanyInfo.INIT);
-                                //Acct.PeriodeMax = AccountServices.GetMaxPeriode(CompanyInfo.INIT);
-
-                                //this.Hide();
-                                //new MainView().Show();
-                            }
-                        }
-                        else
-                        {
-                            --kesempatan;
-                            XtraMessageBox.Show("Password Salah. " +
-                               "\nAnda Memiliki " + Convert.ToString(kesempatan) + "X Kesempatan untuk Mencoba", "Perhatian", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        }
-
+                        Hide();
+                        new PenjualanKasir().Show();
                     }
                     else
                     {
-                        this.Player.SoundLocation = Environment.CurrentDirectory + "\\wav\\nore_userid.wav";
-                        this.Player.Play();
-
-                        XtraMessageBox.Show("UserID tidak terdaftar. " +
-                            "\nAnda Memiliki " + Convert.ToString(kesempatan) + "X Kesempatan untuk Mencoba", "Perhatian", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
                         --kesempatan;
-                        txtuserid.Focus();
-                        txtpwd.Focus();
+                        XtraMessageBox.Show("Password Salah. " +
+                           "\nAnda Memiliki " + Convert.ToString(kesempatan) + "X Kesempatan untuk Mencoba", "Perhatian", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
-                    dr.Close();
-                    con.Close();
 
                 }
+                else
+                {
+                    XtraMessageBox.Show("UserID tidak terdaftar. " +
+                        "\nAnda Memiliki " + Convert.ToString(kesempatan) + "X Kesempatan untuk Mencoba", "Perhatian", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+                    --kesempatan;
+                    txtuserid.Focus();
+                }
+                dr.Close();
+                con.Close();
             }
             catch (SystemException ex)
             {
