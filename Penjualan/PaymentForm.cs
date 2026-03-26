@@ -1,25 +1,33 @@
-﻿using Dapper;
-using DevExpress.XtraEditors;
+﻿using DevExpress.XtraEditors;
 using DevExpress.XtraReports.UI;
-using Oracle.ManagedDataAccess.Client;
 using Penjualan.BusinessLayer;
 using Penjualan.Laporan;
 using Penjualan.Model;
-using System.Data;
-using System.Globalization;
+
 
 namespace Penjualan
 {
     public partial class PaymentForm : DevExpress.XtraEditors.XtraForm
     {
+        private const string DEFAULT_CUSTOMER_NIK = "00.00004";
         PendingController controller = new();
         public bool PendingFaktur { get; set; }
         private string jenis_pembayaran = "TUNAI";
         private string ket_pembayaran = "KAS";
         string NIK, STATUS, UNIT_KERJA;
-        double ID, JUMLAHFAKTUR;
+        double ID;
+        decimal JUMLAHFAKTUR, LIMIT;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTOFakturPenjualanDetail> ListItemsPenjualan { get; set; }
+
+
+        public DateTime BulananDari { get; set; }
+        public DateTime BulananSampai { get; set; }
+        public DateTime Remise1Dari { get; set; }
+        public DateTime Remise1Sampai { get; set; }
+        public DateTime Remise2Dari { get; set; }
+        public DateTime Remise2Sampai { get; set; }
+
 
         public PaymentForm()
         {
@@ -32,7 +40,7 @@ namespace Penjualan
         {
             FinSettingsDataAccess finsetting = new();
             txttotal.Text = FakturPenjualanHeader.TOTAL.ToString();
-            JUMLAHFAKTUR = Convert.ToDouble(FakturPenjualanHeader.TOTAL);
+            JUMLAHFAKTUR = FakturPenjualanHeader.TOTAL;
             Load_angsuran(finsetting.GetMaxAngsuran());
             Load_Pelanggan();
             leangsuran.ItemIndex = 0;
@@ -50,20 +58,8 @@ namespace Penjualan
             leangsuran.Properties.DataSource = Angsuran;
         }
 
-        private void Load_angsuranStatik(int tenor)
-        {
-            Dictionary<int, string> Angsuran = new();
 
-            // Define maximum allowed installment values for the selected month
-            int maxAllowedInstallments = maxInstallments[tenor];
 
-            for (int i = 1; i <= maxAllowedInstallments; i++)
-            {
-                Angsuran.Add(i, i + " Kali");
-            }
-
-            leangsuran.Properties.DataSource = Angsuran;
-        }
 
         List<DTOPelanggan> datasource;
         private void Load_Pelanggan()
@@ -73,46 +69,43 @@ namespace Penjualan
             searchLookUpEdit1.Properties.DisplayMember = "NAMA_PELANGGAN";
             searchLookUpEdit1.Properties.ValueMember = "NIK";
             // Set the default value for searchLookUpEdit1
-            int index = datasource.FindIndex(item => item.NIK == "00.00004");
-
-            searchLookUpEdit1.EditValue = datasource[index].NIK;
+            int index = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
+            if (index >= 0)
+                searchLookUpEdit1.EditValue = datasource[index].NIK;
         }
 
         private static List<DTOPelanggan> GetPelanggan()
         {
-            string query = @"SELECT A.ID_PELANGGAN, A.NIK, A.NAMA_PELANGGAN, A.UNIT_KERJA,K.NAMA UNITKERJA, A.STATUS, A.LIMIT_HUTANG FROM FIN_ANGGOTA A
-                            JOIN FIN_UNITKERJA K ON K.KODE=A.UNIT_KERJA
-                            WHERE A.AKTIF='Y' ORDER BY A.NAMA_PELANGGAN";
-
-            using OracleConnection connection = new(global.connectionString);
-
-            if (connection.State != ConnectionState.Open)
-            {
-                connection.Open();
-            }
-
-            List<DTOPelanggan> pelangganList = connection.Query<DTOPelanggan>(query).ToList();
-
-            connection.Close();
-
-            return pelangganList;
+            return POS_Services.GetPelangganAktif();
         }
         private void sbsimpancetak_Click(object sender, EventArgs e)
         {
             if (searchLookUpEdit1.EditValue != null)
             {
-                bayar = decimal.Parse(txtcash.Text);
-                if (searchLookUpEdit1.EditValue.ToString() == "00.00004" && (bayar == 0 || kembalian < 0))
+                if (!decimal.TryParse(txtcash.Text, out bayar))
+                    bayar = 0;
+                if (searchLookUpEdit1.EditValue.ToString() == DEFAULT_CUSTOMER_NIK && (bayar == 0 || kembalian < 0))
                 {
                     txtcash.Focus();
                     XtraMessageBox.Show("Pembayaran harus lebih besar atau sama dengan", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                SimpanFakturPenjualan("T");
-                //cetak
-                CetakFaktur();
-
-                this.DialogResult = DialogResult.OK;
+                try
+                {
+                    SimpanFakturPenjualan("T");
+                    CetakFaktur();
+                    this.DialogResult = DialogResult.OK;
+                }
+                catch (CreditLimitExceededException ex)
+                {
+                    sbsimpancetak.Enabled = false;
+                    XtraMessageBox.Show(
+                        $"Transaksi tidak dapat disimpan karena limit hutang telah terlampaui.\n\n" +
+                        $"Hutang Saat Ini     : Rp. {ex.CurrentDebt:N0}\n" +
+                        $"Jumlah Faktur Baru  : Rp. {ex.InvoiceAmount:N0}\n" +
+                        $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
+                        "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
@@ -133,33 +126,47 @@ namespace Penjualan
             FakturPenjualanHeader.ANGSURAN = FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR;
             FakturPenjualanHeader.PENDING = ispending;
 
+            // Build credit limit check for non-cash customers
+            CreditLimitCheck? creditCheck = null;
+            if (NIK != DEFAULT_CUSTOMER_NIK && LIMIT != 0)
+            {
+                DateTime dari, sampai;
+                if (STATUS == "BULANAN")
+                {
+                    dari = BulananDari;
+                    sampai = BulananSampai;
+                }
+                else
+                {
+                    dari = Remise1Dari;
+                    sampai = Remise2Sampai;
+                }
+
+                creditCheck = new CreditLimitCheck
+                {
+                    NIK = NIK,
+                    STATUS = STATUS,
+                    Limit = LIMIT,
+                    InvoiceAmount = FakturPenjualanHeader.TOTAL,
+                    PeriodFrom = dari,
+                    PeriodTo = sampai
+                };
+            }
+
             if (tenor == SinglePaymentTenor)
             {
-                HandleSinglePayment();
+                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan, creditCheck);
             }
             else
             {
-                HandleInstallmentPayments();
+                List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
+                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang, creditCheck);
             }
 
             if (PendingFaktur)
             {
                 controller.DeletePendingFaktur(FakturPenjualanHeader.NO_TRANSAKSI);
             }
-
-            POS_Services.UpdateTransactionNumber(FakturPenjualanHeader.NO_TRANSAKSI);
-        }
-
-        private void HandleSinglePayment()
-        {
-            POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan);
-        }
-
-        private void HandleInstallmentPayments()
-        {
-            List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
-
-            POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang);
         }
 
         private void CetakFaktur()
@@ -197,8 +204,8 @@ namespace Penjualan
             report.Parameters["Total"].Value = FakturPenjualanHeader.TOTAL;
 
             report.Parameters["Kasir"].Value = "";
-            report.Parameters["Bayar"].Value = decimal.Parse(txtcash.Text);
-            report.Parameters["Kembalian"].Value = decimal.Parse(txtkembali.Text);
+            report.Parameters["Bayar"].Value = decimal.TryParse(txtcash.Text, out var bayarVal) ? bayarVal : 0m;
+            report.Parameters["Kembalian"].Value = decimal.TryParse(txtkembali.Text, out var kembaliVal) ? kembaliVal : 0m;
             report.ShowPrintMarginsWarning = false;
             ReportPrintTool tool = new(report);
             tool.Print();
@@ -206,12 +213,11 @@ namespace Penjualan
 
         private float CalculatePaperHeight(int numberOfRecords)
         {
-            // Adjust the paper height based on the number of records
-            // You might need to fine-tune these values based on your actual requirements
-            float defaultPageHeight = 1169.0f; // Base paper height
-            float heightPerRecord = 0.5f; // Height per record
+            float defaultPageHeight = 1169.0f; // Base paper height (fits ~40 records)
+            float heightPerRecord = 25.0f; // Height per additional record
 
-            float calculatedHeight = defaultPageHeight + (numberOfRecords * heightPerRecord);
+            int extraRecords = numberOfRecords - 40;
+            float calculatedHeight = defaultPageHeight + (extraRecords * heightPerRecord);
 
             return calculatedHeight;
         }
@@ -220,8 +226,8 @@ namespace Penjualan
         decimal kembalian = 0;
         private void txtcash_EditValueChanged(object sender, EventArgs e)
         {
-            var total = decimal.Parse(txttotal.Text);
-            bayar = decimal.Parse(txtcash.Text);
+            if (!decimal.TryParse(txttotal.Text, out var total)) total = 0;
+            if (!decimal.TryParse(txtcash.Text, out bayar)) bayar = 0;
             kembalian = bayar - total;
             txtkembali.Text = kembalian.ToString();
         }
@@ -258,8 +264,9 @@ namespace Penjualan
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
+                    LIMIT= selectedObject.LIMIT_HUTANG;
 
-                    if (NIK == "00.00004")
+                    if (NIK == DEFAULT_CUSTOMER_NIK)
                     {
                         jenis_pembayaran = "TUNAI";
                         ket_pembayaran = "KAS";
@@ -284,18 +291,35 @@ namespace Penjualan
                         labelControl4.Visible = true;
                         leangsuran.Visible = true;
                         sbsimpancetak.Enabled = true;
-                        double LimitHutang = Checking_Limit(NIK);
-                        if (LimitHutang != 0)
+                        if (LIMIT != 0)
                         {
-                            double GetSalesTotal = Checking_JumlahHutang(NIK, STATUS);
-                            double total = GetSalesTotal + JUMLAHFAKTUR;
-                            if (total > LimitHutang)
+                            decimal totalHutang = Checking_JumlahHutang(NIK, STATUS);
+                            decimal totalSetelahFaktur = totalHutang + JUMLAHFAKTUR;
+
+                            if (totalSetelahFaktur > LIMIT)
                             {
-                                var lebih = total - LimitHutang;
+                                decimal kelebihan = totalSetelahFaktur - LIMIT;
                                 sbsimpancetak.Enabled = false;
-                                XtraMessageBox.Show("Limit Hutang Waserda Telah Melebihi Batas \nRp." + lebih, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                                string message =
+                                    $"Transaksi tidak dapat disimpan karena limit hutang telah terlampaui.\n\n" +
+                                    $"📌 **Detail Hutang:**\n" +
+                                    $"- Hutang Saat Ini     : Rp. {totalHutang:N0}\n" +
+                                    $"- Jumlah Faktur Baru  : Rp. {JUMLAHFAKTUR:N0}\n" +
+                                    $"- Total Setelah Faktur: Rp. {totalSetelahFaktur:N0}\n" +
+                                    $"- Batas Limit Hutang  : Rp. {LIMIT:N0}\n" +
+                                    $"- Kelebihan Limit      : Rp. {kelebihan:N0}\n\n" +
+                                    $"Silakan lakukan pelunasan terlebih dahulu atau hubungi bagian keuangan.";
+
+                                XtraMessageBox.Show(
+                                    message,
+                                    "Limit Hutang Melebihi Batas",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error
+                                );
                             }
                         }
+
                     }
                 }
             }
@@ -305,70 +329,26 @@ namespace Penjualan
             }
         }
 
-        private double Checking_Limit(string nIK)
+        
+
+        private decimal Checking_JumlahHutang(string nIK, string sTATUS)
         {
-            double limit = 0;
-            using (OracleConnection connection = new(global.connectionString))
-            {
-                connection.Open();
-
-                using OracleCommand command = new("SELECT LIMIT_HUTANG FROM FIN_ANGGOTA WHERE NIK = :Nik", connection);
-                command.Parameters.Add(new OracleParameter("Nik", nIK));
-
-                object result = command.ExecuteScalar();
-                if (result != DBNull.Value)
-                {
-                    limit = Convert.ToDouble(result);
-                }
-            }
-
-            return limit;
-        }
-
-        private double Checking_JumlahHutang(string nIK, string sTATUS)
-        {
-            var harini = DateTime.Today;
             DateTime dari, sampai;
-            DateTime lastDayOfMonth = new(harini.Year, harini.Month, DateTime.DaysInMonth(harini.Year, harini.Month));
+
             if (sTATUS == "BULANAN")
             {
-                dari = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-                sampai = lastDayOfMonth;
+                dari = BulananDari;
+                sampai = BulananSampai;
             }
             else
             {
-                if (harini.Day < 16)
-                {
-                    dari = new(harini.Year, harini.Month, 1);
-                    sampai = new(harini.Year, harini.Month, 15);
-                }
-                else
-                {
-                    dari = new(harini.Year, harini.Month, 16);
-                    sampai = lastDayOfMonth;
-                }
-
-            }
-            double total = 0;
-
-            using (OracleConnection connection = new(global.connectionString))
-            {
-                connection.Open();
-
-                using OracleCommand command = new("SELECT SUM(TOTAL) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL BETWEEN :Dari AND :Sampai", connection);
-                command.Parameters.Add(new OracleParameter("Nik", nIK));
-                command.Parameters.Add(new OracleParameter("Dari", dari));
-                command.Parameters.Add(new OracleParameter("Sampai", sampai));
-
-                object result = command.ExecuteScalar();
-                if (result != DBNull.Value)
-                {
-                    total = Convert.ToDouble(result);
-                }
+                dari = Remise1Dari;
+                sampai = Remise2Sampai;
             }
 
-            return total;
+            return POS_Services.CheckingJumlahHutang(nIK, sTATUS, dari, sampai);
         }
+
 
         private void PelangganTextBox_KeyDown(object sender, KeyEventArgs e)
         {
@@ -386,7 +366,7 @@ namespace Penjualan
                     else
                     {
                         // Set the default value for searchLookUpEdit1
-                        //int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
+                        //int index2 = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
 
                         //searchLookUpEdit1.EditValue = datasource[index2].NIK;
                         searchLookUpEdit1.EditValue = null;
@@ -410,8 +390,8 @@ namespace Penjualan
             if (e.KeyCode == Keys.F5)
             {
                 // Set the default value for searchLookUpEdit1
-                int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
-
+                int index2 = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
+                if (index2 < 0) return;
                 searchLookUpEdit1.EditValue = datasource[index2].NIK;
                 sbsimpancetak.Enabled = true;
                 txtcash.Focus();
@@ -446,20 +426,16 @@ namespace Penjualan
         {
             List<DTOAngsuranKreditBarang> listAngsuran = new();
             decimal saldoAwal = jumlahBelanja;
-            decimal P; // Installment amount
+            decimal P = Math.Floor(saldoAwal / waktuangsuran);
 
-            // Calculate the installment amount
-            P = saldoAwal / waktuangsuran;
-
-            // Calculate installment for each month within the specified duration
             for (int i = 1; i <= waktuangsuran; i++)
             {
-
-                DateTime bulanBerikutnya = tanggalBelanja.AddMonths(i-1);
+                DateTime bulanBerikutnya = tanggalBelanja.AddMonths(i - 1);
                 DateTime tanggalJatuhTempo = new DateTime(bulanBerikutnya.Year, bulanBerikutnya.Month, DateTime.DaysInMonth(bulanBerikutnya.Year, bulanBerikutnya.Month));
                 int p_periode = int.Parse(tanggalJatuhTempo.ToString("yyyyMM"));
 
-                decimal saldoAkhir = saldoAwal - P;
+                decimal angsuranBulanIni = (i == waktuangsuran) ? saldoAwal : P;
+                decimal saldoAkhir = saldoAwal - angsuranBulanIni;
 
                 DTOAngsuranKreditBarang angsuran = new()
                 {
@@ -468,7 +444,7 @@ namespace Penjualan
                     TANGGALJATUHTEMPO = tanggalJatuhTempo,
                     ANGSURANKE = i,
                     SALDOAWAL = Math.Round(saldoAwal, 2),
-                    ANGSURAN = Math.Round(P, 2),
+                    ANGSURAN = Math.Round(angsuranBulanIni, 2),
                     SALDOAKHIR = Math.Round(saldoAkhir, 2)
                 };
 
@@ -481,33 +457,6 @@ namespace Penjualan
 
         private void leangsuran_EditValueChanged(object sender, EventArgs e)
         {
-            //sbsimpancetak.Enabled = true;
-            //var tanggaltransaksi = FakturPenjualanHeader.TANGGAL;
-            //var angsuran = (int)leangsuran.EditValue;
-
-            //// Check if the selected installment exceeds the maximum allowed for the given month
-            //if (maxInstallments.TryGetValue(tanggaltransaksi.Month, out int maxAllowed) && angsuran > maxAllowed)
-            //{
-            //    sbsimpancetak.Enabled = false;
-            //    var monthName = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(tanggaltransaksi.Month);
-            //    XtraMessageBox.Show($"Untuk bulan {monthName}, Angsuran potongan barang hanya diperbolehkan maksimal {maxAllowed} kali Angsuran.", "Perhatian", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            //}
         }
-
-        private Dictionary<int, int> maxInstallments = new()
-        {
-                { 1, 12 }, // January
-                { 2, 11 }, // February
-                { 3, 10 }, // March
-                { 4, 9 },  // April
-                { 5, 8 },  // May
-                { 6, 7 },  // June
-                { 7, 6 },  // July 
-                { 8, 5 },  // August 
-                { 9, 4 },  // September 
-                { 10, 3 }, // October 
-                { 11, 2 }, // November
-                { 12, 1 }  // December
-         };
     }
 }

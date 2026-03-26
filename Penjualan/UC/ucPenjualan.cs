@@ -1,34 +1,26 @@
-﻿using DevExpress.CodeParser;
-using DevExpress.XtraEditors;
+﻿using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Views.Grid;
-using DevExpress.XtraRichEdit.Model;
-using Oracle.ManagedDataAccess.Client;
 using Penjualan.BusinessLayer;
 using Penjualan.DataLayer;
 using Penjualan.Model;
 using System.ComponentModel;
-using System.Xml.Linq;
 
 namespace Penjualan.UC
 {
     public partial class ucPenjualan : UserControl
     {
         bool ispending = false;
-        List<DTOItemBarang> ItemBarang;
-        
+
+        private DateTime _bulananDari, _bulananSampai;
+        private DateTime _remise1Dari, _remise1Sampai;
+        private DateTime _remise2Dari, _remise2Sampai;
+
+
         private BindingList<TransactionData> transactionDataList;
         PendingController controller = new();
         //Using singleton pattern to create an instance to ucModule3
-        private static ucPenjualan? _instance;
-        public static ucPenjualan Instance
-        {
-            get
-            {
-                if (_instance == null)
-                    _instance = new ucPenjualan();
-                return _instance;
-            }
-        }
+        private static readonly Lazy<ucPenjualan> _instance = new(() => new ucPenjualan());
+        public static ucPenjualan Instance => _instance.Value;
 
         public ucPenjualan()
         {
@@ -50,119 +42,25 @@ namespace Penjualan.UC
 
                     if (productInfo.ProductId != 0)
                     {
-                        int productid = Convert.ToInt32(productInfo.ProductId);
-                        string kodeitem = productInfo.KodeItem.ToString();
-                        string productname = productInfo.ProductName.ToString();
-                        string satuan = productInfo.Satuan.ToString();
-                        decimal price = Convert.ToDecimal(productInfo.Price);
-                        decimal hpp = Convert.ToDecimal(productInfo.Hpp);
-
-                        var qty_sistem = POS_Services.GetStocItem(kodeitem, startdate, enddate);
-                        if (qty_sistem <1)
-                        {
-                            XtraMessageBox.Show("Barang belum dapat dijual, tidak terdapat stock pada system\nKode Barang : " + kodeitem + "\nNama Barang : " + productname + "\nStok System : " + qty_sistem, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                        if (!AddProductToTransaction(
+                            Convert.ToInt32(productInfo.ProductId), barcode,
+                            productInfo.KodeItem, productInfo.ProductName,
+                            productInfo.Satuan, Convert.ToDecimal(productInfo.Price),
+                            Convert.ToDecimal(productInfo.Hpp)))
                             return;
-                        }
-                        
-
-                        if (hpp == 0)
-                        {
-                            XtraMessageBox.Show("Barang belum dapat dijual Hpp belum ditentukan\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
-                            return;
-                        }
-                        if (price <= hpp)
-                        {
-                            XtraMessageBox.Show("Harga jual <= dari harga beli\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
-                            return;
-                        }
-
-                        var existingProduct = transactionDataList.FirstOrDefault(p => p.Barcode == barcode);
-                        if (existingProduct != null)
-                        {
-                            existingProduct.Qty++;
-                            existingProduct.UpdateTotal();
-                            HitungNilaiPotongan();
-                            gridView1.RefreshData();
-                        }
-                        else
-                        {
-                            var newProduct = new TransactionData
-                            {
-                                ProductId = productid,
-                                Barcode = barcode,
-                                Kode_Item = kodeitem,
-                                ProductName = productname,
-                                Satuan = satuan,
-                                Hpp = hpp,
-                                Price = price,
-                                Qty = 1
-                            };
-                            newProduct.UpdateTotal();
-                            transactionDataList.Add(newProduct);
-                        }
                     }
                     else
                     {
-                        // Tampilkan form untuk memilih produk secara manual
                         using ProductForm productForm = new();
-                        productForm.StartPosition = FormStartPosition.CenterScreen;                       
+                        productForm.StartPosition = FormStartPosition.CenterScreen;
                         productForm.SetSearchPanelValue(barcodeTextBox.Text);
                         if (productForm.ShowDialog() == DialogResult.OK)
                         {
-                            int productid = productForm.ProductId;
-                            string kodeitem = productForm.Kode_Item;
-                            string barcodefromx = productForm.Barcode;
-                            string productname = productForm.ProductName;
-                            string satuan = productForm.Satuan;
-                            decimal price = productForm.Price;
-                            decimal hpp = productForm.Hpp;
-
-                            var qty_sistem = POS_Services.GetStocItem(kodeitem, startdate, enddate);
-                            if (qty_sistem < 1)
-                            {
-                                XtraMessageBox.Show("Barang belum dapat dijual, tidak terdapat stock pada system\nKode Barang : " + kodeitem + "\nNama Barang : " + productname + "\nStok System : " + qty_sistem, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                            if (!AddProductToTransaction(
+                                productForm.ProductId, productForm.Barcode,
+                                productForm.Kode_Item, productForm.ProductName,
+                                productForm.Satuan, productForm.Price, productForm.Hpp))
                                 return;
-                            }
-
-
-                            if (hpp == 0)
-                            {
-                                XtraMessageBox.Show("Barang belum dapat dijual Hpp belum ditentukan\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
-                                return;
-                            }
-                            // Check if price is less than or equal to hpp
-                            if (price <= hpp)
-                            {
-                                // Price is less than or equal to hpp
-                                // Rest of the code goes here...
-                                // ...
-                                XtraMessageBox.Show("Harga jual <= dari harga beli\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop); return;
-
-                            }
-
-                            var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid);
-                            if (existingProduct != null)
-                            {
-                                existingProduct.Qty++;
-                                existingProduct.UpdateTotal();
-
-                            }
-                            else
-                            {
-                                var newProduct = new TransactionData
-                                {
-                                    ProductId = productid,
-                                    Barcode = barcodefromx,
-                                    Kode_Item = kodeitem,
-                                    ProductName = productname,
-                                    Satuan = satuan,
-                                    Hpp = hpp,
-                                    Price = price,
-                                    Qty = 1
-                                };
-                                newProduct.UpdateTotal();
-                                transactionDataList.Add(newProduct);
-                            }
                         }
                     }
                     HitungTotalHarga();
@@ -187,45 +85,64 @@ namespace Penjualan.UC
                     blbibayar.PerformClick();
                 }
             }
-            catch (SystemException ex)
+            catch (Exception ex)
             {
                 XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        public List<DTOItemBarang> GetItemsFromDatabase(string barcode)
+        private bool AddProductToTransaction(int productid, string barcode, string kodeitem, string productname, string satuan, decimal price, decimal hpp)
         {
-            List<DTOItemBarang> itemList = new();
-
-            using (OracleConnection connection = new(global.connectionString))
+            if (LoginInfo.Penjualan_Control_Qty)
             {
-                    connection.Open();
-
-                    string sqlQuery = "SELECT PRODUCTID, KODE_ITEM, PRODUCTNAME, SATUAN, PRICE, BELI FROM POS_PRODUCT WHERE BARCODE=:barcode";
-
-                using OracleCommand cmd = new(sqlQuery, connection);
-                // Add the parameter for the barcode
-                cmd.Parameters.Add(new OracleParameter("barcode", OracleDbType.Varchar2)).Value = barcode;
-
-                using OracleDataReader reader = cmd.ExecuteReader();
-                while (reader.Read())
+                var qty_sistem = POS_Services.GetStocItem(kodeitem, startdate, enddate);
+                if (qty_sistem < 1)
                 {
-                    DTOItemBarang item = new()
-                    {
-                        PRODUCTID = Convert.ToInt32(reader["PRODUCTID"]),
-                        KODE_ITEM = reader["KODE_ITEM"].ToString(),
-                        PRODUCTNAME = reader["PRODUCTNAME"].ToString(),
-                        SATUAN = reader["SATUAN"].ToString(),
-                        PRICE = Convert.ToDecimal(reader["PRICE"]),
-                        BELI = Convert.ToDecimal(reader["BELI"])
-                    };
-                    itemList.Add(item);
+                    XtraMessageBox.Show("Barang belum dapat dijual, tidak terdapat stock pada system\nKode Barang : " + kodeitem + "\nNama Barang : " + productname + "\nStok System : " + qty_sistem, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                    return false;
                 }
-
             }
 
-            return itemList;
+            if (hpp == 0)
+            {
+                XtraMessageBox.Show("Barang belum dapat dijual Hpp belum ditentukan\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                return false;
+            }
+            if (price <= hpp)
+            {
+                XtraMessageBox.Show("Harga jual <= dari harga beli\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                return false;
+            }
+
+            var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid);
+            if (existingProduct != null)
+            {
+                existingProduct.Qty++;
+                existingProduct.UpdateTotal();
+                HitungNilaiPotongan();
+                gridView1.RefreshData();
+            }
+            else
+            {
+                var newProduct = new TransactionData
+                {
+                    ProductId = productid,
+                    Barcode = barcode,
+                    Kode_Item = kodeitem,
+                    ProductName = productname,
+                    Satuan = satuan,
+                    Hpp = hpp,
+                    Price = price,
+                    Qty = 1
+                };
+                newProduct.UpdateTotal();
+                transactionDataList.Add(newProduct);
+            }
+            return true;
         }
+
+
+
 
 
 
@@ -248,13 +165,49 @@ namespace Penjualan.UC
             gridView1.Columns["Bruto"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
             gridView1.Columns["Potongan"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
             gridView1.Columns["Total"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
+            int tahun=DateTime.Now.Year;
+            int bulan = DateTime.Now.Month;
+            int periode = (tahun * 100) + bulan;
+            GetTanggalByPeriode(periode);
+            CheckPeriodeStatus();
+        }
+
+        private void CheckPeriodeStatus()
+        {
+            var tgl = DateTime.Today;
+            var periode = Convert.ToInt32(tgl.Year.ToString() + tgl.Month.ToString("00"));
+            int remise = tgl.Day <= 15 ? 1 : 2;
+
+            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
+            MaxPeriodeFinder periodemax = new();
+            var maxperiode = periodemax.GetMaxPeriode();
+
+            if (tutup || periode > maxperiode)
+            {
+                blbibayar.Enabled = false;
+                barcodeTextBox.Enabled = false;
+                string alasan = tutup ? "Periode telah ditutup" : "Periode belum tersedia";
+                XtraMessageBox.Show($"{alasan}, transaksi tidak dapat dilakukan.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void GetTanggalByPeriode(int periode)
+        {
+            var dates = POS_Services.GetTanggalByPeriode(periode);
+            if (dates != null)
+            {
+                _remise1Dari = dates.Remise1Dari;
+                _remise1Sampai = dates.Remise1Sampai;
+                _remise2Dari = dates.Remise2Dari;
+                _remise2Sampai = dates.Remise2Sampai;
+                _bulananDari = dates.BulananDari;
+                _bulananSampai = dates.BulananSampai;
+            }
         }
 
 
-        
 
-
-    private void NewTransaction()
+        private void NewTransaction()
         {
             try
             {
@@ -272,7 +225,7 @@ namespace Penjualan.UC
                 barcodeTextBox.Focus();
                 ispending = false;
             }
-             catch (SystemException ex)
+             catch (Exception ex)
             {
                 XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -280,32 +233,7 @@ namespace Penjualan.UC
 
         public string GenerateTransactionNumber(DateTime date)
         {
-            // Mendapatkan tahun dari parameter tanggal
-            int currentYear = date.Year % 100;
-
-            // Ambil nomor transaksi terakhir dari database untuk tahun saat ini
-            string selectQuery = $"SELECT nomor FROM nomor_transaksi WHERE kode = 'PENJUALAN' AND nomor LIKE 'W-{currentYear}%' ORDER BY nomor DESC FETCH FIRST 1 ROWS ONLY";
-            using OracleConnection connection = new(global.connectionString);
-            connection.Open();
-            using OracleCommand selectCommand = new(selectQuery, connection);
-            string lastTransactionNumber = selectCommand.ExecuteScalar()?.ToString();
-
-            // Buat nomor transaksi baru untuk tahun saat ini
-            string newTransactionNumber;
-            if (string.IsNullOrEmpty(lastTransactionNumber))
-            {
-                newTransactionNumber = $"W-{currentYear.ToString("D2")}-000001"; // Jika belum ada nomor transaksi sebelumnya
-
-
-            }
-            else
-            {
-                int lastNumber = int.Parse(lastTransactionNumber.Substring(lastTransactionNumber.Length - 6));
-                int newNumber = lastNumber + 1;
-                newTransactionNumber = $"W-{currentYear.ToString("D2")}-{newNumber.ToString("D6")}"; // Format nomor transaksi dengan leading zero
-            }
-
-            return newTransactionNumber;
+            return POS_Services.GenerateTransactionNumber(date);
         }
 
 
@@ -337,17 +265,22 @@ namespace Penjualan.UC
                     {
                         TransactionData data = (TransactionData)gridView1.GetRow(e.RowHandle);
 
-                        // Get the system stock for the item
-                        decimal qtySistem = POS_Services.GetStocItem(data.Kode_Item, startdate, enddate);
-
-                        // Check if the changed quantity exceeds the system stock
-                        if (data.Qty > qtySistem)
+                        //jika setting control qty penjualan
+                        if (LoginInfo.Penjualan_Control_Qty)
                         {
-                            // Optionally, you can display a message to the user or take other actions.
-                            MessageBox.Show("Input Qty Melebihi Stock System! Qty akan diset sesuai nilai maksimal Stock di sistem\n"+"\nKode Barang: " + data.Kode_Item + "\nNama Barang: " + data.ProductName + "\nStok System: " + qtySistem, "Error",MessageBoxButtons.OK,MessageBoxIcon.Stop);
-                            // Reset the quantity to the maximum allowed value (qtySistem)
-                            data.Qty = qtySistem;
+                            // Get the system stock for the item
+                            decimal qtySistem = POS_Services.GetStocItem(data.Kode_Item, startdate, enddate);
+
+                            // Check if the changed quantity exceeds the system stock
+                            if (data.Qty > qtySistem)
+                            {
+                                // Optionally, you can display a message to the user or take other actions.
+                                MessageBox.Show("Input Qty Melebihi Stock System! Qty akan diset sesuai nilai maksimal Stock di sistem\n" + "\nKode Barang: " + data.Kode_Item + "\nNama Barang: " + data.ProductName + "\nStok System: " + qtySistem, "Error", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                                // Reset the quantity to the maximum allowed value (qtySistem)
+                                data.Qty = qtySistem;
+                            }
                         }
+                        
 
                         // Update the Total property of the TransactionData object
                         data.UpdateTotal();
@@ -366,9 +299,9 @@ namespace Penjualan.UC
                 }
 
             }
-            catch
+            catch (Exception ex)
             {
-
+                XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -379,62 +312,23 @@ namespace Penjualan.UC
 
         private void HitungNilaiPotongan()
         {
-            // Get the index of the focused row
             int focusedRowHandle = gridView1.FocusedRowHandle;
             if (focusedRowHandle < 0)
                 return;
 
-            // Get the value of the "Qty" column for the current row
             decimal qty = Convert.ToDecimal(gridView1.GetRowCellValue(focusedRowHandle, "Qty"));
-
-            // Get the current TransactionData object from the transactionDataList
             TransactionData data = transactionDataList[focusedRowHandle];
 
-            // Query the database for discounts based on quantity
-            string kodebrg = data.Kode_Item;
-            string query = "SELECT MINQTY, POTONGAN FROM POS_POTONGANBERDASARKANQTY WHERE KODE_ITEM = :kodebrg";
+            var potongan = POS_Services.GetPotonganByKodeItem(data.Kode_Item);
 
-            using OracleConnection connection = new(global.connectionString);
-            connection.Open();
-            using OracleCommand command = new(query, connection);
-            command.Parameters.Add("kodebrg", kodebrg);
-            var reader = command.ExecuteReader();
-
-            if (reader.Read())
+            decimal discount = 0;
+            if (potongan != null && potongan.MinQty > 0 && qty >= potongan.MinQty)
             {
-                decimal MINQTY = reader.GetDecimal(0);
-                decimal POTONGAN = reader.GetDecimal(1);
-
-                decimal discount;
-                if (qty % MINQTY == 0)
-                {
-                    decimal kelipatan = qty / MINQTY;
-                    discount = qty* POTONGAN;
-                }
-                else if (qty>= MINQTY)
-                {
-                    int result= (int)Math.Floor(qty / MINQTY);
-                    discount = qty * POTONGAN;
-                }
-                else
-                {
-                    discount = 0;
-                }
-
-                // Update the TransactionData object with the calculated discount
-                data.Potongan = discount;
-
-                // Update the corresponding row in the transactionDataList
-                transactionDataList.ResetItem(focusedRowHandle);
+                discount = qty * potongan.Potongan;
             }
-            else
-            {
-                // No discount applies, set the discount value to 0
-                data.Potongan = 0;
 
-                // Update the corresponding row in the transactionDataList
-                transactionDataList.ResetItem(focusedRowHandle);
-            }
+            data.Potongan = discount;
+            transactionDataList.ResetItem(focusedRowHandle);
         }
 
 
@@ -494,10 +388,10 @@ namespace Penjualan.UC
                     return;
                 }
 
-                if (qty < 0)
+                if (qty <= 0)
                 {
                     e.Valid = false;
-                    e.ErrorText = "Qty tidak boleh negatif.";
+                    e.ErrorText = "Qty harus lebih dari 0.";
                 }
             }
         }
@@ -629,7 +523,15 @@ namespace Penjualan.UC
             // Set the TotalAmount and Items properties
             paymentForm.PendingFaktur = ispending;
             paymentForm.FakturPenjualanHeader = PenjualanHeader;
-            paymentForm.ListItemsPenjualan = itemPenjualanData;            
+            paymentForm.ListItemsPenjualan = itemPenjualanData;
+
+            // Set properti tambahan yang dilempar ke form
+            paymentForm.BulananDari = _bulananDari;
+            paymentForm.BulananSampai = _bulananSampai;
+            paymentForm.Remise1Dari = _remise1Dari;
+            paymentForm.Remise1Sampai = _remise1Sampai;
+            paymentForm.Remise2Dari = _remise2Dari;
+            paymentForm.Remise2Sampai = _remise2Sampai;
 
             if (paymentForm.ShowDialog() == DialogResult.OK)
             {
@@ -655,7 +557,7 @@ namespace Penjualan.UC
             //insert
             List<DTODaftarBarangPending> ListItemsPenjualan = GetItemPenjualanDataPending();
             controller.InsertFaktur_Pending(FakturPenjualanHeader, ListItemsPenjualan);
-            POS_Services.UpdateTransactionNumber(FakturPenjualanHeader.NO_TRANSAKSI);
+            // Transaction number already reserved atomically in GenerateTransactionNumber
             NewTransaction();
         }
 

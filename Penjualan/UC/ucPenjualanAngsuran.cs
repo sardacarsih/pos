@@ -54,21 +54,15 @@ namespace Penjualan.UC
             if (e.KeyCode == Keys.Enter)
             {
                 string barcode = barcodeTextBox.Text;
-                string sql = "SELECT * FROM pos_Product WHERE Barcode = :Barcode";
-                using (OracleConnection conn = new (global.connectionString))
+                DTOProductInfo productInfo = POS_Services.RetrieveProductInfo(barcode);
+                if (productInfo.ProductId != 0)
                 {
-                    conn.Open();
-                    OracleCommand cmd = new (sql, conn);
-                    cmd.Parameters.Add(":Barcode", barcode);
-                    OracleDataReader reader = cmd.ExecuteReader();
-                    if (reader.Read())
                     {
-                        int productId = Convert.ToInt32(reader["ProductId"]);
-                        string kodeitem = reader["Kode_Item"].ToString();
-                        string productName = reader["ProductName"].ToString();
-                        string satuan = reader["satuan"].ToString();
-                        decimal price = Convert.ToDecimal(reader["Price"]);
-                        reader.Close();
+                        int productId = productInfo.ProductId;
+                        string kodeitem = productInfo.KodeItem;
+                        string productName = productInfo.ProductName;
+                        string satuan = productInfo.Satuan;
+                        decimal price = productInfo.Price;
 
                         // Cari produk di datagrid
                         int rowHandle = gridView1.LocateByValue("Barcode", barcode);
@@ -115,62 +109,60 @@ namespace Penjualan.UC
                         txttotalpenjualan.Text = "Total: " + total.ToString("C");
                         
                     }
-                    else
+                }
+                else
+                {
+                    // Tampilkan form untuk memilih produk secara manual
+                    using ProductForm productForm = new ();
+                    productForm.StartPosition = FormStartPosition.CenterScreen;
+                    productForm.SetSearchPanelValue(barcodeTextBox.Text);
+                    if (productForm.ShowDialog() == DialogResult.OK)
                     {
-                        // Tampilkan form untuk memilih produk secara manual
-                        using ProductForm productForm = new ();
-                        productForm.StartPosition = FormStartPosition.CenterScreen;
-                        productForm.SetSearchPanelValue(barcodeTextBox.Text);
-                        if (productForm.ShowDialog() == DialogResult.OK)
+                        int productId = productForm.ProductId;
+                        string Kode_Item = productForm.Kode_Item;
+                        string productName = productForm.ProductName;
+                        string Satuan = productForm.Satuan;
+                        decimal price = productForm.Price;
+
+                        // Cari produk di datagrid
+                        int rowHandle = gridView1.LocateByValue("Kode_Item", Kode_Item);
+                        if (rowHandle != DevExpress.XtraGrid.GridControl.InvalidRowHandle)
                         {
-                            int productId = productForm.ProductId;
-                            string Kode_Item = productForm.Kode_Item;
-                            string productName = productForm.ProductName;
-                            string Satuan = productForm.Satuan;
-                            decimal price = productForm.Price;
-
-                            // Cari produk di datagrid
-                            int rowHandle = gridView1.LocateByValue("Kode_Item", Kode_Item);
-                            if (rowHandle != DevExpress.XtraGrid.GridControl.InvalidRowHandle)
-                            {
-                                // Jika produk sudah ada di datagrid, tambahkan qty dan update total harga
-                                decimal qty = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Qty"));
-                                qty++;
-                                gridView1.SetRowCellValue(rowHandle, "Qty", qty);
-                                decimal potongan = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Potongan"));
-                                decimal harga = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Price"));
-                                decimal bruto = qty * harga;
-                                gridView1.SetRowCellValue(rowHandle, "Bruto", bruto);
-                                decimal subtotal = (qty * harga) - potongan;
-                                gridView1.SetRowCellValue(rowHandle, "Total", subtotal);
-                                gridView1.UpdateCurrentRow();
-                            }
-                            else
-                            {
-                                // Jika produk belum ada di datagrid, tambahkan produk baru
-                                gridView1.AddNewRow();
-                                int newRowHandle = gridView1.GetRowHandle(gridView1.DataRowCount);
-                                gridView1.SetRowCellValue(newRowHandle, "Kode_Item", Kode_Item);
-                                gridView1.SetRowCellValue(newRowHandle, "ProductId", productId);
-                                gridView1.SetRowCellValue(newRowHandle, "ProductName", productName);
-                                gridView1.SetRowCellValue(newRowHandle, "Satuan", Satuan);
-                                gridView1.SetRowCellValue(newRowHandle, "Price", price);
-                                gridView1.SetRowCellValue(newRowHandle, "Qty", 1);
-                                decimal bruto = 1 * price;
-                                gridView1.SetRowCellValue(newRowHandle, "Bruto", bruto);
-                                gridView1.SetRowCellValue(newRowHandle, "Potongan", 0);
-                                decimal subtotal = (1 * price) - Convert.ToDecimal(gridView1.GetRowCellValue(newRowHandle, "Potongan"));
-                                gridView1.SetRowCellValue(newRowHandle, "Total", subtotal);
-                                gridView1.UpdateCurrentRow();
-                                gridView1.RefreshData();
-
-                            }
-
-                            // Hitung total harga
-                            HitungTotalHarga();
+                            // Jika produk sudah ada di datagrid, tambahkan qty dan update total harga
+                            decimal qty = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Qty"));
+                            qty++;
+                            gridView1.SetRowCellValue(rowHandle, "Qty", qty);
+                            decimal potongan = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Potongan"));
+                            decimal harga = Convert.ToDecimal(gridView1.GetRowCellValue(rowHandle, "Price"));
+                            decimal bruto = qty * harga;
+                            gridView1.SetRowCellValue(rowHandle, "Bruto", bruto);
+                            decimal subtotal = (qty * harga) - potongan;
+                            gridView1.SetRowCellValue(rowHandle, "Total", subtotal);
+                            gridView1.UpdateCurrentRow();
                         }
+                        else
+                        {
+                            // Jika produk belum ada di datagrid, tambahkan produk baru
+                            gridView1.AddNewRow();
+                            int newRowHandle = gridView1.GetRowHandle(gridView1.DataRowCount);
+                            gridView1.SetRowCellValue(newRowHandle, "Kode_Item", Kode_Item);
+                            gridView1.SetRowCellValue(newRowHandle, "ProductId", productId);
+                            gridView1.SetRowCellValue(newRowHandle, "ProductName", productName);
+                            gridView1.SetRowCellValue(newRowHandle, "Satuan", Satuan);
+                            gridView1.SetRowCellValue(newRowHandle, "Price", price);
+                            gridView1.SetRowCellValue(newRowHandle, "Qty", 1);
+                            decimal bruto = 1 * price;
+                            gridView1.SetRowCellValue(newRowHandle, "Bruto", bruto);
+                            gridView1.SetRowCellValue(newRowHandle, "Potongan", 0);
+                            decimal subtotal = (1 * price) - Convert.ToDecimal(gridView1.GetRowCellValue(newRowHandle, "Potongan"));
+                            gridView1.SetRowCellValue(newRowHandle, "Total", subtotal);
+                            gridView1.UpdateCurrentRow();
+                            gridView1.RefreshData();
+                        }
+
+                        // Hitung total harga
+                        HitungTotalHarga();
                     }
-                    
                 }
                 barcodeTextBox.Text = string.Empty;
                 barcodeTextBox.Focus();
@@ -244,7 +236,7 @@ namespace Penjualan.UC
             string query = "SELECT MAX(NO_TRANSAKSI) FROM POS_KREDIT_PENJUALAN_MASTER " +
                            "WHERE EXTRACT(YEAR FROM TANGGAL) = :year";
 
-            using (OracleConnection conn = new(global.connectionString))
+            using (OracleConnection conn = new(Global.connectionString))
             // Create a new OracleCommand object to execute the query
             using (OracleCommand command = new(query, conn))
             {
@@ -288,7 +280,7 @@ namespace Penjualan.UC
         private static DataTable Pelanggan()
         {
             string query = "SELECT ID_PELANGGAN,NIK,NAMA_PELANGGAN,UNIT_KERJA,STATUS,LIMIT_HUTANG FROM FIN_ANGGOTA WHERE AKTIF='Y' ORDER BY NAMA_PELANGGAN";
-            using OracleConnection connection = new(global.connectionString);
+            using OracleConnection connection = new(Global.connectionString);
             using OracleCommand _command = new(query, connection)
             {
                 CommandType = CommandType.Text
@@ -379,7 +371,7 @@ namespace Penjualan.UC
             
             // Query the database for discounts based on quantity
             string query = "SELECT POTONGAN FROM POS_POTONGANBERDASARKANQTY WHERE PRODUCTID = :productId AND MINQTY <= :qty ORDER BY MINQTY DESC";
-            using var connection = new OracleConnection(global.connectionString);
+            using var connection = new OracleConnection(Global.connectionString);
             var command = new OracleCommand(query, connection);
 
             command.Parameters.Add("productId", productId); // replace with actual product ID
@@ -612,7 +604,7 @@ namespace Penjualan.UC
             tool.ShowPreview();
 
         }
-        double LIMIT_HUTANG;
+        decimal LIMIT_HUTANG;
         private void lepelanggan_EditValueChanged(object sender, EventArgs e)
         {
             try
@@ -624,7 +616,7 @@ namespace Penjualan.UC
                     NIK = row["NIK"].ToString().ToUpper();
                     STATUS = row["STATUS"].ToString().ToUpper();
                     UNIT_KERJA = row["UNIT_KERJA"].ToString().ToUpper();
-                    LIMIT_HUTANG = Convert.ToDouble(row["LIMIT_HUTANG"].ToString());
+                    LIMIT_HUTANG = Convert.ToDecimal(row["LIMIT_HUTANG"]);
                 }
                 
             }

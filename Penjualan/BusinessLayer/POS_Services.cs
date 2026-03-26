@@ -12,17 +12,17 @@ namespace Penjualan.BusinessLayer
             repository = new FakturPenjualan();
         }
 
-        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan)
+        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null)
         {
-            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan);
+            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan, creditCheck);
         }
-        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan)
+        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null)
         {
-            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan);
+            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan, creditCheck);
         }
-        public static void UpdateTransactionNumber(string transactionNumber)
+        public static string GenerateTransactionNumber(DateTime date)
         {
-            repository.UpdateTransactionNumber(transactionNumber);
+            return repository.GenerateTransactionNumber(date);
         }
         public static void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header)
         {
@@ -35,6 +35,26 @@ namespace Penjualan.BusinessLayer
         public static decimal GetStocItem(string kodeBarang, DateTime startDate, DateTime endDate)
         {
             return repository.GetStocItem(kodeBarang, startDate, endDate); 
+        }
+        public static bool GetSettingKontrol_qty_Saldo()
+        {
+            return repository.GetSettingKontrol_qty_Saldo();
+        }
+        public static DTOPeriodeDates? GetTanggalByPeriode(int periode)
+        {
+            return repository.GetTanggalByPeriode(periode);
+        }
+        public static DTOPotonganHarga? GetPotonganByKodeItem(string kodeItem)
+        {
+            return repository.GetPotonganByKodeItem(kodeItem);
+        }
+        public static List<DTOPelanggan> GetPelangganAktif()
+        {
+            return repository.GetPelangganAktif();
+        }
+        public static decimal CheckingJumlahHutang(string nik, string status, DateTime dari, DateTime sampai)
+        {
+            return repository.CheckingJumlahHutang(nik, status, dari, sampai);
         }
     }
 }

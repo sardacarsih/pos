@@ -14,7 +14,8 @@ namespace Penjualan
     public partial class frmEditFaktur : DevExpress.XtraEditors.XtraForm
     {
         string NIK, STATUS, UNIT_KERJA,ket_pembayaran,jenis_pembayaran;
-        double ID,LIMIT_HUTANG;
+        double ID;
+        decimal LIMIT_HUTANG;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTODaftarBarang> ListItemsPenjualan { get; set; }
 
@@ -65,7 +66,7 @@ namespace Penjualan
         {
             string query = "SELECT ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, LIMIT_HUTANG FROM FIN_ANGGOTA WHERE AKTIF='Y' ORDER BY NAMA_PELANGGAN";
 
-            using OracleConnection connection = new (global.connectionString);
+            using OracleConnection connection = new (Global.connectionString);
 
             if (connection.State != ConnectionState.Open)
             {
