@@ -16,7 +16,7 @@ namespace Penjualan.DataLayer
                                 JOIN FIN_UNITKERJA U ON U.KODE=J.UNIT_KERJA
                                 WHERE J.TANGGAL BETWEEN :1 AND:2 AND J.PENDING='T' ORDER BY J.TANGGAL,J.NIK";
 
-            using (OracleConnection connection = new(global.connectionString))
+            using (OracleConnection connection = new(Global.connectionString))
             {
                 connection.Open();
 
@@ -56,7 +56,7 @@ namespace Penjualan.DataLayer
 
             string query = "SELECT BARIS,NAMA_BARANG,SATUAN,JUMLAH_BARANG,HARGA_BARANG,POTONGAN,TOTAL_HARGA FROM  POS_PENJUALAN_DETAIL WHERE NO_TRANSAKSI = :idtransaksi ORDER BY BARIS";
 
-            using (OracleConnection connection = new(global.connectionString))
+            using (OracleConnection connection = new(Global.connectionString))
             {
                 connection.Open();
 

@@ -10,24 +10,30 @@ namespace BackOffice.DataLayer
     {
         public List<DTOFakturPembelian_Header> DaftarPembelian(int bulan, int tahun)
         {
-            List<DTOFakturPembelian_Header> Master = new();
-
-            string query = @"SELECT B.NO_TRANSAKSI,B.TANGGAL,B.SUPPLIER_ID,S.NAMA,B.BRUTO,B.POTONGAN,B.TOTAL,B.TERMIN FROM POS_PEMBELIAN B
+            string headerQuery = @"SELECT B.NO_TRANSAKSI,B.TANGGAL,B.SUPPLIER_ID,S.NAMA,B.BRUTO,B.POTONGAN,B.TOTAL,B.TERMIN FROM POS_PEMBELIAN B
                             JOIN  POS_SUPPLIER  S ON S.KODE=B.SUPPLIER_ID
                             WHERE EXTRACT(MONTH FROM B.TANGGAL) = :p_bulan AND EXTRACT(YEAR FROM B.TANGGAL) = :p_tahun
                             ORDER BY B.TANGGAL";
 
-            using (OracleConnection connection = new(global.connectionString))
-            {
-                connection.Open();
+            string detailQuery = @"SELECT D.NO_TRANSAKSI,D.BARIS,D.PRODUCT_ID,D.KODE_BARANG,D.NAMA_BARANG,D.SATUAN,D.QUANTITY,D.HARGA_BELI,D.BRUTO,D.POTONGAN,D.TOTAL
+                            FROM POS_PEMBELIANDETAIL D
+                            JOIN POS_PEMBELIAN B ON B.NO_TRANSAKSI=D.NO_TRANSAKSI
+                            WHERE EXTRACT(MONTH FROM B.TANGGAL) = :p_bulan AND EXTRACT(YEAR FROM B.TANGGAL) = :p_tahun
+                            ORDER BY D.NO_TRANSAKSI, D.BARIS";
 
-                using OracleCommand command = new(query, connection);
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+
+            // Query 1: Fetch all headers
+            List<DTOFakturPembelian_Header> Master = new();
+            using (OracleCommand command = new(headerQuery, connection))
+            {
                 command.Parameters.Add(":p_bulan", OracleDbType.Int32).Value = bulan;
                 command.Parameters.Add(":p_tahun", OracleDbType.Int32).Value = tahun;
                 using OracleDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DTOFakturPembelian_Header DaftarPembelian = new()
+                    Master.Add(new DTOFakturPembelian_Header
                     {
                         NO_TRANSAKSI = reader["NO_TRANSAKSI"].ToString(),
                         TANGGAL = Convert.ToDateTime(reader["TANGGAL"]),
@@ -36,39 +42,24 @@ namespace BackOffice.DataLayer
                         BRUTO = Convert.ToDecimal(reader["BRUTO"]),
                         POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
                         TOTAL = Convert.ToDecimal(reader["TOTAL"]),
-                        TERMIN = Convert.ToInt32(reader["TERMIN"])
-                    };
-
-                    // Fetch products for the order
-                    List<DTOFakturPembelianDetail> idtransaksi = GetItemBarang(reader["NO_TRANSAKSI"].ToString());
-                    DaftarPembelian.Details = idtransaksi;
-
-                    Master.Add(DaftarPembelian);
+                        TERMIN = Convert.ToInt32(reader["TERMIN"]),
+                        Details = new List<DTOFakturPembelianDetail>()
+                    });
                 }
             }
 
-            return Master;
-        }
-
-        private List<DTOFakturPembelianDetail> GetItemBarang(string idtransaksi)
-        {
-            List<DTOFakturPembelianDetail> Detail = new();
-
-            string query = "SELECT BARIS,PRODUCT_ID,KODE_BARANG,NAMA_BARANG,SATUAN,quantity,HARGA_BELI,BRUTO,POTONGAN,TOTAL FROM  POS_PEMBELIANDETAIL WHERE NO_TRANSAKSI = :idtransaksi ORDER BY BARIS";
-
-            using (OracleConnection connection = new(global.connectionString))
+            // Query 2: Fetch all details in one query
+            List<DTOFakturPembelianDetail> allDetails = new();
+            using (OracleCommand command = new(detailQuery, connection))
             {
-                connection.Open();
-
-                using OracleCommand command = new(query, connection);
-                command.Parameters.Add(":idtransaksi", OracleDbType.Varchar2).Value = idtransaksi;
-
+                command.Parameters.Add(":p_bulan", OracleDbType.Int32).Value = bulan;
+                command.Parameters.Add(":p_tahun", OracleDbType.Int32).Value = tahun;
                 using OracleDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DTOFakturPembelianDetail DaftarBarang = new()
+                    allDetails.Add(new DTOFakturPembelianDetail
                     {
-                        NO_TRANSAKSI = idtransaksi,
+                        NO_TRANSAKSI = reader["NO_TRANSAKSI"].ToString(),
                         BARIS = Convert.ToInt32(reader["BARIS"]),
                         PRODUCT_ID = Convert.IsDBNull(reader["PRODUCT_ID"]) ? 0 : Convert.ToInt32(reader["PRODUCT_ID"]),
                         KODE_BARANG = reader["KODE_BARANG"].ToString(),
@@ -79,49 +70,19 @@ namespace BackOffice.DataLayer
                         BRUTO = Convert.IsDBNull(reader["BRUTO"]) ? 0 : Convert.ToDecimal(reader["BRUTO"]),
                         POTONGAN = Convert.IsDBNull(reader["POTONGAN"]) ? 0 : Convert.ToDecimal(reader["POTONGAN"]),
                         TOTAL = Convert.IsDBNull(reader["TOTAL"]) ? 0 : Convert.ToDecimal(reader["TOTAL"])
-                    };
-
-                    Detail.Add(DaftarBarang);
+                    });
                 }
-
             }
 
-            return Detail;
-        }
-
-        public List<DTODaftarBarang> GetDaftarBarang(string idtransaksi)
-        {
-            List<DTODaftarBarang> Detail = new();
-
-            string query = "SELECT BARIS,NAMA_BARANG,SATUAN,JUMLAH_BARANG,HARGA_BARANG,POTONGAN,TOTAL_HARGA FROM  POS_PENJUALAN_DETAIL WHERE NO_TRANSAKSI = :idtransaksi ORDER BY BARIS";
-
-            using (OracleConnection connection = new(global.connectionString))
+            // Group details by NO_TRANSAKSI and assign to headers
+            var detailLookup = allDetails.GroupBy(d => d.NO_TRANSAKSI).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var header in Master)
             {
-                connection.Open();
-
-                using OracleCommand command = new(query, connection);
-                command.Parameters.Add(":idtransaksi", OracleDbType.Varchar2).Value = idtransaksi;
-
-                using OracleDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    DTODaftarBarang DaftarBarang = new()
-                    {
-                        NO_TRANSAKSI = idtransaksi,
-                        BARIS = Convert.ToInt32(reader["BARIS"]),
-                        NAMA_BARANG = reader["NAMA_BARANG"].ToString(),
-                        SATUAN = reader["SATUAN"].ToString(),
-                        JUMLAH_BARANG = Convert.ToInt32(reader["JUMLAH_BARANG"]),
-                        HARGA_BARANG = Convert.ToDecimal(reader["HARGA_BARANG"]),
-                        POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
-                        TOTAL_HARGA = Convert.ToDecimal(reader["TOTAL_HARGA"])
-                    };
-
-                    Detail.Add(DaftarBarang);
-                }
+                if (detailLookup.TryGetValue(header.NO_TRANSAKSI, out var details))
+                    header.Details = details;
             }
 
-            return Detail;
+            return Master;
         }
 
         public List<DTOSupplier> GetSuppliers()
@@ -162,27 +123,29 @@ namespace BackOffice.DataLayer
                     var detailParameters = new DynamicParameters(detail);
                     conn.Execute(insertFakturBeli_Detail, detailParameters, transaction);
                 }
-                //update hpp dan harga jual
+                //update hpp dan harga jual - hanya jika harga beli dan harga jual > 0
                 string updateharga = "UPDATE pos_product " +
                      "SET beli = :Beli, price = :Jual, lastupdate = SYSDATE " +
                      "WHERE productid = :ProductID";
 
                 foreach (var product in ListItemPembelian)
                 {
+                    if (product.HARGA_BELI <= 0 || product.HARGA_JUAL <= 0)
+                        continue;
+
                     var parameters = new DynamicParameters(product);
                     parameters.Add("Beli", product.HARGA_BELI, DbType.Decimal, ParameterDirection.Input);
                     parameters.Add("Jual", product.HARGA_JUAL, DbType.Decimal, ParameterDirection.Input);
                     parameters.Add("ProductID", product.PRODUCT_ID, DbType.Int32, ParameterDirection.Input);
-                    conn.Execute(updateharga, parameters);
+                    conn.Execute(updateharga, parameters, transaction);
                 }
 
                 transaction.Commit();
             }
-            catch (Exception ex)
+            catch
             {
                 transaction.Rollback();
-                // Handle or log the exception here
-                throw ex;
+                throw;
             }
         }
 
@@ -220,15 +183,108 @@ namespace BackOffice.DataLayer
         {
             using OracleConnection connection = new(global.connectionString);
             connection.Open();
+            OracleTransaction transaction = connection.BeginTransaction();
 
-            // DELETE existing record
-            string deleteQuery = "DELETE FROM POS_PEMBELIAN WHERE NO_TRANSAKSI = :nomor";
+            try
+            {
+                // DELETE detail records first
+                string deleteDetailQuery = "DELETE FROM POS_PEMBELIANDETAIL WHERE NO_TRANSAKSI = :nomor";
+                using OracleCommand deleteDetailCommand = new(deleteDetailQuery, connection);
+                deleteDetailCommand.Transaction = transaction;
+                deleteDetailCommand.Parameters.Add("nomor", no_faktur);
+                deleteDetailCommand.ExecuteNonQuery();
 
-            using OracleCommand deleteCommand = new(deleteQuery, connection);
-            deleteCommand.Parameters.Add("nomor", no_faktur);
-            deleteCommand.ExecuteNonQuery();
+                // DELETE header record
+                string deleteQuery = "DELETE FROM POS_PEMBELIAN WHERE NO_TRANSAKSI = :nomor";
+                using OracleCommand deleteCommand = new(deleteQuery, connection);
+                deleteCommand.Transaction = transaction;
+                deleteCommand.Parameters.Add("nomor", no_faktur);
+                deleteCommand.ExecuteNonQuery();
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
+
+        public void UpdateFaktur_Pembelian(DTOFakturPembelian_Header faktur_header, List<DTOFakturPembelianDetail> ListItemPembelian)
+        {
+            using OracleConnection conn = new(global.connectionString);
+            conn.Open();
+            OracleTransaction transaction = conn.BeginTransaction();
+
+            try
+            {
+                // DELETE detail records first
+                string deleteDetailQuery = "DELETE FROM POS_PEMBELIANDETAIL WHERE NO_TRANSAKSI = :nomor";
+                using (OracleCommand deleteDetailCommand = new(deleteDetailQuery, conn))
+                {
+                    deleteDetailCommand.Transaction = transaction;
+                    deleteDetailCommand.Parameters.Add("nomor", faktur_header.NO_TRANSAKSI);
+                    deleteDetailCommand.ExecuteNonQuery();
+                }
+
+                // DELETE header record
+                string deleteQuery = "DELETE FROM POS_PEMBELIAN WHERE NO_TRANSAKSI = :nomor";
+                using (OracleCommand deleteCommand = new(deleteQuery, conn))
+                {
+                    deleteCommand.Transaction = transaction;
+                    deleteCommand.Parameters.Add("nomor", faktur_header.NO_TRANSAKSI);
+                    deleteCommand.ExecuteNonQuery();
+                }
+
+                // Insert master records
+                string insertFakturBeli_Master = "INSERT INTO POS_PEMBELIAN (NO_TRANSAKSI, TANGGAL, SUPPLIER_ID, BRUTO, POTONGAN, TOTAL, TERMIN,USERID) " +
+                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :SUPPLIER_ID,:BRUTO, :POTONGAN, :TOTAL, :TERMIN, :USERID) " +
+                                                "RETURNING PURCHASE_ID INTO :PembelianId";
+
+                var masterParameters = new DynamicParameters(faktur_header);
+                masterParameters.Add("PembelianId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                conn.Execute(insertFakturBeli_Master, masterParameters, transaction);
+
+                Int32 newPembelianId = masterParameters.Get<Int32>("PembelianId");
+
+                string insertFakturBeli_Detail = "INSERT INTO POS_PEMBELIANDETAIL (PURCHASE_ID, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, NAMA_BARANG, SATUAN,QUANTITY,HARGA_BELI,  BRUTO, POTONGAN, TOTAL) " +
+                    "VALUES (:PURCHASE_ID, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG,  :NAMA_BARANG, :SATUAN, :QUANTITY,:HARGA_BELI, :BRUTO, :POTONGAN, :TOTAL)";
+
+                foreach (var detail in ListItemPembelian)
+                {
+                    detail.PURCHASE_ID = newPembelianId;
+                    detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
+
+                    var detailParameters = new DynamicParameters(detail);
+                    conn.Execute(insertFakturBeli_Detail, detailParameters, transaction);
+                }
+
+                // update hpp dan harga jual - hanya jika harga beli dan harga jual > 0
+                string updateharga = "UPDATE pos_product " +
+                     "SET beli = :Beli, price = :Jual, lastupdate = SYSDATE " +
+                     "WHERE productid = :ProductID";
+
+                foreach (var product in ListItemPembelian)
+                {
+                    if (product.HARGA_BELI <= 0 || product.HARGA_JUAL <= 0)
+                        continue;
+
+                    var parameters = new DynamicParameters(product);
+                    parameters.Add("Beli", product.HARGA_BELI, DbType.Decimal, ParameterDirection.Input);
+                    parameters.Add("Jual", product.HARGA_JUAL, DbType.Decimal, ParameterDirection.Input);
+                    parameters.Add("ProductID", product.PRODUCT_ID, DbType.Int32, ParameterDirection.Input);
+                    conn.Execute(updateharga, parameters, transaction);
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
 
         public void EditPembelian(string no_faktur)
         {

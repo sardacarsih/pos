@@ -8,8 +8,14 @@ using DevExpress.XtraEditors.Repository;
 using DevExpress.XtraGrid.Columns;
 using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraReports.UI;
+using OfficeOpenXml.Table;
+using OfficeOpenXml;
 using Oracle.ManagedDataAccess.Client;
 using System.Data;
+using DevExpress.XtraPrinting.Native;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 
 namespace BackOffice.UC
 {
@@ -17,7 +23,7 @@ namespace BackOffice.UC
     {
         DataSet _ds, _ds2;
         string JenisLaporan;
-        int p_tahun,p_bulan, p_remise, p_periode;
+        int p_tahun, p_bulan, p_remise, p_periode;
 
         string[] bulan = PeriodeServices.GetBulan();
         string[] remise = PeriodeServices.GetRemise();
@@ -87,7 +93,7 @@ namespace BackOffice.UC
             //XtraMessageBox.Show(JenisLaporan);
         }
 
-       
+
         private void Load_Tagihan_Perioe()
         {
             try
@@ -210,7 +216,7 @@ namespace BackOffice.UC
         string periode;
         private void BLBICETAK_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            
+
             //_ds.WriteXmlSchema("Tagihan_Penjualan.xsd");
 
             if (JenisLaporan == "Rekap")
@@ -334,10 +340,10 @@ namespace BackOffice.UC
             {
                 XtraReport report1 = new rptTagihanPinjaman_nik
                 {
-                    DataSource = LaporanManager.TagihanPinjaman(NIK,p_periode),
+                    DataSource = LaporanManager.TagihanPinjaman(NIK, p_periode),
                     RequestParameters = true
                 };
-               // report1.Parameters["NAMA"].Value = NAMA + " (Periode : " + startdate.ToString("dd-MMM-yyyy") + " - " + enddate.ToString("dd-MMM-yyyy") + " )";
+                // report1.Parameters["NAMA"].Value = NAMA + " (Periode : " + startdate.ToString("dd-MMM-yyyy") + " - " + enddate.ToString("dd-MMM-yyyy") + " )";
                 report1.ShowPreview();
             }
             else
@@ -359,13 +365,13 @@ namespace BackOffice.UC
             var NIK = gridView1.GetRowCellValue(rowhandle, "NIK").ToString();
             var NAMA = gridView1.GetRowCellValue(rowhandle, "NAMA_PELANGGAN").ToString();
             var status = gridView1.GetRowCellValue(rowhandle, "STATUS").ToString();
-            var waserda= decimal.Parse(gridView1.GetRowCellValue(rowhandle, "WASERDA").ToString());
+            var waserda = decimal.Parse(gridView1.GetRowCellValue(rowhandle, "WASERDA").ToString());
             DateTime daritanggal, sampaitanggal;
-           
-            if(status == "BULANAN")
+
+            if (status == "BULANAN")
             {
                 daritanggal = bulanandari;
-                sampaitanggal= bulanansampai;
+                sampaitanggal = bulanansampai;
 
             }
             else
@@ -375,7 +381,8 @@ namespace BackOffice.UC
 
             }
 
-            if (waserda != 0) {
+            if (waserda != 0)
+            {
 
                 XtraReport report1 = new rptTagihan_PenjualanDetails_NIK
                 {
@@ -385,7 +392,7 @@ namespace BackOffice.UC
                 };
                 report1.Parameters["PERIODE"].Value = periode;
                 report1.Parameters["TANGGAL"].Value = daritanggal.ToString("dd-MMM-yyyy") + "to" + sampaitanggal.ToString("dd-MMM-yyyy");
-                report1.Parameters["NIK"].Value = NIK+" "+NAMA;
+                report1.Parameters["NIK"].Value = NIK + " " + NAMA;
                 // Create a ReportPrintTool instance and assign the report to it
                 ReportPrintTool printTool = new(report1);
 
@@ -396,6 +403,34 @@ namespace BackOffice.UC
             {
                 XtraMessageBox.Show("Pelanggan ini tidak memiliki potongan waserda", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+
+        private void barLargeButtonItem1_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            var p_periode = periode;
+            // Create the sample DataSet
+            DataSet dataSet = _ds;
+            ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+            using ExcelPackage package = new();
+            // Add worksheets
+            ExcelExporter.AddWorksheet(package, dataSet, "Rekap Tagihan", p_periode);
+            ExcelExporter.AddWorksheet(package, dataSet, "Tagihan Detail", p_periode);
+
+            Byte[] bin = package.GetAsByteArray();
+            string tempPath = Path.GetTempPath();
+            string filename = Path.Combine(tempPath, $"Tagihan_{Guid.NewGuid()}.xlsx");
+            File.WriteAllBytes(@filename, bin);
+            ProcessStartInfo psi = new(@filename)
+            {
+                UseShellExecute = true
+            };
+            Process.Start(psi);
+        }
+
+       
+        private void bei_bulan_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+
         }
     }
 }

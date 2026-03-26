@@ -26,7 +26,7 @@ namespace BackOffice.UC.Persediaan
 
         private void ucDaftarPersediaan_Load(object sender, EventArgs e)
         {
-            dateEdit1.Text = DateTime.Today.ToString("dd-MMM-yyyy");
+            dateEdit1.Text = DateTime.Today.ToString();
 
             Load_Persediaan();
         }
@@ -56,45 +56,47 @@ namespace BackOffice.UC.Persediaan
 
         private void Load_Persediaan()
         {
-            var startdate = new DateTime(Convert.ToDateTime(dateEdit1.Text).Year, 1, 1);
-            var enddate = Convert.ToDateTime(dateEdit1.Text);
-            persediaan = controller.GetProductStockInfo(startdate, enddate);
-            gridControl1.DataSource = persediaan;
+            if (DateTime.TryParse(dateEdit1.Text, out DateTime enddate))
+            {
+                var startdate = new DateTime(enddate.Year, 1, 1);
+                persediaan = controller.GetProductStockInfo(startdate, enddate);
+                gridControl1.DataSource = persediaan;
 
-            gridView1.Columns["IDX"].GroupIndex = 0;
-            gridView1.ExpandAllGroups();
-            gridView1.OptionsBehavior.Editable = false;
-            gridView1.Columns["STOCKAWAL_HPP"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            gridView1.Columns["STOCKAWAL_HPP"].DisplayFormat.FormatString = "N0";
-            gridView1.Columns["BELI_HARGA_AVG"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            gridView1.Columns["BELI_HARGA_AVG"].DisplayFormat.FormatString = "N0";
-            gridView1.Columns["TOTAL_COST_AVG"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            gridView1.Columns["TOTAL_COST_AVG"].DisplayFormat.FormatString = "N2";
-            gridView1.Columns["PERSEDIAAN"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            gridView1.Columns["PERSEDIAAN"].DisplayFormat.FormatString = "N2";
-            gridView1.OptionsFind.AlwaysVisible = true;
-            gridView1.OptionsView.ShowAutoFilterRow = true;
+                gridView1.Columns["IDX"].GroupIndex = 0;
+                gridView1.ExpandAllGroups();
+                gridView1.OptionsBehavior.Editable = false;
+                gridView1.Columns["STOCKAWAL_HPP"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+                gridView1.Columns["STOCKAWAL_HPP"].DisplayFormat.FormatString = "N0";
+                gridView1.Columns["BELI_HARGA_AVG"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+                gridView1.Columns["BELI_HARGA_AVG"].DisplayFormat.FormatString = "N0";
+                gridView1.Columns["TOTAL_COST_AVG"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+                gridView1.Columns["TOTAL_COST_AVG"].DisplayFormat.FormatString = "N2";
+                gridView1.Columns["PERSEDIAAN"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+                gridView1.Columns["PERSEDIAAN"].DisplayFormat.FormatString = "N2";
+                gridView1.OptionsFind.AlwaysVisible = true;
+                gridView1.OptionsView.ShowAutoFilterRow = true;
 
-            gridView1.OptionsView.ShowFooter = true;
-            gridView1.OptionsFind.ShowFindButton = true;
-            gridView1.BestFitColumns();
-            GridFormatRule gridFormatRule = new();
-            FormatConditionRuleExpression formatConditionRuleExpression = new FormatConditionRuleExpression();
+                gridView1.OptionsView.ShowFooter = true;
+                gridView1.OptionsFind.ShowFindButton = true;
+                gridView1.BestFitColumns();
+                GridFormatRule gridFormatRule = new();
+                FormatConditionRuleExpression formatConditionRuleExpression = new FormatConditionRuleExpression();
 
 
-            gridFormatRule.Column = gridView1.Columns["STOCK_AKHIR"]; // Assuming "Stock" is the correct column name
-            gridFormatRule.ApplyToRow = true;
+                gridFormatRule.Column = gridView1.Columns["STOCK_AKHIR"]; // Assuming "Stock" is the correct column name
+                gridFormatRule.ApplyToRow = true;
 
-            formatConditionRuleExpression.PredefinedName = "Red Fill, Red Text";
-            formatConditionRuleExpression.Expression = "[STOCK_AKHIR] < 0";  // Update the condition to check if "Stock" is less than 0
+                formatConditionRuleExpression.PredefinedName = "Red Fill, Red Text";
+                formatConditionRuleExpression.Expression = "[STOCK_AKHIR] < 0";  // Update the condition to check if "Stock" is less than 0
 
-            gridFormatRule.Rule = formatConditionRuleExpression;
-            gridView1.FormatRules.Add(gridFormatRule);
+                gridFormatRule.Rule = formatConditionRuleExpression;
+                gridView1.FormatRules.Add(gridFormatRule);
 
-            // Add summary for "TOTAL" column
-            GridColumn totalColumn = gridView1.Columns["PERSEDIAAN"];
-            totalColumn.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
-            totalColumn.SummaryItem.DisplayFormat = "Total: {0:N0}";
+                // Add summary for "TOTAL" column
+                GridColumn totalColumn = gridView1.Columns["PERSEDIAAN"];
+                totalColumn.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
+                totalColumn.SummaryItem.DisplayFormat = "Total: {0:N0}";
+            }
         }
 
         private void sbexport_Click(object sender, EventArgs e)

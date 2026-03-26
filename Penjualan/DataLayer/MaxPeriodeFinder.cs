@@ -12,7 +12,7 @@ namespace Penjualan.DataLayer
     {
         public  int GetMaxPeriode()
         {
-            using (OracleConnection connection = new OracleConnection(global.connectionString))
+            using (OracleConnection connection = new OracleConnection(Global.connectionString))
             {
                 connection.Open();
 

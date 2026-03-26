@@ -17,7 +17,7 @@ namespace Penjualan.DataLayer
         {
             string query = @"DELETE FROM POS_PENDING WHERE NO_TRANSAKSI = :notransaksi";
 
-            using OracleConnection connection = new(global.connectionString);
+            using OracleConnection connection = new(Global.connectionString);
             connection.Open();
 
             using OracleCommand command = new(query, connection);
@@ -31,7 +31,7 @@ namespace Penjualan.DataLayer
 
                 string query = @"SELECT NO_TRANSAKSI,TANGGAL,JAM,KASIR FROM POS_PENDING ORDER BY TANGGAL";
 
-                using (OracleConnection connection = new(global.connectionString))
+                using (OracleConnection connection = new(Global.connectionString))
                 {
                     connection.Open();
 
@@ -69,7 +69,7 @@ namespace Penjualan.DataLayer
                             WHERE
                               NO_TRANSAKSI = :idtransaksi";
 
-            using (OracleConnection connection = new(global.connectionString))
+            using (OracleConnection connection = new(Global.connectionString))
             {
                 connection.Open();
 
@@ -105,7 +105,7 @@ namespace Penjualan.DataLayer
 
         public void InsertFaktur_Pending(DTOFakturPending faktur_header, List<DTODaftarBarangPending> ListItemsPenjualan)
         {
-            using OracleConnection conn = new(global.connectionString);
+            using OracleConnection conn = new(Global.connectionString);
             conn.Open();
             OracleTransaction transaction = conn.BeginTransaction();
 

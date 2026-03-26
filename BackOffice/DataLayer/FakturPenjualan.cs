@@ -4,6 +4,7 @@ using Dapper;
 using DevExpress.XtraMap.Native;
 using Oracle.ManagedDataAccess.Client;
 using System.Data;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace BackOffice.DataLayer
@@ -351,17 +352,27 @@ namespace BackOffice.DataLayer
 
         public void Tutup_Buku(int p_periode, int p_remise, DateTime p_tglAngsuran, DateTime p_daritanggal, DateTime p_sampaitanggal)
         {
-            using OracleConnection conn = new(global.connectionString);
-            using OracleCommand _command = new("TUTUP_BUKU.TUTUP_BUKU_PERIODE", conn)
+            using OracleConnection conn = new OracleConnection(global.connectionString);
+            using OracleCommand _command = new OracleCommand("TUTUP_BUKU.TUTUP_BUKU_PERIODE", conn)
             {
                 CommandType = CommandType.StoredProcedure
             };
+
             conn.Open();
+
+            // Format tanggal sebagai string dalam format dd-MMM-yyyy menggunakan culture en-US
+            CultureInfo enUS = new CultureInfo("en-US"); 
+            string dariTanggalStr = p_daritanggal.ToString("dd-MMM-yyyy", enUS);
+            string sampaiTanggalStr = p_sampaitanggal.ToString("dd-MMM-yyyy", enUS);
+
+            // Tambahkan parameter
             _command.Parameters.Add(":p_periode", OracleDbType.Int16).Value = p_periode;
             _command.Parameters.Add(":p_remise", OracleDbType.Int16).Value = p_remise;
             _command.Parameters.Add(":p_tglAngsuran", OracleDbType.Date).Value = p_tglAngsuran;
             _command.Parameters.Add(":p_daritanggal", OracleDbType.Date).Value = p_daritanggal;
             _command.Parameters.Add(":p_sampaitanggal", OracleDbType.Date).Value = p_sampaitanggal;
+
+
             _command.ExecuteNonQuery();
         }
 
@@ -395,6 +406,66 @@ namespace BackOffice.DataLayer
             _ds.Tables[2].TableName = "tagihan_waserda";
             // return dataset result
             return _ds;
+        }
+
+        public bool GetSettingKontrol_qty_Saldo()
+        {
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+
+            string sqlQuery = "SELECT JUMLAH FROM FIN_SETTINGS WHERE CONFIG ='KONTROL_SALDO_QTY'";
+            using OracleCommand command = new(sqlQuery, connection);
+            object result = command.ExecuteScalar();
+            int rowCount = result != null ? Convert.ToInt32(result) : 0;
+            return rowCount > 0;
+        }
+
+        public decimal GetStocItem(string kodeBarang, DateTime startDate, DateTime endDate)
+        {
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+
+            string sqlQuery = @"
+                SELECT COALESCE(stock.quantity, 0) + COALESCE(purchases.quantity, 0)
+                    + COALESCE(STOCKOPNAME.jumlah_barang, 0) - (COALESCE(sales.jumlah_barang, 0)
+                    + COALESCE(RUSAK.jumlah_barang, 0)) AS StockAkhir
+                FROM
+                    (SELECT kode_item FROM POS_PRODUCT WHERE kode_item = :p_product_code) all_data
+                LEFT JOIN
+                    (SELECT kode_barang, quantity FROM pos_stock
+                     WHERE tanggal = :start_date AND KODE_BARANG = :p_product_code) stock
+                     ON all_data.kode_item = stock.kode_barang
+                LEFT JOIN
+                    (SELECT d.kode_barang, SUM(d.quantity) AS quantity
+                    FROM pos_pembeliandetail d
+                    JOIN pos_pembelian m ON m.purchase_id = d.purchase_id
+                    WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_product_code
+                    GROUP BY d.kode_barang) purchases ON all_data.kode_item = purchases.kode_barang
+                LEFT JOIN
+                    (SELECT d.kode_barang, SUM(d.jumlah_barang) AS jumlah_barang
+                    FROM pos_penjualan_detail d
+                    JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
+                    WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_product_code
+                    GROUP BY d.kode_barang) sales ON all_data.kode_item = sales.kode_barang
+                LEFT JOIN
+                    (SELECT KODE_BARANG, SUM(JUMLAHFISIK) AS jumlah_barang
+                    FROM POS_BARANGRUSAK
+                    WHERE TANGGAL BETWEEN :start_date AND :end_date AND KODE_BARANG = :p_product_code
+                    GROUP BY KODE_BARANG) RUSAK ON all_data.kode_item = RUSAK.kode_barang
+                LEFT JOIN
+                    (SELECT KODE_BARANG, SUM(SELISIH) AS jumlah_barang
+                    FROM POS_STOCKOPNAME
+                    WHERE TANGGAL BETWEEN :start_date AND :end_date AND KODE_BARANG = :p_product_code
+                    GROUP BY KODE_BARANG) STOCKOPNAME ON all_data.kode_item = STOCKOPNAME.kode_barang";
+
+            var parameters = new
+            {
+                p_product_code = kodeBarang,
+                start_date = startDate,
+                end_date = endDate
+            };
+
+            return connection.QueryFirstOrDefault<decimal>(sqlQuery, parameters, commandType: CommandType.Text);
         }
 
         public DTOProductInfo RetrieveProductInfo(string barcode)

@@ -12,12 +12,13 @@ namespace BackOffice
 {
     public partial class PaymentForm : DevExpress.XtraEditors.XtraForm
     {
+        private const string DEFAULT_CUSTOMER_NIK = "00.00004";
         PendingController controller = new();
         public bool PendingFaktur { get; set; }
         private string jenis_pembayaran="TUNAI";
         private string ket_pembayaran = "KAS";
         string NIK, STATUS, UNIT_KERJA;
-        double ID,LIMIT_HUTANG;
+        double ID, LIMIT_HUTANG, JUMLAHFAKTUR;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTOFakturPenjualanDetail> ListItemsPenjualan { get; set; }
 
@@ -32,6 +33,7 @@ namespace BackOffice
         {
             FinSettingsDataAccess finsetting = new();
             txttotal.Text = FakturPenjualanHeader.TOTAL.ToString();
+            JUMLAHFAKTUR = Convert.ToDouble(FakturPenjualanHeader.TOTAL);
             Load_angsuran(finsetting.GetMaxAngsuran());
             Load_Pelanggan();
             leangsuran.ItemIndex = 0;
@@ -65,9 +67,9 @@ namespace BackOffice
 
 
             // Set the default value for searchLookUpEdit1
-            int index = datasource.FindIndex(item => item.NIK == "00.00004");
-
-            searchLookUpEdit1.EditValue = datasource[index].NIK;
+            int index = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
+            if (index >= 0)
+                searchLookUpEdit1.EditValue = datasource[index].NIK;
         }
 
         private static List<DTOPelanggan> GetPelanggan()
@@ -93,8 +95,9 @@ namespace BackOffice
         {
             if (searchLookUpEdit1.EditValue != null)
             {
-                bayar = decimal.Parse(txtcash.Text);
-                if (searchLookUpEdit1.EditValue.ToString() == "00.00004" && (bayar == 0 || kembalian < 0))
+                if (!decimal.TryParse(txtcash.Text, out bayar))
+                    bayar = 0;
+                if (searchLookUpEdit1.EditValue.ToString() == DEFAULT_CUSTOMER_NIK && (bayar == 0 || kembalian < 0))
                 {
                     txtcash.Focus();
                     XtraMessageBox.Show("Pembayaran harus lebih besar atau sama dengan", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -177,8 +180,8 @@ namespace BackOffice
             decimal kembalian=0;
         private void txtcash_EditValueChanged(object sender, EventArgs e)
         {
-            var total=decimal.Parse(txttotal.Text);
-            bayar = decimal.Parse(txtcash.Text);
+            if (!decimal.TryParse(txttotal.Text, out var total)) total = 0;
+            if (!decimal.TryParse(txtcash.Text, out bayar)) bayar = 0;
             kembalian = bayar - total;
             txtkembali.Text=kembalian.ToString();
         }
@@ -215,8 +218,9 @@ namespace BackOffice
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
+                    LIMIT_HUTANG = Convert.ToDouble(selectedObject.LIMIT_HUTANG);
 
-                    if (NIK == "00.00004")
+                    if (NIK == DEFAULT_CUSTOMER_NIK)
                     {
                         jenis_pembayaran = "TUNAI";
                         ket_pembayaran = "KAS";
@@ -239,6 +243,36 @@ namespace BackOffice
                         leangsuran.EditValue = 1;
                         labelControl4.Visible = true;
                         leangsuran.Visible = true;
+                        sbsimpancetak.Enabled = true;
+
+                        if (LIMIT_HUTANG != 0)
+                        {
+                            double totalHutang = Checking_JumlahHutang(NIK, STATUS);
+                            double totalSetelahFaktur = totalHutang + JUMLAHFAKTUR;
+
+                            if (totalSetelahFaktur > LIMIT_HUTANG)
+                            {
+                                double kelebihan = totalSetelahFaktur - LIMIT_HUTANG;
+                                sbsimpancetak.Enabled = false;
+
+                                string message =
+                                    $"Transaksi tidak dapat disimpan karena limit hutang telah terlampaui.\n\n" +
+                                    $"Detail Hutang:\n" +
+                                    $"- Hutang Saat Ini     : Rp. {totalHutang:N0}\n" +
+                                    $"- Jumlah Faktur Baru  : Rp. {JUMLAHFAKTUR:N0}\n" +
+                                    $"- Total Setelah Faktur: Rp. {totalSetelahFaktur:N0}\n" +
+                                    $"- Batas Limit Hutang  : Rp. {LIMIT_HUTANG:N0}\n" +
+                                    $"- Kelebihan Limit     : Rp. {kelebihan:N0}\n\n" +
+                                    $"Silakan lakukan pelunasan terlebih dahulu atau hubungi bagian keuangan.";
+
+                                XtraMessageBox.Show(
+                                    message,
+                                    "Limit Hutang Melebihi Batas",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -269,7 +303,7 @@ namespace BackOffice
                     else
                     {
                         // Set the default value for searchLookUpEdit1
-                        //int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
+                        //int index2 = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
 
                         //searchLookUpEdit1.EditValue = datasource[index2].NIK;
                         searchLookUpEdit1.EditValue = null;
@@ -308,8 +342,8 @@ namespace BackOffice
             if (e.KeyCode == Keys.F5)
             {
                 // Set the default value for searchLookUpEdit1
-                int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
-
+                int index2 = datasource.FindIndex(item => item.NIK == DEFAULT_CUSTOMER_NIK);
+                if (index2 < 0) return;
                 searchLookUpEdit1.EditValue = datasource[index2].NIK;
                 sbsimpancetak.Enabled = true;
                 txtcash.Focus();
@@ -334,35 +368,91 @@ namespace BackOffice
             }
         }
 
+        private double Checking_JumlahHutang(string nik, string status)
+        {
+            double total = 0;
+            int tahun = DateTime.Now.Year;
+            int bulan = DateTime.Now.Month;
+            int periode = (tahun * 100) + bulan;
+
+            using var connection = new OracleConnection(global.connectionString);
+            connection.Open();
+
+            // Get date range from POS_PERIODE based on status
+            DateTime dari = DateTime.MinValue;
+            DateTime sampai = DateTime.MinValue;
+
+            using (var cmdPeriode = new OracleCommand(@"
+                SELECT
+                    TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1DARI,
+                    TO_DATE(R1SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1SAMPAI,
+                    TO_DATE(R2DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2DARI,
+                    TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2SAMPAI,
+                    TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BDARI,
+                    TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BSAMPAI
+                FROM POS_PERIODE
+                WHERE PERIODE = :periode", connection))
+            {
+                cmdPeriode.Parameters.Add(":periode", OracleDbType.Int32).Value = periode;
+                using var reader = cmdPeriode.ExecuteReader();
+                if (reader.Read())
+                {
+                    if (status == "BULANAN")
+                    {
+                        dari = reader.IsDBNull(reader.GetOrdinal("BDARI")) ? DateTime.MinValue : reader.GetDateTime(reader.GetOrdinal("BDARI"));
+                        sampai = reader.IsDBNull(reader.GetOrdinal("BSAMPAI")) ? DateTime.MinValue : reader.GetDateTime(reader.GetOrdinal("BSAMPAI"));
+                    }
+                    else
+                    {
+                        dari = reader.IsDBNull(reader.GetOrdinal("R1DARI")) ? DateTime.MinValue : reader.GetDateTime(reader.GetOrdinal("R1DARI"));
+                        sampai = reader.IsDBNull(reader.GetOrdinal("R2SAMPAI")) ? DateTime.MinValue : reader.GetDateTime(reader.GetOrdinal("R2SAMPAI"));
+                    }
+                }
+            }
+
+            // Get total outstanding debt
+            using var cmdTotal = new OracleCommand(@"
+                SELECT NVL(SUM(TOTAL), 0)
+                FROM POS_PENJUALAN
+                WHERE NIK = :Nik
+                AND TANGGAL BETWEEN :Dari AND :Sampai", connection);
+
+            cmdTotal.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
+            cmdTotal.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
+            cmdTotal.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
+
+            total = Convert.ToDouble(cmdTotal.ExecuteScalar());
+
+            return total;
+        }
+
         private void sbtutup_Click(object sender, EventArgs e)
         {
             this.Close();
         }
         
 
-        public static List<DTOAngsuranKreditBarang> CalculateAngsuranKreditBarang(string nomortransaksi,DateTime tanggalBelanja, decimal jumlahBelanja, int waktuangsuran)
+        public static List<DTOAngsuranKreditBarang> CalculateAngsuranKreditBarang(string nomortransaksi, DateTime tanggalBelanja, decimal jumlahBelanja, int waktuangsuran)
         {
             List<DTOAngsuranKreditBarang> listAngsuran = new();
             decimal saldoAwal = jumlahBelanja;
-            decimal P; // Installment amount
+            decimal P = Math.Floor(saldoAwal / waktuangsuran);
 
-            // Calculate the installment amount
-            P = saldoAwal / waktuangsuran;
-
-            // Calculate installment for each month within the specified duration
             for (int i = 1; i <= waktuangsuran; i++)
             {
                 DateTime bulanBerikutnya = tanggalBelanja.AddMonths(i);
-                DateTime tanggalJatuhTempo = new (bulanBerikutnya.Year, bulanBerikutnya.Month, 1);
-                decimal saldoAkhir = saldoAwal - P;
+                DateTime tanggalJatuhTempo = new(bulanBerikutnya.Year, bulanBerikutnya.Month, 1);
 
-                DTOAngsuranKreditBarang angsuran = new ()
+                decimal angsuranBulanIni = (i == waktuangsuran) ? saldoAwal : P;
+                decimal saldoAkhir = saldoAwal - angsuranBulanIni;
+
+                DTOAngsuranKreditBarang angsuran = new()
                 {
                     NO_TRANSAKSI = nomortransaksi,
                     TANGGALJATUHTEMPO = tanggalJatuhTempo,
                     ANGSURANKE = i,
                     SALDOAWAL = Math.Round(saldoAwal, 2),
-                    ANGSURAN = Math.Round(P, 2),
+                    ANGSURAN = Math.Round(angsuranBulanIni, 2),
                     SALDOAKHIR = Math.Round(saldoAkhir, 2)
                 };
 

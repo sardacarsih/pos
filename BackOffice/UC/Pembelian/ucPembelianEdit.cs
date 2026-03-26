@@ -160,145 +160,16 @@ namespace BackOffice.UC
 
         
         private void gridView1_RowCountChanged(object sender, EventArgs e)
-        {
-            for (int i = 0; i < gridView1.RowCount; i++)
-            {
-
-                gridView1.SetRowCellValue(i, gridView1.Columns["No"], i + 1);
-            }
-        }
+            => PembelianHelper.UpdateRowNumbers(gridView1);
 
         private void gridView1_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
-        {
-            try
-            {
+            => PembelianHelper.HandleCellValueChanged(gridView1, e, transactionDataList, HitungTotalHarga, barcodeTextBox);
 
-                // Check if the changed cell is in the "Qty" column
-                if (e.Column.FieldName == "Qty")
-                {
-                    if (e.RowHandle >= 0)
-                    {
-                        // Get the current row
-                        TransactionDataBeli data = (TransactionDataBeli)gridView1.GetRow(e.RowHandle);
-
-                        // Update the Total property of the TransactionData object
-                        data.UpdateTotal();
-
-                        // Call the PostEditor method to update the GridView
-                        gridView1.PostEditor();
-                        // Calculate and update the total price
-                        HitungTotalHarga();
-                        gridView1.RefreshData();
-                    }
-                }
-                else if (e.Column.FieldName == "Total")
-                {
-                    object cellValue = e.Value;
-
-                    if (cellValue != null)
-                    {
-                        if (!decimal.TryParse(cellValue.ToString(), out decimal total))
-                        {
-                            gridView1.SetColumnError(e.Column, "Input hanya angka.");
-                        }
-                        else if (total <= 0)
-                        {
-                            gridView1.SetColumnError(e.Column, "Total harus positif.");
-                        }
-                        else
-                        {
-                            gridView1.SetColumnError(e.Column, null); // Clear error if validation passes
-                        }
-                    }
-                }
-            }
-            catch
-            {
-
-            }
-            finally
-            {
-                barcodeTextBox.Focus();
-            }
-
-        }
         private void gridView1_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.F2)
-            {
-                // Close the editor and exit the edit mode
-                gridView1.CloseEditor();
-                gridView1.UpdateCurrentRow();
-                // Set focus to the GridView control
-                barcodeTextBox.Focus();
-                e.Handled = true;
-            }
-            if (e.KeyCode == Keys.Delete)
-            {
-                // Get the selected row from the GridView
-                GridView view = gridControl1.FocusedView as GridView;
-                int selectedRowHandle = view.FocusedRowHandle;
-
-                // Get the underlying item from the list based on the selected row
-                if (selectedRowHandle >= 0 && selectedRowHandle < transactionDataList.Count)
-                {
-                    TransactionDataBeli selectedItem = transactionDataList[selectedRowHandle];
-
-                    // Show a confirmation dialog before deleting
-                    DialogResult result = MessageBox.Show("Apakah anda yakin akan menghapus baris ini?", "Delete Row", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-
-                    if (result == DialogResult.Yes)
-                    {
-                        // Remove the item from the list
-                        transactionDataList.RemoveAt(selectedRowHandle);
-                    }
-                }
-                HitungTotalHarga();
-            }
-        }
+            => PembelianHelper.HandleGridKeyDown(e, gridControl1, gridView1, transactionDataList, HitungTotalHarga, barcodeTextBox);
 
         private void gridView1_ValidatingEditor(object sender, DevExpress.XtraEditors.Controls.BaseContainerValidateEditorEventArgs e)
-        {
-            if (gridView1.FocusedColumn.FieldName == "Qty" && e.Value != null)
-            {
-                string qtyString = e.Value.ToString();
-
-                if (qtyString.Length > 5)
-                {
-                    e.Valid = false;
-                    e.ErrorText = "Qty ERROR.";
-                    return;
-                }
-
-                if (!decimal.TryParse(qtyString, out decimal qty))
-                {
-                    e.Valid = false;
-                    e.ErrorText = "Input hanya angka.";
-                    return;
-                }
-
-                if (qty < 0)
-                {
-                    e.Valid = false;
-                    e.ErrorText = "Qty tidak boleh negatif.";
-                }
-            }
-            else if (gridView1.FocusedColumn.FieldName == "Total" && e.Value != null)
-            {
-                if (!decimal.TryParse(e.Value.ToString(), out decimal jumlah))
-                {
-                    e.Valid = false;
-                    e.ErrorText = "Input hanya angka.";
-                    return;
-                }
-
-                if (jumlah <= 0)
-                {
-                    e.Valid = false;
-                    e.ErrorText = "Jumlah harus positif.";
-                }
-            }
-        }
+            => PembelianHelper.ValidateEditor(gridView1, e);
 
         private void ucPembelianEdit_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
         {
@@ -329,13 +200,7 @@ namespace BackOffice.UC
         }
         int productid;
         private void Subtotal_calc()
-        {
-            var qty = decimal.Parse(txtqty.Text);
-            var harga = decimal.Parse(txthargabeli.Text);
-            var potongan = decimal.Parse(txtpotongan.Text);
-            var total = (qty * harga) - potongan;
-            txttotal.Text = total.ToString();
-        }
+            => PembelianHelper.SubtotalCalc(txtqty, txthargabeli, txtpotongan, txttotal);
 
         private void txtqty_KeyDown(object sender, KeyEventArgs e)
         {
@@ -359,11 +224,6 @@ namespace BackOffice.UC
 
         private void blbisimpan_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));   
-
             if (transactionDataList.Count == 0) return;
             if (searchLookUpEditSupplier.EditValue ==null)
             {
@@ -388,48 +248,22 @@ namespace BackOffice.UC
                 BRUTO = Bruto,
                 POTONGAN = Potongan,
                 TOTAL = Total,
-                TERMIN=int.Parse(txttermin.Text),
+                TERMIN = int.TryParse(txttermin.Text, out int termin) ? termin : 0,
                 USERID = txtuser.Text
             };
 
 
             List<DTOFakturPembelianDetail> itemPembelianData = GetItemPembelianData();
 
-            //menghapus faktur pembelian,detail pembelian dan daftar angsuran penjualan kredit
-            controller.HapusPembelian(PembelianHeader.NO_TRANSAKSI);
-
-            //insert pembelian dan set hpp dan harga jual pada product
-            controller.InsertFaktur_Pembelian(PembelianHeader, itemPembelianData);
+            //update faktur pembelian (delete+insert dalam satu transaction)
+            controller.UpdateFaktur_Pembelian(PembelianHeader, itemPembelianData);
 
             XtraMessageBox.Show("Faktur Pembelian telah diupdate", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         }
 
         private List<DTOFakturPembelianDetail> GetItemPembelianData()
-        {
-            List<DTOFakturPembelianDetail> ListItemsPembelian = new();
-
-            for (int i = 0; i < transactionDataList.Count; i++)
-            {
-                TransactionDataBeli data = transactionDataList[i];
-                DTOFakturPembelianDetail detail = new()
-                {
-                    BARIS = i + 1,
-                    PRODUCT_ID = data.ProductId,
-                    KODE_BARANG = data.Kode_Item,
-                    NAMA_BARANG = data.ProductName,
-                    SATUAN = data.Satuan,
-                    QUANTITY = data.Qty,
-                    HARGA_BELI = data.Hpp,
-                    HARGA_JUAL = data.Price,
-                    BRUTO = data.Qty * data.Hpp,
-                    POTONGAN = data.Potongan,
-                    TOTAL = data.Total
-                };
-                ListItemsPembelian.Add(detail);
-            }
-            return ListItemsPembelian;
-        }
+            => PembelianHelper.GetItemPembelianData(transactionDataList);
         private void detanggal_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
@@ -451,42 +285,15 @@ namespace BackOffice.UC
         {
             if (e.KeyCode == Keys.Enter)
             {
-                if (decimal.Parse(txtqty.Text) == 0 || decimal.Parse(txtqty.Text) < 0 || string.IsNullOrEmpty(txtItemBarang.Text))
-                {
-                    XtraMessageBox.Show("Qty dan harga harus diisi", "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-                if (decimal.Parse(texthargajual.Text) <= decimal.Parse(txthargabeli.Text))
-                {
-                    XtraMessageBox.Show("Harga Jual <=  Harga Pokok Pembelian", "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-                var newProduct = new TransactionDataBeli
-                {
-                    ProductId = productid,
-                    Barcode = barcodeTextBox.Text,
-                    Kode_Item = txtItemBarang.Text,
-                    ProductName = txtnamabarang.Text,
-                    Satuan = txtsatuan.Text,
-                    Qty = decimal.Parse(txtqty.Text),
-                    Hpp=decimal.Parse(txthargabeli.Text),
-                    Price = decimal.Parse(texthargajual.Text),
-                    Potongan = decimal.Parse(txtpotongan.Text),
-                };
-                newProduct.UpdateTotal();
+                var newProduct = PembelianHelper.ValidateAndCreateProduct(
+                    ref productid, barcodeTextBox, txtItemBarang, txtnamabarang,
+                    txtsatuan, txtqty, txthargabeli, texthargajual, txtpotongan);
+                if (newProduct == null) return;
+
                 transactionDataList.Add(newProduct);
                 HitungTotalHarga();
-                productid = 0;
-                barcodeTextBox.Text = string.Empty;
-                txtItemBarang.Text = string.Empty;
-                txtnamabarang.Text = string.Empty;
-                txtsatuan.Text = string.Empty;
-                txtqty.Text = "0";
-                txthargabeli.Text = "0";
-                txtpotongan.Text = "0";
-                texthpplama.Text = "0";
-                texthargajual.Text = "0";
-                barcodeTextBox.Focus();
+                PembelianHelper.ClearInputFields(barcodeTextBox, txtItemBarang, txtnamabarang,
+                    txtsatuan, txtqty, txthargabeli, txtpotongan, texthpplama, texthargajual);
             }
         }
 
@@ -514,14 +321,7 @@ namespace BackOffice.UC
 
         private void ucPembelianEdit_Load(object sender, EventArgs e)
         {
-            gridView1.Columns["No"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["ProductName"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Satuan"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Qty"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Hpp"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Bruto"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Potongan"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            gridView1.Columns["Total"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
+            PembelianHelper.DisableColumnSorting(gridView1);
             txtqty.Text = "0";
             txthargabeli.Text = "0";
             txtpotongan.Text = "0";

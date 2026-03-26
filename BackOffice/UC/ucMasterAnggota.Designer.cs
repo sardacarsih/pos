@@ -29,292 +29,291 @@
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ucMasterAnggota));
-            this.sidePanel1 = new DevExpress.XtraEditors.SidePanel();
-            this.radioGroup1 = new DevExpress.XtraEditors.RadioGroup();
-            this.sbbatal = new DevExpress.XtraEditors.SimpleButton();
-            this.sbaddorupdate = new DevExpress.XtraEditors.SimpleButton();
-            this.pictureEdit1 = new DevExpress.XtraEditors.PictureEdit();
-            this.comboBoxEdit_status = new DevExpress.XtraEditors.ComboBoxEdit();
-            this.checkEditnonaktif = new DevExpress.XtraEditors.CheckEdit();
-            this.checkEditnonanggota = new DevExpress.XtraEditors.CheckEdit();
-            this.lookUpEdit1 = new DevExpress.XtraEditors.LookUpEdit();
-            this.dateEdit_tma = new DevExpress.XtraEditors.DateEdit();
-            this.textEdit_nama = new DevExpress.XtraEditors.TextEdit();
-            this.textEdit_LIMITHUTANG = new DevExpress.XtraEditors.TextEdit();
-            this.textEdit_nik = new DevExpress.XtraEditors.TextEdit();
-            this.labelControl4 = new DevExpress.XtraEditors.LabelControl();
-            this.labelControl5 = new DevExpress.XtraEditors.LabelControl();
-            this.labelControl3 = new DevExpress.XtraEditors.LabelControl();
-            this.labelControl6 = new DevExpress.XtraEditors.LabelControl();
-            this.labelControl2 = new DevExpress.XtraEditors.LabelControl();
-            this.labelControl1 = new DevExpress.XtraEditors.LabelControl();
-            this.sidePanel2 = new DevExpress.XtraEditors.SidePanel();
-            this.gridControl1 = new DevExpress.XtraGrid.GridControl();
-            this.gridView1 = new DevExpress.XtraGrid.Views.Grid.GridView();
-            this.sidePanel1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.radioGroup1.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureEdit1.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.comboBoxEdit_status.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.checkEditnonaktif.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.checkEditnonanggota.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.lookUpEdit1.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.dateEdit_tma.Properties.CalendarTimeProperties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.dateEdit_tma.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_nama.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_LIMITHUTANG.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_nik.Properties)).BeginInit();
-            this.sidePanel2.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.gridControl1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.gridView1)).BeginInit();
-            this.SuspendLayout();
+            sidePanel1 = new DevExpress.XtraEditors.SidePanel();
+            radioGroup1 = new DevExpress.XtraEditors.RadioGroup();
+            sbbatal = new DevExpress.XtraEditors.SimpleButton();
+            sbaddorupdate = new DevExpress.XtraEditors.SimpleButton();
+            pictureEdit1 = new DevExpress.XtraEditors.PictureEdit();
+            comboBoxEdit_status = new DevExpress.XtraEditors.ComboBoxEdit();
+            checkEditnonaktif = new DevExpress.XtraEditors.CheckEdit();
+            checkEditnonanggota = new DevExpress.XtraEditors.CheckEdit();
+            lookUpEdit1 = new DevExpress.XtraEditors.LookUpEdit();
+            dateEdit_tma = new DevExpress.XtraEditors.DateEdit();
+            textEdit_nama = new DevExpress.XtraEditors.TextEdit();
+            textEdit_nik = new DevExpress.XtraEditors.TextEdit();
+            labelControl4 = new DevExpress.XtraEditors.LabelControl();
+            labelControl5 = new DevExpress.XtraEditors.LabelControl();
+            labelControl3 = new DevExpress.XtraEditors.LabelControl();
+            labelControl6 = new DevExpress.XtraEditors.LabelControl();
+            labelControl2 = new DevExpress.XtraEditors.LabelControl();
+            labelControl1 = new DevExpress.XtraEditors.LabelControl();
+            sidePanel2 = new DevExpress.XtraEditors.SidePanel();
+            gridControl1 = new DevExpress.XtraGrid.GridControl();
+            gridView1 = new DevExpress.XtraGrid.Views.Grid.GridView();
+            txtlimithutang = new DevExpress.XtraEditors.TextEdit();
+            sidePanel1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)radioGroup1.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureEdit1.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)comboBoxEdit_status.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)checkEditnonaktif.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)checkEditnonanggota.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)lookUpEdit1.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)dateEdit_tma.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)dateEdit_tma.Properties.CalendarTimeProperties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)textEdit_nama.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)textEdit_nik.Properties).BeginInit();
+            sidePanel2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)gridControl1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)gridView1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)txtlimithutang.Properties).BeginInit();
+            SuspendLayout();
             // 
             // sidePanel1
             // 
-            this.sidePanel1.Controls.Add(this.radioGroup1);
-            this.sidePanel1.Controls.Add(this.sbbatal);
-            this.sidePanel1.Controls.Add(this.sbaddorupdate);
-            this.sidePanel1.Controls.Add(this.pictureEdit1);
-            this.sidePanel1.Controls.Add(this.comboBoxEdit_status);
-            this.sidePanel1.Controls.Add(this.checkEditnonaktif);
-            this.sidePanel1.Controls.Add(this.checkEditnonanggota);
-            this.sidePanel1.Controls.Add(this.lookUpEdit1);
-            this.sidePanel1.Controls.Add(this.dateEdit_tma);
-            this.sidePanel1.Controls.Add(this.textEdit_nama);
-            this.sidePanel1.Controls.Add(this.textEdit_LIMITHUTANG);
-            this.sidePanel1.Controls.Add(this.textEdit_nik);
-            this.sidePanel1.Controls.Add(this.labelControl4);
-            this.sidePanel1.Controls.Add(this.labelControl5);
-            this.sidePanel1.Controls.Add(this.labelControl3);
-            this.sidePanel1.Controls.Add(this.labelControl6);
-            this.sidePanel1.Controls.Add(this.labelControl2);
-            this.sidePanel1.Controls.Add(this.labelControl1);
-            this.sidePanel1.Dock = System.Windows.Forms.DockStyle.Top;
-            this.sidePanel1.Location = new System.Drawing.Point(0, 0);
-            this.sidePanel1.Name = "sidePanel1";
-            this.sidePanel1.Size = new System.Drawing.Size(710, 155);
-            this.sidePanel1.TabIndex = 1;
-            this.sidePanel1.Text = "sidePanel1";
+            sidePanel1.Controls.Add(txtlimithutang);
+            sidePanel1.Controls.Add(radioGroup1);
+            sidePanel1.Controls.Add(sbbatal);
+            sidePanel1.Controls.Add(sbaddorupdate);
+            sidePanel1.Controls.Add(pictureEdit1);
+            sidePanel1.Controls.Add(comboBoxEdit_status);
+            sidePanel1.Controls.Add(checkEditnonaktif);
+            sidePanel1.Controls.Add(checkEditnonanggota);
+            sidePanel1.Controls.Add(lookUpEdit1);
+            sidePanel1.Controls.Add(dateEdit_tma);
+            sidePanel1.Controls.Add(textEdit_nama);
+            sidePanel1.Controls.Add(textEdit_nik);
+            sidePanel1.Controls.Add(labelControl4);
+            sidePanel1.Controls.Add(labelControl5);
+            sidePanel1.Controls.Add(labelControl3);
+            sidePanel1.Controls.Add(labelControl6);
+            sidePanel1.Controls.Add(labelControl2);
+            sidePanel1.Controls.Add(labelControl1);
+            sidePanel1.Dock = DockStyle.Top;
+            sidePanel1.Location = new Point(0, 0);
+            sidePanel1.Name = "sidePanel1";
+            sidePanel1.Size = new Size(710, 155);
+            sidePanel1.TabIndex = 1;
+            sidePanel1.Text = "sidePanel1";
             // 
             // radioGroup1
             // 
-            this.radioGroup1.Location = new System.Drawing.Point(376, 5);
-            this.radioGroup1.Name = "radioGroup1";
-            this.radioGroup1.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
-            new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Anggota"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Pelanggan"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Anggota or Pelanggan Aktif")});
-            this.radioGroup1.Size = new System.Drawing.Size(178, 96);
-            this.radioGroup1.TabIndex = 8;
-            this.radioGroup1.SelectedIndexChanged += new System.EventHandler(this.radioGroup1_SelectedIndexChanged);
+            radioGroup1.Location = new Point(376, 5);
+            radioGroup1.Name = "radioGroup1";
+            radioGroup1.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] { new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Anggota"), new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Pelanggan"), new DevExpress.XtraEditors.Controls.RadioGroupItem(null, "Anggota or Pelanggan Aktif") });
+            radioGroup1.Size = new Size(178, 96);
+            radioGroup1.TabIndex = 8;
+            radioGroup1.SelectedIndexChanged += radioGroup1_SelectedIndexChanged;
             // 
             // sbbatal
             // 
-            this.sbbatal.ImageOptions.Image = ((System.Drawing.Image)(resources.GetObject("sbbatal.ImageOptions.Image")));
-            this.sbbatal.Location = new System.Drawing.Point(405, 114);
-            this.sbbatal.Name = "sbbatal";
-            this.sbbatal.Size = new System.Drawing.Size(91, 37);
-            this.sbbatal.TabIndex = 7;
-            this.sbbatal.Text = "Batal";
-            this.sbbatal.Click += new System.EventHandler(this.sbbatal_Click);
+            sbbatal.ImageOptions.Image = (Image)resources.GetObject("sbbatal.ImageOptions.Image");
+            sbbatal.Location = new Point(405, 114);
+            sbbatal.Name = "sbbatal";
+            sbbatal.Size = new Size(91, 37);
+            sbbatal.TabIndex = 7;
+            sbbatal.Text = "Batal";
+            sbbatal.Click += sbbatal_Click;
             // 
             // sbaddorupdate
             // 
-            this.sbaddorupdate.ImageOptions.Image = ((System.Drawing.Image)(resources.GetObject("sbaddorupdate.ImageOptions.Image")));
-            this.sbaddorupdate.Location = new System.Drawing.Point(308, 114);
-            this.sbaddorupdate.Name = "sbaddorupdate";
-            this.sbaddorupdate.Size = new System.Drawing.Size(91, 37);
-            this.sbaddorupdate.TabIndex = 7;
-            this.sbaddorupdate.Text = "Simpan";
-            this.sbaddorupdate.Click += new System.EventHandler(this.sbaddorupdate_Click);
+            sbaddorupdate.ImageOptions.Image = (Image)resources.GetObject("sbaddorupdate.ImageOptions.Image");
+            sbaddorupdate.Location = new Point(308, 114);
+            sbaddorupdate.Name = "sbaddorupdate";
+            sbaddorupdate.Size = new Size(91, 37);
+            sbaddorupdate.TabIndex = 7;
+            sbaddorupdate.Text = "Simpan";
+            sbaddorupdate.Click += sbaddorupdate_Click;
             // 
             // pictureEdit1
             // 
-            this.pictureEdit1.Location = new System.Drawing.Point(560, 3);
-            this.pictureEdit1.Name = "pictureEdit1";
-            this.pictureEdit1.Properties.ShowCameraMenuItem = DevExpress.XtraEditors.Controls.CameraMenuItemVisibility.Auto;
-            this.pictureEdit1.Properties.SizeMode = DevExpress.XtraEditors.Controls.PictureSizeMode.Stretch;
-            this.pictureEdit1.Size = new System.Drawing.Size(147, 146);
-            this.pictureEdit1.TabIndex = 6;
-            this.pictureEdit1.Click += new System.EventHandler(this.pictureEdit1_Click);
+            pictureEdit1.Location = new Point(560, 3);
+            pictureEdit1.Name = "pictureEdit1";
+            pictureEdit1.Properties.ShowCameraMenuItem = DevExpress.XtraEditors.Controls.CameraMenuItemVisibility.Auto;
+            pictureEdit1.Properties.SizeMode = DevExpress.XtraEditors.Controls.PictureSizeMode.Stretch;
+            pictureEdit1.Size = new Size(147, 146);
+            pictureEdit1.TabIndex = 6;
+            pictureEdit1.Click += pictureEdit1_Click;
             // 
             // comboBoxEdit_status
             // 
-            this.comboBoxEdit_status.Location = new System.Drawing.Point(107, 81);
-            this.comboBoxEdit_status.Name = "comboBoxEdit_status";
-            this.comboBoxEdit_status.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.comboBoxEdit_status.Size = new System.Drawing.Size(100, 20);
-            this.comboBoxEdit_status.TabIndex = 5;
+            comboBoxEdit_status.Location = new Point(107, 81);
+            comboBoxEdit_status.Name = "comboBoxEdit_status";
+            comboBoxEdit_status.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] { new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo) });
+            comboBoxEdit_status.Size = new Size(100, 20);
+            comboBoxEdit_status.TabIndex = 5;
             // 
             // checkEditnonaktif
             // 
-            this.checkEditnonaktif.Location = new System.Drawing.Point(270, 9);
-            this.checkEditnonaktif.Name = "checkEditnonaktif";
-            this.checkEditnonaktif.Properties.Caption = "Non Aktif";
-            this.checkEditnonaktif.Size = new System.Drawing.Size(114, 20);
-            this.checkEditnonaktif.TabIndex = 4;
+            checkEditnonaktif.Location = new Point(270, 9);
+            checkEditnonaktif.Name = "checkEditnonaktif";
+            checkEditnonaktif.Properties.Caption = "Non Aktif";
+            checkEditnonaktif.Size = new Size(114, 20);
+            checkEditnonaktif.TabIndex = 4;
             // 
             // checkEditnonanggota
             // 
-            this.checkEditnonanggota.Location = new System.Drawing.Point(270, 33);
-            this.checkEditnonanggota.Name = "checkEditnonanggota";
-            this.checkEditnonanggota.Properties.Caption = "Non Anggota";
-            this.checkEditnonanggota.Size = new System.Drawing.Size(114, 20);
-            this.checkEditnonanggota.TabIndex = 4;
+            checkEditnonanggota.Location = new Point(270, 33);
+            checkEditnonanggota.Name = "checkEditnonanggota";
+            checkEditnonanggota.Properties.Caption = "Non Anggota";
+            checkEditnonanggota.Size = new Size(114, 20);
+            checkEditnonanggota.TabIndex = 4;
             // 
             // lookUpEdit1
             // 
-            this.lookUpEdit1.Location = new System.Drawing.Point(107, 105);
-            this.lookUpEdit1.Name = "lookUpEdit1";
-            this.lookUpEdit1.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.lookUpEdit1.Size = new System.Drawing.Size(100, 20);
-            this.lookUpEdit1.TabIndex = 3;
+            lookUpEdit1.Location = new Point(107, 105);
+            lookUpEdit1.Name = "lookUpEdit1";
+            lookUpEdit1.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] { new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo) });
+            lookUpEdit1.Size = new Size(100, 20);
+            lookUpEdit1.TabIndex = 3;
             // 
             // dateEdit_tma
             // 
-            this.dateEdit_tma.EditValue = null;
-            this.dateEdit_tma.Location = new System.Drawing.Point(107, 59);
-            this.dateEdit_tma.Name = "dateEdit_tma";
-            this.dateEdit_tma.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.dateEdit_tma.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.dateEdit_tma.Size = new System.Drawing.Size(100, 20);
-            this.dateEdit_tma.TabIndex = 2;
-            this.dateEdit_tma.EditValueChanged += new System.EventHandler(this.dateEdit1_EditValueChanged);
+            dateEdit_tma.EditValue = null;
+            dateEdit_tma.Location = new Point(107, 59);
+            dateEdit_tma.Name = "dateEdit_tma";
+            dateEdit_tma.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] { new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo) });
+            dateEdit_tma.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] { new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo) });
+            dateEdit_tma.Properties.DisplayFormat.FormatString = "dd-MMM-yyyy";
+            dateEdit_tma.Properties.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            dateEdit_tma.Properties.EditFormat.FormatString = "dd-MMM-yyyy";
+            dateEdit_tma.Properties.EditFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            dateEdit_tma.Properties.UseMaskAsDisplayFormat = true;
+            dateEdit_tma.Size = new Size(100, 20);
+            dateEdit_tma.TabIndex = 2;
+            dateEdit_tma.EditValueChanged += dateEdit1_EditValueChanged;
             // 
             // textEdit_nama
             // 
-            this.textEdit_nama.Location = new System.Drawing.Point(107, 33);
-            this.textEdit_nama.Name = "textEdit_nama";
-            this.textEdit_nama.Size = new System.Drawing.Size(157, 20);
-            this.textEdit_nama.TabIndex = 1;
-            // 
-            // textEdit_LIMITHUTANG
-            // 
-            this.textEdit_LIMITHUTANG.Location = new System.Drawing.Point(107, 129);
-            this.textEdit_LIMITHUTANG.Name = "textEdit_LIMITHUTANG";
-            this.textEdit_LIMITHUTANG.Size = new System.Drawing.Size(100, 20);
-            this.textEdit_LIMITHUTANG.TabIndex = 1;
+            textEdit_nama.Location = new Point(107, 33);
+            textEdit_nama.Name = "textEdit_nama";
+            textEdit_nama.Size = new Size(157, 20);
+            textEdit_nama.TabIndex = 1;
             // 
             // textEdit_nik
             // 
-            this.textEdit_nik.Location = new System.Drawing.Point(107, 9);
-            this.textEdit_nik.Name = "textEdit_nik";
-            this.textEdit_nik.Properties.ReadOnly = true;
-            this.textEdit_nik.Size = new System.Drawing.Size(100, 20);
-            this.textEdit_nik.TabIndex = 1;
+            textEdit_nik.Location = new Point(107, 9);
+            textEdit_nik.Name = "textEdit_nik";
+            textEdit_nik.Properties.ReadOnly = true;
+            textEdit_nik.Size = new Size(100, 20);
+            textEdit_nik.TabIndex = 1;
             // 
             // labelControl4
             // 
-            this.labelControl4.Location = new System.Drawing.Point(12, 59);
-            this.labelControl4.Name = "labelControl4";
-            this.labelControl4.Size = new System.Drawing.Size(46, 13);
-            this.labelControl4.TabIndex = 0;
-            this.labelControl4.Text = "TANGGAL";
+            labelControl4.Location = new Point(12, 59);
+            labelControl4.Name = "labelControl4";
+            labelControl4.Size = new Size(46, 13);
+            labelControl4.TabIndex = 0;
+            labelControl4.Text = "TANGGAL";
             // 
             // labelControl5
             // 
-            this.labelControl5.Location = new System.Drawing.Point(12, 84);
-            this.labelControl5.Name = "labelControl5";
-            this.labelControl5.Size = new System.Drawing.Size(38, 13);
-            this.labelControl5.TabIndex = 0;
-            this.labelControl5.Text = "STATUS";
+            labelControl5.Location = new Point(12, 84);
+            labelControl5.Name = "labelControl5";
+            labelControl5.Size = new Size(38, 13);
+            labelControl5.TabIndex = 0;
+            labelControl5.Text = "STATUS";
             // 
             // labelControl3
             // 
-            this.labelControl3.Location = new System.Drawing.Point(12, 108);
-            this.labelControl3.Name = "labelControl3";
-            this.labelControl3.Size = new System.Drawing.Size(58, 13);
-            this.labelControl3.TabIndex = 0;
-            this.labelControl3.Text = "UNIT KERJA";
-            this.labelControl3.Click += new System.EventHandler(this.labelControl3_Click);
+            labelControl3.Location = new Point(12, 108);
+            labelControl3.Name = "labelControl3";
+            labelControl3.Size = new Size(58, 13);
+            labelControl3.TabIndex = 0;
+            labelControl3.Text = "UNIT KERJA";
+            labelControl3.Click += labelControl3_Click;
             // 
             // labelControl6
             // 
-            this.labelControl6.Location = new System.Drawing.Point(12, 132);
-            this.labelControl6.Name = "labelControl6";
-            this.labelControl6.Size = new System.Drawing.Size(71, 13);
-            this.labelControl6.TabIndex = 0;
-            this.labelControl6.Text = "LIMIT HUTANG";
+            labelControl6.Location = new Point(12, 132);
+            labelControl6.Name = "labelControl6";
+            labelControl6.Size = new Size(71, 13);
+            labelControl6.TabIndex = 0;
+            labelControl6.Text = "LIMIT HUTANG";
             // 
             // labelControl2
             // 
-            this.labelControl2.Location = new System.Drawing.Point(12, 36);
-            this.labelControl2.Name = "labelControl2";
-            this.labelControl2.Size = new System.Drawing.Size(29, 13);
-            this.labelControl2.TabIndex = 0;
-            this.labelControl2.Text = "NAMA";
+            labelControl2.Location = new Point(12, 36);
+            labelControl2.Name = "labelControl2";
+            labelControl2.Size = new Size(29, 13);
+            labelControl2.TabIndex = 0;
+            labelControl2.Text = "NAMA";
             // 
             // labelControl1
             // 
-            this.labelControl1.Location = new System.Drawing.Point(12, 12);
-            this.labelControl1.Name = "labelControl1";
-            this.labelControl1.Size = new System.Drawing.Size(17, 13);
-            this.labelControl1.TabIndex = 0;
-            this.labelControl1.Text = "NIK";
+            labelControl1.Location = new Point(12, 12);
+            labelControl1.Name = "labelControl1";
+            labelControl1.Size = new Size(17, 13);
+            labelControl1.TabIndex = 0;
+            labelControl1.Text = "NIK";
             // 
             // sidePanel2
             // 
-            this.sidePanel2.Controls.Add(this.gridControl1);
-            this.sidePanel2.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.sidePanel2.Location = new System.Drawing.Point(0, 155);
-            this.sidePanel2.Name = "sidePanel2";
-            this.sidePanel2.Size = new System.Drawing.Size(710, 353);
-            this.sidePanel2.TabIndex = 2;
-            this.sidePanel2.Text = "sidePanel2";
+            sidePanel2.Controls.Add(gridControl1);
+            sidePanel2.Dock = DockStyle.Fill;
+            sidePanel2.Location = new Point(0, 155);
+            sidePanel2.Name = "sidePanel2";
+            sidePanel2.Size = new Size(710, 353);
+            sidePanel2.TabIndex = 2;
+            sidePanel2.Text = "sidePanel2";
             // 
             // gridControl1
             // 
-            this.gridControl1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.gridControl1.Location = new System.Drawing.Point(0, 0);
-            this.gridControl1.MainView = this.gridView1;
-            this.gridControl1.Name = "gridControl1";
-            this.gridControl1.Size = new System.Drawing.Size(710, 353);
-            this.gridControl1.TabIndex = 0;
-            this.gridControl1.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
-            this.gridView1});
+            gridControl1.Dock = DockStyle.Fill;
+            gridControl1.Location = new Point(0, 0);
+            gridControl1.MainView = gridView1;
+            gridControl1.Name = "gridControl1";
+            gridControl1.Size = new Size(710, 353);
+            gridControl1.TabIndex = 0;
+            gridControl1.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] { gridView1 });
             // 
             // gridView1
             // 
-            this.gridView1.GridControl = this.gridControl1;
-            this.gridView1.Name = "gridView1";
-            this.gridView1.OptionsBehavior.Editable = false;
-            this.gridView1.OptionsFind.AlwaysVisible = true;
-            this.gridView1.OptionsFind.SearchInPreview = true;
-            this.gridView1.OptionsView.ShowFilterPanelMode = DevExpress.XtraGrid.Views.Base.ShowFilterPanelMode.ShowAlways;
-            this.gridView1.OptionsView.ShowGroupPanel = false;
-            this.gridView1.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(this.gridView1_RowCellStyle);
-            this.gridView1.DoubleClick += new System.EventHandler(this.gridView1_DoubleClick);
+            gridView1.GridControl = gridControl1;
+            gridView1.Name = "gridView1";
+            gridView1.OptionsBehavior.Editable = false;
+            gridView1.OptionsFind.AlwaysVisible = true;
+            gridView1.OptionsFind.SearchInPreview = true;
+            gridView1.OptionsView.ShowFilterPanelMode = DevExpress.XtraGrid.Views.Base.ShowFilterPanelMode.ShowAlways;
+            gridView1.OptionsView.ShowGroupPanel = false;
+            gridView1.RowCellStyle += gridView1_RowCellStyle;
+            gridView1.DoubleClick += gridView1_DoubleClick;
+            // 
+            // txtlimithutang
+            // 
+            txtlimithutang.Location = new Point(107, 128);
+            txtlimithutang.Name = "txtlimithutang";
+            txtlimithutang.Properties.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            txtlimithutang.Properties.EditFormat.FormatString = "n0";
+            txtlimithutang.Properties.UseMaskAsDisplayFormat = true;
+            txtlimithutang.Size = new Size(100, 20);
+            txtlimithutang.TabIndex = 9;
             // 
             // ucMasterAnggota
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.sidePanel2);
-            this.Controls.Add(this.sidePanel1);
-            this.Name = "ucMasterAnggota";
-            this.Size = new System.Drawing.Size(710, 508);
-            this.Load += new System.EventHandler(this.ucMasterAnggota_Load);
-            this.sidePanel1.ResumeLayout(false);
-            this.sidePanel1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.radioGroup1.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureEdit1.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.comboBoxEdit_status.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.checkEditnonaktif.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.checkEditnonanggota.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.lookUpEdit1.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.dateEdit_tma.Properties.CalendarTimeProperties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.dateEdit_tma.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_nama.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_LIMITHUTANG.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.textEdit_nik.Properties)).EndInit();
-            this.sidePanel2.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.gridControl1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.gridView1)).EndInit();
-            this.ResumeLayout(false);
-
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(sidePanel2);
+            Controls.Add(sidePanel1);
+            Name = "ucMasterAnggota";
+            Size = new Size(710, 508);
+            Load += ucMasterAnggota_Load;
+            sidePanel1.ResumeLayout(false);
+            sidePanel1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)radioGroup1.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureEdit1.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)comboBoxEdit_status.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)checkEditnonaktif.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)checkEditnonanggota.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)lookUpEdit1.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)dateEdit_tma.Properties.CalendarTimeProperties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)dateEdit_tma.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)textEdit_nama.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)textEdit_nik.Properties).EndInit();
+            sidePanel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)gridControl1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)gridView1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)txtlimithutang.Properties).EndInit();
+            ResumeLayout(false);
         }
 
         #endregion
@@ -338,8 +337,8 @@
         private DevExpress.XtraEditors.PictureEdit pictureEdit1;
         private DevExpress.XtraEditors.ComboBoxEdit comboBoxEdit_status;
         private DevExpress.XtraEditors.SimpleButton sbbatal;
-        private DevExpress.XtraEditors.TextEdit textEdit_LIMITHUTANG;
         private DevExpress.XtraEditors.LabelControl labelControl6;
         private DevExpress.XtraEditors.RadioGroup radioGroup1;
+        private DevExpress.XtraEditors.TextEdit txtlimithutang;
     }
 }

@@ -48,6 +48,7 @@
             Penjualan = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             accordionControlElementDaftarPenjualan = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             accordionControlElementTansaksiPending = new DevExpress.XtraBars.Navigation.AccordionControlElement();
+            accordionControlElement34 = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             Persediaa = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             accordionControlElement24 = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             accordionControlElement7 = new DevExpress.XtraBars.Navigation.AccordionControlElement();
@@ -82,7 +83,6 @@
             skinBarSubItem2 = new DevExpress.XtraBars.SkinBarSubItem();
             skinDropDownButtonItem3 = new DevExpress.XtraBars.SkinDropDownButtonItem();
             fluentFormDefaultManager1 = new DevExpress.XtraBars.FluentDesignSystem.FluentFormDefaultManager(components);
-            accordionControlElement34 = new DevExpress.XtraBars.Navigation.AccordionControlElement();
             ((System.ComponentModel.ISupportInitialize)accordionControl1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)fluentDesignFormControl1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)fluentFormDefaultManager1).BeginInit();
@@ -124,6 +124,7 @@
             // Master
             // 
             Master.Elements.AddRange(new DevExpress.XtraBars.Navigation.AccordionControlElement[] { accordionControlElement10, accordionControlElement11, accordionControlElement12, accordionControlElement13, accordionControlElement14, accordionControlElement5 });
+            Master.Expanded = true;
             Master.ImageOptions.Image = (Image)resources.GetObject("Master.ImageOptions.Image");
             Master.Name = "Master";
             Master.Text = "Master Data";
@@ -140,6 +141,7 @@
             accordionControlElement11.Name = "accordionControlElement11";
             accordionControlElement11.Style = DevExpress.XtraBars.Navigation.ElementStyle.Item;
             accordionControlElement11.Text = "Daftar Supplier";
+            accordionControlElement11.Click += accordionControlElement11_Click;
             // 
             // accordionControlElement12
             // 
@@ -217,6 +219,13 @@
             accordionControlElementTansaksiPending.Style = DevExpress.XtraBars.Navigation.ElementStyle.Item;
             accordionControlElementTansaksiPending.Text = "Analisa Laba/Rugi";
             accordionControlElementTansaksiPending.Click += accordionControlElementTansaksiPending_Click;
+            // 
+            // accordionControlElement34
+            // 
+            accordionControlElement34.Name = "accordionControlElement34";
+            accordionControlElement34.Style = DevExpress.XtraBars.Navigation.ElementStyle.Item;
+            accordionControlElement34.Text = "Laba Penjualan";
+            accordionControlElement34.Click += accordionControlElement34_Click;
             // 
             // Persediaa
             // 
@@ -461,13 +470,6 @@
             fluentFormDefaultManager1.Form = this;
             fluentFormDefaultManager1.Items.AddRange(new DevExpress.XtraBars.BarItem[] { barButtonItem1, skinBarSubItem1, skinDropDownButtonItem1, skinPaletteDropDownButtonItem1, skinDropDownButtonItem2, skinBarSubItem2, skinDropDownButtonItem3 });
             fluentFormDefaultManager1.MaxItemId = 7;
-            // 
-            // accordionControlElement34
-            // 
-            accordionControlElement34.Name = "accordionControlElement34";
-            accordionControlElement34.Style = DevExpress.XtraBars.Navigation.ElementStyle.Item;
-            accordionControlElement34.Text = "Laba Penjualan";
-            accordionControlElement34.Click += accordionControlElement34_Click;
             // 
             // BackOffice
             // 

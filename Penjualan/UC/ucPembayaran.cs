@@ -1,7 +1,4 @@
 ﻿using QRCoder;
-using Windows.Devices.PointOfService;
-using Windows.Foundation;
-using System.Threading.Tasks;
 namespace Penjualan.UC
 {
     public partial class ucPembayaran : UserControl

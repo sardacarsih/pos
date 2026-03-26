@@ -15,6 +15,7 @@ namespace BackOffice.Interface
         void EditPembelian(string no_faktur);
         void CetakPembelian(string no_faktur);
         void InsertFaktur_Pembelian(DTOFakturPembelian_Header faktur_header, List<DTOFakturPembelianDetail> ListItemPembelian);
+        void UpdateFaktur_Pembelian(DTOFakturPembelian_Header faktur_header, List<DTOFakturPembelianDetail> ListItemPembelian);
         void UpdateTransactionNumber(string transactionNumber);
         List<DTODaftarBarang> GetDaftarPembelianBarang(string idtransaksi);
 

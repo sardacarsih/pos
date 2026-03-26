@@ -3,6 +3,7 @@ using DevExpress.XtraBars;
 using DevExpress.XtraBars.FluentDesignSystem;
 using DevExpress.XtraBars.Navigation;
 using DevExpress.XtraEditors;
+using Penjualan.BusinessLayer;
 using Penjualan.UC;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ namespace Penjualan
 {
     public partial class PenjualanKasir : DevExpress.XtraBars.FluentDesignSystem.FluentDesignForm
     {
+        
         public PenjualanKasir()
         {
             InitializeComponent();
@@ -25,6 +27,7 @@ namespace Penjualan
 
         private void PenjualanKasir_Load(object sender, EventArgs e)
         {
+            LoginInfo.Penjualan_Control_Qty = POS_Services.GetSettingKontrol_qty_Saldo();
 
             //Add module1 to panel control
             if (!fluentDesignFormContainer.Controls.Contains(ucPenjualan.Instance))

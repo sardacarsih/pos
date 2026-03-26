@@ -222,7 +222,7 @@ namespace Penjualan.UC
          {
             string query = "SELECT * FROM pos_product ORDER BY productname";
 
-            using OracleConnection connection = new(global.connectionString);
+            using OracleConnection connection = new(Global.connectionString);
             connection.Open();
 
             List<DTOPRODUCTS> productList = connection.Query<DTOPRODUCTS>(query).ToList();
@@ -250,7 +250,7 @@ namespace Penjualan.UC
 
             // Ambil nomor transaksi terakhir dari database untuk tahun saat ini
             string selectQuery = $"SELECT nomor FROM nomor_transaksi WHERE kode = 'PENJUALAN' AND nomor LIKE 'F-{currentYear}%' ORDER BY nomor DESC FETCH FIRST 1 ROWS ONLY";
-            using (OracleConnection connection = new OracleConnection(global.connectionString))
+            using (OracleConnection connection = new OracleConnection(Global.connectionString))
             {
                 connection.Open();
                 using (OracleCommand selectCommand = new OracleCommand(selectQuery, connection))
@@ -359,7 +359,7 @@ namespace Penjualan.UC
             
             // Query the database for discounts based on quantity
             string query = "SELECT MINQTY,POTONGAN FROM POS_POTONGANBERDASARKANQTY WHERE KODE_ITEM = :kodebrg ";
-            using var connection = new OracleConnection(global.connectionString);
+            using var connection = new OracleConnection(Global.connectionString);
             var command = new OracleCommand(query, connection);
 
             command.Parameters.Add("kodebrg", kodebrg); // replace with actual product ID

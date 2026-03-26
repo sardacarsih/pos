@@ -2,10 +2,10 @@
 {
     public class DTOFakturPenjualanDetail
     {
-        public double ID_PENJUALAN { get; set; }
+        public int ID_PENJUALAN { get; set; }
         public string NO_TRANSAKSI { get; set; }
         public int BARIS { get; set; }
-        public Double PRODUCT_ID { get; set; }
+        public int PRODUCT_ID { get; set; }
         public string KODE_BARANG { get; set; }
         public string BARCODE { get; set; }        
         public string NAMA_BARANG { get; set; }

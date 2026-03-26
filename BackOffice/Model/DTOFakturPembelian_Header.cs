@@ -8,7 +8,7 @@ namespace BackOffice.Model
 {
     public class DTOFakturPembelian_Header
     {
-        public double PURCHASE_ID { get; set; }
+        public int PURCHASE_ID { get; set; }
         public string NO_TRANSAKSI { get; set; }
         public DateTime TANGGAL { get; set; }
         public string SUPPLIER_ID { get; set; }

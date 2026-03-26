@@ -139,7 +139,7 @@ namespace Penjualan
 
         public List<DTOPRODUCT_WSTOCK> GetProductList(DateTime startDate, DateTime endDate)
         {
-            using IDbConnection dbConnection = new OracleConnection(global.connectionString);
+            using IDbConnection dbConnection = new OracleConnection(Global.connectionString);
             dbConnection.Open();
 
             string sqlQuery = @"

@@ -59,6 +59,9 @@ appsettings.*.json
 ## DevExpress license
 DevExpress*.lic
 
+## Backup files
+*.bak
+
 ## Python
 __pycache__/
 *.py[cod]

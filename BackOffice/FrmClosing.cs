@@ -8,6 +8,7 @@ using DevExpress.XtraEditors;
 using DevExpress.XtraSplashScreen;
 using Oracle.ManagedDataAccess.Client;
 using System.Diagnostics;
+using System.Globalization;
 using System.Media;
 
 namespace BackOffice
@@ -356,11 +357,8 @@ namespace BackOffice
             Update_Periode();
         }
 
-       
-
         private void CreateThisPeriode(int p_periode)
         {
-            // Extract the tahun and bulan from next_periode using substr
             string periode_str = p_periode.ToString();
             string tahun_str = periode_str.Substring(0, 4);
             string bulan_str = periode_str.Substring(4);
@@ -368,40 +366,41 @@ namespace BackOffice
             int tahun = int.Parse(tahun_str);
             int bulan = int.Parse(bulan_str);
             string namabulan = arrayBulan[bulan - 1];
-            string query = "INSERT INTO POS_PERIODE (PERIODE, TAHUN, BULAN, R1DARI,R1SAMPAI,R2DARI,R2SAMPAI,BDARI,BSAMPAI,REMISE1, REMISE2) VALUES " +
-                "(:this_periode, :this_tahun, :this_namabulan,:R1DARI,:R1SAMPAI,:R2DARI,:R2SAMPAI,:BDARI,:BSAMPAI, 'T', 'T')";
 
-            // Check if the record already exists
+            string query = @"INSERT INTO POS_PERIODE 
+        (PERIODE, TAHUN, BULAN, R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI, REMISE1, REMISE2)
+        VALUES (:this_periode, :this_tahun, :this_namabulan, :R1DARI, :R1SAMPAI, :R2DARI, :R2SAMPAI, :BDARI, :BSAMPAI, 'T', 'T')";
+
             string checkQuery = "SELECT COUNT(*) FROM POS_PERIODE WHERE PERIODE = :p_periode";
             int count = 0;
 
-            // create a new Oracle connection object
-            using OracleConnection conn = new(global.connectionString);
-            // open the database connection
+            using OracleConnection conn = new OracleConnection(global.connectionString);
             conn.Open();
 
-            // Check if the record already exists
             using (OracleCommand checkCommand = new OracleCommand(checkQuery, conn))
             {
                 checkCommand.Parameters.Add(new OracleParameter("p_periode", OracleDbType.Int32) { Value = p_periode });
                 count = Convert.ToInt32(checkCommand.ExecuteScalar());
             }
 
-            // Perform the insert only if the record does not exist
+            CultureInfo enUS = new CultureInfo("en-US");
+            string dariStr = p_daritanggal.ToString("dd-MMM-yyyy", enUS);
+            string sampaiStr = p_sampaitanggal.ToString("dd-MMM-yyyy", enUS);
+
             if (count == 0)
             {
-                // create a new OracleCommand object for the insert operation
                 using (OracleCommand command = new OracleCommand(query, conn))
                 {
                     command.Parameters.Add(new OracleParameter("this_periode", OracleDbType.Int32) { Value = p_periode });
                     command.Parameters.Add(new OracleParameter("this_tahun", OracleDbType.Int16) { Value = tahun });
                     command.Parameters.Add(new OracleParameter("this_namabulan", OracleDbType.Varchar2) { Value = namabulan });
-                    command.Parameters.Add(new OracleParameter("R1DARI", OracleDbType.Varchar2) { Value = p_daritanggal });
-                    command.Parameters.Add(new OracleParameter("R1SAMPAI", OracleDbType.Varchar2) { Value = p_sampaitanggal });
-                    command.Parameters.Add(new OracleParameter("R2DARI", OracleDbType.Varchar2) { Value = p_daritanggal });
-                    command.Parameters.Add(new OracleParameter("R2SAMPAI", OracleDbType.Varchar2) { Value = p_sampaitanggal });
-                    command.Parameters.Add(new OracleParameter("BDARI", OracleDbType.Varchar2) { Value = p_daritanggal });
-                    command.Parameters.Add(new OracleParameter("BSAMPAI", OracleDbType.Varchar2) { Value = p_sampaitanggal });
+
+                    command.Parameters.Add(new OracleParameter("R1DARI", OracleDbType.Varchar2) { Value = dariStr });
+                    command.Parameters.Add(new OracleParameter("R1SAMPAI", OracleDbType.Varchar2) { Value = sampaiStr });
+                    command.Parameters.Add(new OracleParameter("R2DARI", OracleDbType.Varchar2) { Value = dariStr });
+                    command.Parameters.Add(new OracleParameter("R2SAMPAI", OracleDbType.Varchar2) { Value = sampaiStr });
+                    command.Parameters.Add(new OracleParameter("BDARI", OracleDbType.Varchar2) { Value = dariStr });
+                    command.Parameters.Add(new OracleParameter("BSAMPAI", OracleDbType.Varchar2) { Value = sampaiStr });
 
                     command.ExecuteNonQuery();
                 }
@@ -409,28 +408,30 @@ namespace BackOffice
             else
             {
                 string sqlsql = string.Empty;
+
                 if (p_remise == 1)
                 {
-                    sqlsql = "UPDATE POS_PERIODE SET R1DARI=:1,R1SAMPAI=:2 WHERE PERIODE=:PERIODE";
+                    sqlsql = "UPDATE POS_PERIODE SET R1DARI = :1, R1SAMPAI = :2 WHERE PERIODE = :PERIODE";
                 }
                 else if (p_remise == 2)
                 {
-                    sqlsql = "UPDATE POS_PERIODE SET R2DARI=:1,R2SAMPAI=:2 WHERE PERIODE=:PERIODE";
+                    sqlsql = "UPDATE POS_PERIODE SET R2DARI = :1, R2SAMPAI = :2 WHERE PERIODE = :PERIODE";
                 }
                 else
                 {
-                    sqlsql = "UPDATE POS_PERIODE SET BDARI=:1,BSAMPAI=:2 WHERE PERIODE=:PERIODE";
-
+                    sqlsql = "UPDATE POS_PERIODE SET BDARI = :1, BSAMPAI = :2 WHERE PERIODE = :PERIODE";
                 }
-                // create a new OracleCommand object for the insert operation
-                using OracleCommand command = new(sqlsql, conn);
-                command.Parameters.Add(new OracleParameter("1", OracleDbType.Varchar2) { Value = p_daritanggal.ToString("dd-MMM-yyyy")});
-                command.Parameters.Add(new OracleParameter("2", OracleDbType.Varchar2) { Value = p_sampaitanggal.ToString("dd-MMM-yyyy") });
+
+                using OracleCommand command = new OracleCommand(sqlsql, conn);
+                command.Parameters.Add(new OracleParameter("1", OracleDbType.Varchar2) { Value = dariStr });
+                command.Parameters.Add(new OracleParameter("2", OracleDbType.Varchar2) { Value = sampaiStr });
                 command.Parameters.Add(new OracleParameter("PERIODE", OracleDbType.Int32) { Value = p_periode });
 
                 command.ExecuteNonQuery();
             }
         }
+
+
 
         private void CreateStatusClosing(int p_remise, int p_periode_TOCLOSE)
         {

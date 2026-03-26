@@ -16,6 +16,8 @@ namespace BackOffice.Interface
         DataSet Penjualan_Tunai(int p_periode, int p_remise);
         void Tutup_Buku(int p_periode, int p_remise, DateTime p_tglAngsuran, DateTime p_daritanggal, DateTime p_sampaitanggal);
         DTOProductInfo RetrieveProductInfo(string barcode);
+        bool GetSettingKontrol_qty_Saldo();
+        decimal GetStocItem(string kodeBarang, DateTime startDate, DateTime endDate);
         List<DTOLabaRugiAnalisa> AnalisaLabaRugi(DateTime date1, DateTime date2);
         List<DTOLabaRugi> GetLabaRugi(int year);
         List<DTODaftarPenjualan> GetPenjualan(DateTime date1, DateTime date2);

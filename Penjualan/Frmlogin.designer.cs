@@ -28,108 +28,108 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
+            components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Frmlogin));
-            this.behaviorManager1 = new DevExpress.Utils.Behaviors.BehaviorManager(this.components);
-            this.txtpwd = new DevExpress.XtraEditors.TextEdit();
-            this.txtuserid = new DevExpress.XtraEditors.TextEdit();
-            this.simpleButton1 = new DevExpress.XtraEditors.SimpleButton();
-            this.Login = new DevExpress.XtraEditors.SimpleButton();
-            this.lblversi = new DevExpress.XtraEditors.LabelControl();
-            ((System.ComponentModel.ISupportInitialize)(this.behaviorManager1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.txtpwd.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.txtuserid.Properties)).BeginInit();
-            this.SuspendLayout();
+            behaviorManager1 = new DevExpress.Utils.Behaviors.BehaviorManager(components);
+            txtpwd = new DevExpress.XtraEditors.TextEdit();
+            txtuserid = new DevExpress.XtraEditors.TextEdit();
+            simpleButton1 = new DevExpress.XtraEditors.SimpleButton();
+            Login = new DevExpress.XtraEditors.SimpleButton();
+            lblversi = new DevExpress.XtraEditors.LabelControl();
+            ((System.ComponentModel.ISupportInitialize)behaviorManager1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)txtpwd.Properties).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)txtuserid.Properties).BeginInit();
+            SuspendLayout();
             // 
             // txtpwd
             // 
-            this.txtpwd.Location = new System.Drawing.Point(176, 155);
-            this.txtpwd.Margin = new System.Windows.Forms.Padding(2);
-            this.txtpwd.Name = "txtpwd";
-            this.txtpwd.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.txtpwd.Properties.Appearance.Options.UseFont = true;
-            this.txtpwd.Properties.Name = "textEdit1";
-            this.txtpwd.Properties.UseSystemPasswordChar = true;
-            this.txtpwd.Size = new System.Drawing.Size(92, 28);
-            this.txtpwd.TabIndex = 1;
-            this.txtpwd.ToolTip = "Password";
-            this.txtpwd.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtpwd_KeyDown);
+            txtpwd.Location = new Point(176, 155);
+            txtpwd.Margin = new Padding(2);
+            txtpwd.Name = "txtpwd";
+            txtpwd.Properties.Appearance.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
+            txtpwd.Properties.Appearance.Options.UseFont = true;
+            txtpwd.Properties.Name = "textEdit1";
+            txtpwd.Properties.UseSystemPasswordChar = true;
+            txtpwd.Size = new Size(92, 28);
+            txtpwd.TabIndex = 1;
+            txtpwd.ToolTip = "Password";
+            txtpwd.EditValueChanged += txtpwd_EditValueChanged;
+            txtpwd.KeyDown += txtpwd_KeyDown;
             // 
             // txtuserid
             // 
-            this.txtuserid.Location = new System.Drawing.Point(73, 155);
-            this.txtuserid.Margin = new System.Windows.Forms.Padding(2);
-            this.txtuserid.Name = "txtuserid";
-            this.txtuserid.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.txtuserid.Properties.Appearance.Options.UseFont = true;
-            this.txtuserid.Properties.Name = "textEdit1";
-            this.txtuserid.Size = new System.Drawing.Size(92, 28);
-            this.txtuserid.TabIndex = 0;
-            this.txtuserid.ToolTip = "UserID";
-            this.txtuserid.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtuserid_KeyDown);
+            txtuserid.Location = new Point(73, 155);
+            txtuserid.Margin = new Padding(2);
+            txtuserid.Name = "txtuserid";
+            txtuserid.Properties.Appearance.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
+            txtuserid.Properties.Appearance.Options.UseFont = true;
+            txtuserid.Properties.Name = "textEdit1";
+            txtuserid.Size = new Size(92, 28);
+            txtuserid.TabIndex = 0;
+            txtuserid.ToolTip = "UserID";
+            txtuserid.KeyDown += txtuserid_KeyDown;
             // 
             // simpleButton1
             // 
-            this.simpleButton1.Location = new System.Drawing.Point(20, 151);
-            this.simpleButton1.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.simpleButton1.Name = "simpleButton1";
-            this.simpleButton1.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
-            this.simpleButton1.Size = new System.Drawing.Size(33, 27);
-            this.simpleButton1.TabIndex = 3;
-            this.simpleButton1.ToolTip = "Cancel";
-            this.simpleButton1.Click += new System.EventHandler(this.SimpleButton1_Click);
+            simpleButton1.Location = new Point(20, 151);
+            simpleButton1.Margin = new Padding(3, 4, 3, 4);
+            simpleButton1.Name = "simpleButton1";
+            simpleButton1.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
+            simpleButton1.Size = new Size(33, 27);
+            simpleButton1.TabIndex = 3;
+            simpleButton1.ToolTip = "Cancel";
+            simpleButton1.Click += SimpleButton1_Click;
             // 
             // Login
             // 
-            this.Login.Location = new System.Drawing.Point(281, 151);
-            this.Login.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.Login.Name = "Login";
-            this.Login.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
-            this.Login.Size = new System.Drawing.Size(36, 27);
-            this.Login.TabIndex = 2;
-            this.Login.ToolTip = "Login";
-            this.Login.Click += new System.EventHandler(this.Login_Click);
+            Login.Location = new Point(281, 151);
+            Login.Margin = new Padding(3, 4, 3, 4);
+            Login.Name = "Login";
+            Login.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
+            Login.Size = new Size(36, 27);
+            Login.TabIndex = 2;
+            Login.ToolTip = "Login";
+            Login.Click += Login_Click;
             // 
             // lblversi
             // 
-            this.lblversi.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.lblversi.Appearance.ForeColor = System.Drawing.Color.White;
-            this.lblversi.Appearance.Options.UseFont = true;
-            this.lblversi.Appearance.Options.UseForeColor = true;
-            this.lblversi.Location = new System.Drawing.Point(237, 10);
-            this.lblversi.Name = "lblversi";
-            this.lblversi.Size = new System.Drawing.Size(42, 15);
-            this.lblversi.TabIndex = 4;
-            this.lblversi.Text = "Version";
+            lblversi.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point);
+            lblversi.Appearance.ForeColor = Color.White;
+            lblversi.Appearance.Options.UseFont = true;
+            lblversi.Appearance.Options.UseForeColor = true;
+            lblversi.Location = new Point(237, 10);
+            lblversi.Name = "lblversi";
+            lblversi.Size = new Size(42, 15);
+            lblversi.TabIndex = 4;
+            lblversi.Text = "Version";
             // 
             // Frmlogin
             // 
-            this.Appearance.Options.UseFont = true;
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
-            this.BackgroundImageLayoutStore = System.Windows.Forms.ImageLayout.Stretch;
-            this.BackgroundImageStore = global::Penjualan.Properties.Resources.penjualan;
-            this.ClientSize = new System.Drawing.Size(339, 191);
-            this.Controls.Add(this.lblversi);
-            this.Controls.Add(this.txtpwd);
-            this.Controls.Add(this.txtuserid);
-            this.Controls.Add(this.simpleButton1);
-            this.Controls.Add(this.Login);
-            this.Font = new System.Drawing.Font("Tahoma", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
-            this.IconOptions.Image = ((System.Drawing.Image)(resources.GetObject("Frmlogin.IconOptions.Image")));
-            this.Location = new System.Drawing.Point(10, 50);
-            this.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.Name = "Frmlogin";
-            this.Text = "Login";
-            this.Load += new System.EventHandler(this.Frmlogin_Load);
-            ((System.ComponentModel.ISupportInitialize)(this.behaviorManager1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.txtpwd.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.txtuserid.Properties)).EndInit();
-            this.ResumeLayout(false);
-            this.PerformLayout();
-
+            Appearance.Options.UseFont = true;
+            AutoScaleMode = AutoScaleMode.None;
+            BackgroundImageLayoutStore = ImageLayout.Stretch;
+            BackgroundImageStore = Properties.Resources.penjualan;
+            ClientSize = new Size(339, 191);
+            Controls.Add(lblversi);
+            Controls.Add(txtpwd);
+            Controls.Add(txtuserid);
+            Controls.Add(simpleButton1);
+            Controls.Add(Login);
+            Font = new Font("Tahoma", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
+            FormBorderStyle = FormBorderStyle.None;
+            IconOptions.Image = (Image)resources.GetObject("Frmlogin.IconOptions.Image");
+            Location = new Point(10, 50);
+            Margin = new Padding(3, 4, 3, 4);
+            MaximizeBox = false;
+            MinimizeBox = false;
+            Name = "Frmlogin";
+            Text = "Login";
+            Load += Frmlogin_Load;
+            ((System.ComponentModel.ISupportInitialize)behaviorManager1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)txtpwd.Properties).EndInit();
+            ((System.ComponentModel.ISupportInitialize)txtuserid.Properties).EndInit();
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion

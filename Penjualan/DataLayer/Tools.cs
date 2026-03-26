@@ -11,7 +11,7 @@ namespace Penjualan
         public DataTable AnggotaAktif()
         {
             string query = "SELECT A.ID_PELANGGAN,A.NIK,A.NAMA_PELANGGAN,K.NAMA UNIT_KERJA,A.STATUS,A.LIMIT_HUTANG FROM FIN_ANGGOTA A JOIN FIN_UNITKERJA K ON K.KODE=A.UNIT_KERJA WHERE A.AKTIF='Y' AND A.ANGGOTA='Y' ORDER BY A.NAMA_PELANGGAN";
-            using OracleConnection connection = new(global.connectionString);
+            using OracleConnection connection = new(Global.connectionString);
             using OracleCommand _command = new(query, connection)
             {
                 CommandType = CommandType.Text
@@ -42,7 +42,7 @@ namespace Penjualan
                 query = "SELECT REMISE2 FROM POS_PERIODE WHERE PERIODE=:periode";
             }
 
-            using (OracleConnection conn = new (global.connectionString))
+            using (OracleConnection conn = new (Global.connectionString))
             {
                 conn.Open();
 
@@ -67,7 +67,7 @@ namespace Penjualan
         public DataTable PelangganAktif()
         {
             string query = "SELECT A.ID_PELANGGAN,A.NIK,A.NAMA_PELANGGAN,K.NAMA UNIT_KERJA,A.STATUS,A.LIMIT_HUTANG FROM FIN_ANGGOTA A JOIN FIN_UNITKERJA K ON K.KODE=A.UNIT_KERJA WHERE A.AKTIF='Y'  ORDER BY A.NAMA_PELANGGAN";
-            using OracleConnection connection = new(global.connectionString);
+            using OracleConnection connection = new(Global.connectionString);
             using OracleCommand _command = new(query, connection)
             {
                 CommandType = CommandType.Text

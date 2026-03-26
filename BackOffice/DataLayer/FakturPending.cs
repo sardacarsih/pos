@@ -109,8 +109,8 @@ namespace BackOffice.DataLayer
             conn.Open();
             OracleTransaction transaction = conn.BeginTransaction();
 
-            //try
-            //{
+            try
+            {
                 // Insert master records
                 string insertFakturJual_Master = "INSERT INTO POS_PENDING (NO_TRANSAKSI, TANGGAL, JAM, KASIR) " +
                                                 "VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR) ";
@@ -128,13 +128,12 @@ namespace BackOffice.DataLayer
                 }
 
                 transaction.Commit();
-            //}
-            //catch (Exception ex)
-            //{
-            //    transaction.Rollback();
-            //    // Handle or log the exception here
-            //    throw ex;
-            //}
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
     }
 }

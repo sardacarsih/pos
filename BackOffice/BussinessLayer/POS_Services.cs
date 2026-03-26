@@ -48,5 +48,14 @@ namespace BackOffice.BussinessLayer
             return repository.RetrieveProductInfo(barcode);
         }
 
+        public static bool GetSettingKontrol_qty_Saldo()
+        {
+            return repository.GetSettingKontrol_qty_Saldo();
+        }
+
+        public static decimal GetStocItem(string kodeBarang, DateTime startDate, DateTime endDate)
+        {
+            return repository.GetStocItem(kodeBarang, startDate, endDate);
+        }
     }
 }

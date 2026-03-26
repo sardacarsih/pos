@@ -6,6 +6,7 @@ using DevExpress.XtraGrid.Views.Grid;
 using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using System.IO;
+using System.Windows.Forms;
 
 namespace BackOffice.UC
 {
@@ -28,7 +29,7 @@ namespace BackOffice.UC
         }
         public ucMasterAnggota()
         {
-            InitializeComponent();
+            InitializeComponent(); 
         }
 
         private void dateEdit1_EditValueChanged(object sender, EventArgs e)
@@ -68,7 +69,7 @@ namespace BackOffice.UC
         {
             if (gridView1.SelectedRowsCount > 0)
             {
-                int selectedIndex = gridView1.GetSelectedRows()[0];
+               // int selectedIndex = gridView1.GetSelectedRows()[0];
 
                 // Get the focused row handle, which may be different from the selected row in grouped view
                 int focusedHandle = gridView1.FocusedRowHandle;
@@ -87,7 +88,7 @@ namespace BackOffice.UC
                 }
 
                 // Now, retrieve the DTOAnggota instance for the focused row
-                DTOAnggota selectedItem = gridView1.GetRow(focusedHandle) as DTOAnggota;
+                DTOAnggota? selectedItem = gridView1.GetRow(focusedHandle) as DTOAnggota;
 
                 // Rest of your code remains the same...
                 textEdit_nik.Text = selectedItem.NIK;
@@ -95,27 +96,36 @@ namespace BackOffice.UC
                 dateEdit_tma.Text = selectedItem.TMK.ToString();
                 lookUpEdit1.EditValue = selectedItem.KODE_UNIT;
                 comboBoxEdit_status.Text = selectedItem.STATUS;
+                txtlimithutang.Text= selectedItem.LIMIT_HUTANG.ToString();
                 var nonaktif = selectedItem.AKTIF;
                 var nonanggota = selectedItem.ANGGOTA;
                 if (nonaktif == "Y") { checkEditnonaktif.Checked = false; } else { checkEditnonaktif.Checked = true; }
                 if (nonanggota == "Y") { checkEditnonanggota.Checked = false; } else { checkEditnonanggota.Checked = true; }
+                // Handle image loading
                 if (selectedItem.GAMBAR != null)
                 {
-                    using MemoryStream memoryStream = new(selectedItem.GAMBAR);
-                    try
+                    using (MemoryStream memoryStream = new MemoryStream(selectedItem.GAMBAR))
                     {
-                        Image selectedImage = Image.FromStream(memoryStream);
-                        pictureEdit1.Image = selectedImage;
-                    }
-                    catch (Exception ex)
-                    {
-                        XtraMessageBox.Show($"Error loading image: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        try
+                        {
+                            Image selectedImage = Image.FromStream(memoryStream);
+                            pictureEdit1.Image = selectedImage;
+                        }
+                        catch (Exception ex)
+                        {
+                            XtraMessageBox.Show($"Error loading image: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            pictureEdit1.Image = null;
+                        }
                     }
                 }
                 else
                 {
                     pictureEdit1.Image = null;
                 }
+            }
+            else
+            {
+                XtraMessageBox.Show("No row selected.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -177,7 +187,7 @@ namespace BackOffice.UC
                 KODE_UNIT = lookUpEdit1.EditValue.ToString(),
                 AKTIF = isaktif,
                 ANGGOTA = isanggota,
-                LIMIT_HUTANG = decimal.Parse(textEdit_LIMITHUTANG.Text),
+                LIMIT_HUTANG = decimal.Parse(txtlimithutang.Text),
                 GAMBAR = GetNewImageBytes() // Replace this with your own logic to retrieve the new image bytes
             };
 
@@ -203,7 +213,7 @@ namespace BackOffice.UC
             textEdit_nama.Text = "";
             dateEdit_tma.Text = DateTime.Today.ToString();
             lookUpEdit1.EditValue = null;
-            textEdit_LIMITHUTANG.Text = "0";
+            txtlimithutang.Text = "0";
             checkEditnonaktif.Checked = false;
             checkEditnonanggota.Checked = false;
             pictureEdit1.Image = null;
@@ -242,7 +252,7 @@ namespace BackOffice.UC
 
             // Validate textEdit_LIMITHUTANG
             decimal limithutang;
-            if (!decimal.TryParse(textEdit_LIMITHUTANG.Text, out limithutang))
+            if (!decimal.TryParse(txtlimithutang.Text, out limithutang))
             {
                 errorMessage += "Invalid LIMITHUTANG value.\n";
             }

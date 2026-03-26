@@ -10,7 +10,7 @@ namespace Penjualan
 {
     public partial class Frmlogin : DevExpress.XtraEditors.XtraForm
     {
-        OracleConnection con = new(global.connectionString);
+        OracleConnection con = new(Global.connectionString);
         private SoundPlayer Player = new();
         static int kesempatan = 3;
         public Frmlogin()
@@ -29,7 +29,7 @@ namespace Penjualan
             System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
             //Acct.AppVersion = fvi.FileVersion;
             //lblversi.Text= "Version : "+ Acct.AppVersion;
-           // lblversi.Text= "Version " + Application.ProductVersion;
+            // lblversi.Text= "Version " + Application.ProductVersion;
         }
 
         private void txtuserid_KeyDown(object sender, KeyEventArgs e)
@@ -75,7 +75,7 @@ namespace Penjualan
                 {
                     //this.Player.SoundLocation = Environment.CurrentDirectory + "\\wav\\hub_manager.wav";
                     //this.Player.Play();
-                    XtraMessageBox.Show("3 Kesempatan Gagal digunakan - Hubungi Manager Anda", "Info",MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    XtraMessageBox.Show("3 Kesempatan Gagal digunakan - Hubungi Manager Anda", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 //jika user dan password admin masuk menu
@@ -85,9 +85,9 @@ namespace Penjualan
                     new PenjualanKasir().Show();
                 }
                 else
-                {             
+                {
                     string pwd = txtpwd.Text;
-                    using OracleCommand cmd = new OracleCommand("SELECT * FROM VLOGIN where userid=:USERID  AND APPID='GL' ", con);
+                    using OracleCommand cmd = new("SELECT * FROM VLOGIN where userid=:USERID  AND APPID='' ", con);
 
                     if (con.State != ConnectionState.Open)
                     {
@@ -174,5 +174,9 @@ namespace Penjualan
             this.Close();
         }
 
+        private void txtpwd_EditValueChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 }

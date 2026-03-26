@@ -738,5 +738,18 @@ namespace BackOffice
             newInstance.Dock = DockStyle.Fill;
             newInstance.BringToFront();
         }
+
+        private void accordionControlElement11_Click(object sender, EventArgs e)
+        {
+            //Add module1 to panel control
+            if (!fluentDesignFormContainer.Controls.Contains(ucSupplier.Instance))
+            {
+                fluentDesignFormContainer.Controls.Add(ucSupplier.Instance);
+                ucSupplier.Instance.Dock = DockStyle.Fill;
+                ucSupplier.Instance.BringToFront();
+            }
+            else
+                ucSupplier.Instance.BringToFront();
+        }
     }
 }

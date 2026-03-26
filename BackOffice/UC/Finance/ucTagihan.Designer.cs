@@ -53,6 +53,8 @@
             repositoryItemLookUpEdit_Remise = new DevExpress.XtraEditors.Repository.RepositoryItemLookUpEdit();
             repositoryItemComboBox_Bulan = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
             imageCollection1 = new DevExpress.Utils.ImageCollection(components);
+            barButtonItem1 = new DevExpress.XtraBars.BarButtonItem();
+            barLargeButtonItem1 = new DevExpress.XtraBars.BarLargeButtonItem();
             ((System.ComponentModel.ISupportInitialize)gridControl1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)gridView1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)barManager1).BeginInit();
@@ -73,7 +75,7 @@
             gridControl1.Location = new Point(0, 56);
             gridControl1.MainView = gridView1;
             gridControl1.Name = "gridControl1";
-            gridControl1.Size = new Size(656, 347);
+            gridControl1.Size = new Size(709, 347);
             gridControl1.TabIndex = 2;
             gridControl1.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] { gridView1 });
             // 
@@ -93,9 +95,9 @@
             barManager1.DockControls.Add(barDockControlLeft);
             barManager1.DockControls.Add(barDockControlRight);
             barManager1.Form = this;
-            barManager1.Items.AddRange(new DevExpress.XtraBars.BarItem[] { barStaticItem1, BLBICETAK, bei_bulan, bei_tahun, bei_remise, barEditItemRadio });
+            barManager1.Items.AddRange(new DevExpress.XtraBars.BarItem[] { barStaticItem1, BLBICETAK, bei_bulan, bei_tahun, bei_remise, barEditItemRadio, barButtonItem1, barLargeButtonItem1 });
             barManager1.MainMenu = bar2;
-            barManager1.MaxItemId = 9;
+            barManager1.MaxItemId = 11;
             barManager1.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] { repositoryItemLookUpEdit_Bulan, repositoryItemSpinEdit_Tahun, repositoryItemLookUpEdit_Remise, repositoryItemComboBox_Bulan, repositoryItemComboBox1, repositoryItemSpinEdit1, repositoryItemComboBox2, repositoryItemRadioGroup1 });
             // 
             // bar2
@@ -104,7 +106,7 @@
             bar2.DockCol = 0;
             bar2.DockRow = 0;
             bar2.DockStyle = DevExpress.XtraBars.BarDockStyle.Top;
-            bar2.LinksPersistInfo.AddRange(new DevExpress.XtraBars.LinkPersistInfo[] { new DevExpress.XtraBars.LinkPersistInfo(barStaticItem1), new DevExpress.XtraBars.LinkPersistInfo(bei_bulan), new DevExpress.XtraBars.LinkPersistInfo(bei_tahun), new DevExpress.XtraBars.LinkPersistInfo(bei_remise), new DevExpress.XtraBars.LinkPersistInfo(barEditItemRadio), new DevExpress.XtraBars.LinkPersistInfo(BLBICETAK) });
+            bar2.LinksPersistInfo.AddRange(new DevExpress.XtraBars.LinkPersistInfo[] { new DevExpress.XtraBars.LinkPersistInfo(barStaticItem1), new DevExpress.XtraBars.LinkPersistInfo(bei_bulan), new DevExpress.XtraBars.LinkPersistInfo(bei_tahun), new DevExpress.XtraBars.LinkPersistInfo(bei_remise), new DevExpress.XtraBars.LinkPersistInfo(barEditItemRadio), new DevExpress.XtraBars.LinkPersistInfo(BLBICETAK), new DevExpress.XtraBars.LinkPersistInfo(barLargeButtonItem1) });
             bar2.OptionsBar.MultiLine = true;
             bar2.OptionsBar.UseWholeRow = true;
             bar2.Text = "Main menu";
@@ -125,6 +127,7 @@
             bei_bulan.Name = "bei_bulan";
             bei_bulan.Size = new Size(100, 0);
             bei_bulan.EditValueChanged += bei_bulan_EditValueChanged;
+            bei_bulan.ItemClick += bei_bulan_ItemClick;
             // 
             // repositoryItemComboBox1
             // 
@@ -191,7 +194,7 @@
             barDockControlTop.Dock = DockStyle.Top;
             barDockControlTop.Location = new Point(0, 0);
             barDockControlTop.Manager = barManager1;
-            barDockControlTop.Size = new Size(656, 56);
+            barDockControlTop.Size = new Size(709, 56);
             // 
             // barDockControlBottom
             // 
@@ -199,7 +202,7 @@
             barDockControlBottom.Dock = DockStyle.Bottom;
             barDockControlBottom.Location = new Point(0, 440);
             barDockControlBottom.Manager = barManager1;
-            barDockControlBottom.Size = new Size(656, 0);
+            barDockControlBottom.Size = new Size(709, 0);
             // 
             // barDockControlLeft
             // 
@@ -213,7 +216,7 @@
             // 
             barDockControlRight.CausesValidation = false;
             barDockControlRight.Dock = DockStyle.Right;
-            barDockControlRight.Location = new Point(656, 56);
+            barDockControlRight.Location = new Point(709, 56);
             barDockControlRight.Manager = barManager1;
             barDockControlRight.Size = new Size(0, 384);
             // 
@@ -248,6 +251,21 @@
             imageCollection1.Images.SetKeyName(1, "financial_32x32.png");
             imageCollection1.Images.SetKeyName(2, "projectdirectory_32x32.png");
             // 
+            // barButtonItem1
+            // 
+            barButtonItem1.Caption = "barButtonItem1";
+            barButtonItem1.Id = 9;
+            barButtonItem1.ImageOptions.SvgImage = (DevExpress.Utils.Svg.SvgImage)resources.GetObject("barButtonItem1.ImageOptions.SvgImage");
+            barButtonItem1.Name = "barButtonItem1";
+            // 
+            // barLargeButtonItem1
+            // 
+            barLargeButtonItem1.Caption = "Export";
+            barLargeButtonItem1.Id = 10;
+            barLargeButtonItem1.ImageOptions.SvgImage = (DevExpress.Utils.Svg.SvgImage)resources.GetObject("barLargeButtonItem1.ImageOptions.SvgImage");
+            barLargeButtonItem1.Name = "barLargeButtonItem1";
+            barLargeButtonItem1.ItemClick += barLargeButtonItem1_ItemClick;
+            // 
             // ucTagihan
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -258,7 +276,7 @@
             Controls.Add(barDockControlBottom);
             Controls.Add(barDockControlTop);
             Name = "ucTagihan";
-            Size = new Size(656, 440);
+            Size = new Size(709, 440);
             Load += ucTagihanPenjualan_Load;
             ((System.ComponentModel.ISupportInitialize)gridControl1).EndInit();
             ((System.ComponentModel.ISupportInitialize)gridView1).EndInit();
@@ -301,5 +319,7 @@
         private DevExpress.XtraBars.BarEditItem barEditItemRadio;
         private DevExpress.XtraEditors.Repository.RepositoryItemRadioGroup repositoryItemRadioGroup1;
         private DevExpress.Utils.ImageCollection imageCollection1;
+        private DevExpress.XtraBars.BarLargeButtonItem barLargeButtonItem1;
+        private DevExpress.XtraBars.BarButtonItem barButtonItem1;
     }
 }

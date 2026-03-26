@@ -6,7 +6,6 @@ using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Columns;
 using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraSplashScreen;
-using DevExpress.XtraWaitForm;
 using Oracle.ManagedDataAccess.Client;
 using System.ComponentModel;
 
@@ -38,106 +37,88 @@ namespace BackOffice.UC
         {
             if (e.KeyCode == Keys.Enter)
             {
-                var startdate = new DateTime(Convert.ToDateTime(detanggal.Text).Year, 1, 1);
-                var enddate = Convert.ToDateTime(detanggal.Text);
-                string kodeitem = string.Empty;
-                string barcode = barcodeTextBox.Text;
-                if (string.IsNullOrEmpty(barcode)) { return; }
-                DTOProductInfo productInfo = POS_Services.RetrieveProductInfo(barcode);
-
-                if (productInfo.ProductId != 0)
+                if (!DateTime.TryParse(detanggal.Text, out DateTime selectedDate))
                 {
-                    int productid = Convert.ToInt32(productInfo.ProductId);
-                    kodeitem = productInfo.KodeItem.ToString();
-                    string productname = productInfo.ProductName.ToString();
-                    string satuan = productInfo.Satuan.ToString();
-                    decimal price = Convert.ToDecimal(productInfo.Price);
-                    decimal hpp = Convert.ToDecimal(productInfo.Hpp);
+                    XtraMessageBox.Show("Tanggal tidak valid.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
-                    //var exist_so = controller.CheckStockOpname(kodeitem, enddate);
-                    //if (exist_so)
-                    //{
-                    //    XtraMessageBox.Show("Stock Opname Item Barang sudah ada pada tanggal diatasnya\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    //    return;
-                    //}
+                var startdate = new DateTime(selectedDate.Year, 1, 1);
+                var enddate = selectedDate;
+                string kodeitem = string.Empty;
+                string barcode = barcodeTextBox.Text.Trim();
 
-                    var existingProduct = transactionDataList.FirstOrDefault(p => p.Barcode == barcode);
-                    if (existingProduct != null)
-                    {
-                        XtraMessageBox.Show("Item Barang sudah ada pada Daftar\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        txtnamabarang.Text = string.Empty;
-                        barcodeTextBox.Focus();
-                        return;
-                    }
+                if (string.IsNullOrEmpty(barcode))
+                {
+                    XtraMessageBox.Show("Barcode tidak boleh kosong.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                DTOProductInfo productInfo;
+                try
+                {
+                    productInfo = POS_Services.RetrieveProductInfo(barcode);
+                }
+                catch (Exception ex)
+                {
+                    XtraMessageBox.Show($"Terjadi kesalahan saat mengambil informasi produk: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (productInfo?.ProductId != 0)
+                {
+                    productid = productInfo.ProductId;
+                    kodeitem = productInfo.KodeItem; 
+
                     txtItemBarang.Text = kodeitem;
-                    txtnamabarang.Text = productname;
-                    txtsatuan.Text = satuan;
-                    txthpp.Text = hpp.ToString();
-
-
+                    txtnamabarang.Text = productInfo.ProductName;
+                    txtsatuan.Text = productInfo.Satuan;
+                    txthpp.Text = productInfo.Hpp.ToString("F2");
                 }
                 else
                 {
-                    // Tampilkan form untuk memilih produk secara manual
-                    using ProductForm productForm = new();
-                    productForm.StartPosition = FormStartPosition.CenterScreen;
-                    productForm.SetSearchPanelValue(barcodeTextBox.Text);
+                    using ProductForm productForm = new()
+                    {
+                        StartPosition = FormStartPosition.CenterScreen
+                    };
+                    productForm.SetSearchPanelValue(barcode);
+
                     if (productForm.ShowDialog() == DialogResult.OK)
                     {
                         productid = productForm.ProductId;
-                        kodeitem = productForm.Kode_Item;
-                        string barcodefromx = productForm.Barcode;
-                        string productname = productForm.ProductName;
-                        string satuan = productForm.Satuan;
-                        decimal hpp = productForm.Hpp != null ? productForm.Hpp : 0m;
-
-                        //var exist_so = controller.CheckStockOpname(kodeitem, enddate);
-                        //if (exist_so)
-                        //{
-                        //    XtraMessageBox.Show("Stock Opname Item Barang sudah ada pada tanggal yang sama atau diatasnya\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        //    return;
-                        //}
-                        var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid);
-                        if (existingProduct != null)
-                        {
-                            XtraMessageBox.Show("Item Barang sudah ada pada Daftar\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            txtnamabarang.Text = string.Empty;
-                            barcodeTextBox.Focus();
-                            return;
-                        }
-
-                        barcodeTextBox.Text = barcodefromx;
+                        kodeitem = productForm.Kode_Item; 
+                        barcodeTextBox.Text = productForm.Barcode;
                         txtItemBarang.Text = kodeitem;
-                        txtnamabarang.Text = productname;
-                        txtsatuan.Text = satuan;
-                        txthpp.Text = hpp.ToString();
-
+                        txtnamabarang.Text = productForm.ProductName;
+                        txtsatuan.Text = productForm.Satuan;
+                        txthpp.Text = productForm.Hpp.ToString("F2");
                     }
+                }
 
-                }
-                var qty_sistem = controller.GetStockData(kodeitem, startdate, enddate);
-                if (qty_sistem != null)
+                try
                 {
-                    txtqtysystem.Text = qty_sistem.StockAkhir.ToString();
+                    var qty_sistem = controller.GetStockData(kodeitem, startdate, enddate);
+                    txtqtysystem.Text = qty_sistem?.StockAkhir.ToString("F2") ?? "0";
                 }
-                else
+                catch (Exception ex)
                 {
+                    XtraMessageBox.Show($"Terjadi kesalahan saat mengambil data stok: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     txtqtysystem.Text = "0";
                 }
+
                 txtqtyfisik.Focus();
             }
             else if (e.KeyCode == Keys.F2)
             {
-                // Set focus to the GridView control
                 gridView1.Focus();
 
-                // Get the last row index
                 int lastIndex = gridView1.RowCount - 1;
-
-                // Start editing the Qty column on the last row
-                gridView1.FocusedRowHandle = lastIndex;
-                gridView1.FocusedColumn = gridView1.Columns["QtyFisik"];
-                gridView1.ShowEditor();
+                if (lastIndex >= 0)
+                {
+                    gridView1.FocusedRowHandle = lastIndex;
+                    gridView1.FocusedColumn = gridView1.Columns["QtyFisik"];
+                    gridView1.ShowEditor();
+                }
             }
             else if (e.KeyCode == Keys.F5)
             {
@@ -145,11 +126,15 @@ namespace BackOffice.UC
             }
         }
 
+
         private void NewTransaction()
         {
-            detanggal.Text = DateTime.Today.ToString("dd-MMM-yyyy");
+            detanggal.Text = DateTime.Today.ToString("yyyy-MM-dd");
 
-            txtnotransaksi.Text = GenerateTransactionNumber(Convert.ToDateTime(detanggal.Text));
+            if (DateTime.TryParse(detanggal.Text, out DateTime parsedDate))
+            {
+                txtnotransaksi.Text = GenerateTransactionNumber(parsedDate);
+            }
             transactionDataList.Clear();
             barcodeTextBox.Focus();
             txtqtysystem.Text = "0";
@@ -314,9 +299,9 @@ namespace BackOffice.UC
             if (transactionDataList.Count == 0) return;
             if (XtraMessageBox.Show("Anda akan membatalkan transaksi ini", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
-        isButtonClickHandled = false;
+            isButtonClickHandled = false;
             detanggal.Enabled = true;
-        NewTransaction();
+            NewTransaction();
         }
 
         private void ucPenjualan_KeyDown(object sender, KeyEventArgs e)
@@ -397,32 +382,59 @@ namespace BackOffice.UC
         {
             if (e.KeyCode == Keys.Enter)
             {
-                var newProduct = new TransactionStockOpname
+                if (decimal.TryParse(txtqtysystem.Text, out decimal qtySystem) &&
+                    decimal.TryParse(txtqtyfisik.Text, out decimal qtyFisik) &&
+                    decimal.TryParse(txthpp.Text, out decimal hpp))
                 {
-                    Nomor_SO = txtnotransaksi.Text,
-                    Tanggal = Convert.ToDateTime(detanggal.Text),
-                    ProductId = productid,
-                    Barcode = barcodeTextBox.Text,
-                    Kode_Item = txtItemBarang.Text,
-                    ProductName = txtnamabarang.Text,
-                    Satuan = txtsatuan.Text,
-                    QtySystem = decimal.Parse(txtqtysystem.Text),
-                    QtyFisik = decimal.Parse(txtqtyfisik.Text),
-                    Hpp = decimal.Parse(txthpp.Text),
-                };
-                transactionDataList.Add(newProduct);
+                    // Cek apakah ProductId sudah ada di transactionDataList
+                    var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid);
 
-                productid = 0;
-                barcodeTextBox.Text = string.Empty;
-                txtItemBarang.Text = string.Empty;
-                txtnamabarang.Text = string.Empty;
-                txtsatuan.Text = string.Empty;
-                txtqtysystem.Text = "0";
-                txtqtyfisik.Text = "0";
-                txthpp.Text = "0";
-                barcodeTextBox.Focus();
+                    if (existingProduct != null)
+                    {
+                        // Jika ProductId sudah ada, perbarui QtyFisik
+                        existingProduct.QtyFisik += qtyFisik;
+                    }
+                    else
+                    {
+                        // Jika ProductId belum ada, tambahkan produk baru
+                        var newProduct = new TransactionStockOpname
+                        {
+                            Nomor_SO = txtnotransaksi.Text,
+                            Tanggal = DateTime.TryParse(detanggal.Text, out DateTime tanggal) ? tanggal : DateTime.Now,
+                            ProductId = productid,
+                            Barcode = barcodeTextBox.Text,
+                            Kode_Item = txtItemBarang.Text,
+                            ProductName = txtnamabarang.Text,
+                            Satuan = txtsatuan.Text,
+                            QtySystem = qtySystem,
+                            QtyFisik = qtyFisik,
+                            Hpp = hpp,
+                        };
+                        transactionDataList.Add(newProduct);
+                    }
+
+                    ResetInputFields();
+                }
+                else
+                {
+                    MessageBox.Show("Input tidak valid. Pastikan semua data angka terisi dengan benar.", "Kesalahan Input", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
         }
+
+        private void ResetInputFields()
+        {
+            productid = 0;
+            barcodeTextBox.Text = string.Empty;
+            txtItemBarang.Text = string.Empty;
+            txtnamabarang.Text = string.Empty;
+            txtsatuan.Text = string.Empty;
+            txtqtysystem.Text = "0";
+            txtqtyfisik.Text = "0";
+            txthpp.Text = "0";
+            barcodeTextBox.Focus();
+        }
+
 
 
         private void ucStockOpname_Load(object sender, EventArgs e)
@@ -479,7 +491,10 @@ namespace BackOffice.UC
 
         private void detanggal_EditValueChanged(object sender, EventArgs e)
         {
-            txtnotransaksi.Text = GenerateTransactionNumber(Convert.ToDateTime(detanggal.Text));
+            if (DateTime.TryParse(detanggal.Text, out DateTime selectedDate))
+            {
+                txtnotransaksi.Text = GenerateTransactionNumber(selectedDate);
+            }
         }
         List<DTOStockData> persediaan;
         private bool isButtonClickHandled = false; // Add this variable at the class level
@@ -570,7 +585,7 @@ namespace BackOffice.UC
                     var startdate = new DateTime(DateTime.Parse(detanggal.Text).Year, 1, 1);
                     var enddate = new DateTime(DateTime.Parse(detanggal.Text).Year, 12, 31);
                     persediaan = controller.GetProductStockInfo(startdate, enddate);
-                    var saldominus = persediaan.Where(saldo => saldo.STOCK_OPNAME== 0).ToList();
+                    var saldominus = persediaan.Where(saldo => saldo.STOCK_OPNAME == 0).ToList();
 
                     if (saldominus.Any())
                     {
@@ -609,5 +624,6 @@ namespace BackOffice.UC
                 SplashScreenManager.CloseForm(false);
             }
         }
+         
     }
 }

@@ -35,6 +35,10 @@ namespace BackOffice.Controller
         {
             repository.InsertFaktur_Pembelian(faktur_header, ListItemPembelian);
         }
+        public void UpdateFaktur_Pembelian(DTOFakturPembelian_Header faktur_header, List<DTOFakturPembelianDetail> ListItemPembelian)
+        {
+            repository.UpdateFaktur_Pembelian(faktur_header, ListItemPembelian);
+        }
         public void UpdateTransactionNumber(string transactionNumber)
         {
              repository.UpdateTransactionNumber(transactionNumber);

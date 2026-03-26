@@ -10,6 +10,6 @@ namespace BackOffice.Model
     {
         public string KODE { get; set; }
         public string NAMA { get; set; }
-
+        public string AKTIF { get; set; }
     }
 }

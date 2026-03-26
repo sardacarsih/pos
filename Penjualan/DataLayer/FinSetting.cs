@@ -9,7 +9,7 @@ namespace Penjualan
         {
             int maxAngsuran = 0;
 
-            using (OracleConnection connection = new OracleConnection(global.connectionString))
+            using (OracleConnection connection = new OracleConnection(Global.connectionString))
             {
                 string checkExistenceQuery = "SELECT COUNT(*) FROM FIN_SETTINGS WHERE CONFIG = 'MAXANGSURAN'";
                 string insertQuery = "INSERT INTO FIN_SETTINGS (CONFIG, JUMLAH) VALUES ('MAXANGSURAN', 12)";
@@ -57,7 +57,7 @@ namespace Penjualan
         {
             int simpananWajib = 0;
 
-            using (OracleConnection connection = new OracleConnection(global.connectionString))
+            using (OracleConnection connection = new OracleConnection(Global.connectionString))
             {
                 string checkExistenceQuery = "SELECT COUNT(*) FROM FIN_SETTINGS WHERE CONFIG = 'SIMPANAN_WAJIB'";
                 string insertQuery = "INSERT INTO FIN_SETTINGS (CONFIG, JUMLAH) VALUES ('SIMPANAN_WAJIB', 50000)";
@@ -104,7 +104,7 @@ namespace Penjualan
         {
             double bungaEfektif = 0;
 
-            using (OracleConnection connection = new OracleConnection(global.connectionString))
+            using (OracleConnection connection = new OracleConnection(Global.connectionString))
             {
                 string checkExistenceQuery = "SELECT COUNT(*) FROM FIN_SETTINGS WHERE CONFIG = 'BUNGA_EFEKTIF'";
                 string insertQuery = "INSERT INTO FIN_SETTINGS (CONFIG, JUMLAH) VALUES ('BUNGA_EFEKTIF', 1.6)";
