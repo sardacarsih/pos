@@ -1,3 +1,5 @@
+using DevExpress.XtraEditors;
+
 namespace BackOffice
 {
     internal static class Program
@@ -8,8 +10,10 @@ namespace BackOffice
         [STAThread]
         static void Main()
         {
-            // To customize application configuration such as set high DPI settings or default font,
-            // see https://aka.ms/applicationconfiguration.
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            WindowsFormsSettings.LoadApplicationSettings();
             ApplicationConfiguration.Initialize();
             Application.Run(new Frmlogin());
         }

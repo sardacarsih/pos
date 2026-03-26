@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Data;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using DevExpress.XtraEditors;
 using DevExpress.XtraSplashScreen;
@@ -24,12 +25,14 @@ namespace Penjualan
         }
         private void Frmlogin_Load(object sender, EventArgs e)
         {
+            var screen = Screen.FromControl(this);
+            int w = Math.Max(820, Math.Min(1100, (int)(screen.WorkingArea.Width * 0.47)));
+            int h = Math.Max(520, Math.Min(700, (int)(screen.WorkingArea.Height * 0.54)));
+            this.ClientSize = new Size(w, h);
             this.CenterToScreen();
-            System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-            //Acct.AppVersion = fvi.FileVersion;
-            //lblversi.Text= "Version : "+ Acct.AppVersion;
-            // lblversi.Text= "Version " + Application.ProductVersion;
+
+            lblversi.Text = "Version " + Application.ProductVersion;
+            txtuserid.Focus();
         }
 
         private void txtuserid_KeyDown(object sender, KeyEventArgs e)
@@ -49,17 +52,57 @@ namespace Penjualan
                 Login.PerformClick();
             }
         }
-        IOverlaySplashScreenHandle ShowProgressPanel()
+
+        private void panelBranding_Paint(object sender, PaintEventArgs e)
         {
-            return SplashScreenManager.ShowOverlayForm(this);
+            var panel = (PanelControl)sender;
+            if (panel.ClientRectangle.Width == 0 || panel.ClientRectangle.Height == 0)
+                return;
+            using var brush = new LinearGradientBrush(
+                panel.ClientRectangle,
+                Color.FromArgb(15, 23, 42),    // #0f172a slate-900
+                Color.FromArgb(30, 58, 95),    // #1e3a5f dark blue
+                LinearGradientMode.Vertical);
+            e.Graphics.FillRectangle(brush, panel.ClientRectangle);
+
+            // Subtle decorative circle
+            using var circleBrush = new SolidBrush(Color.FromArgb(8, 255, 255, 255));
+            int circleSize = (int)(panel.Width * 1.2);
+            e.Graphics.FillEllipse(circleBrush,
+                -panel.Width / 3, (int)(panel.Height * 0.55),
+                circleSize, circleSize);
         }
-        void CloseProgressPanel(IOverlaySplashScreenHandle handle)
+
+        private void panelBranding_Resize(object sender, EventArgs e)
         {
-            if (handle != null)
-                SplashScreenManager.CloseOverlayForm(handle);
+            var panel = panelBranding;
+            int centerX = panel.Width / 2;
+
+            int logoH = pictureBoxLogo.Height;
+            int brandH = lblBrandName.Height;
+            int tagH = lblTagline.Height;
+            int gap1 = 16;
+            int gap2 = 8;
+            int totalHeight = logoH + gap1 + brandH + gap2 + tagH;
+            int startY = (panel.Height - totalHeight) / 2 - 20;
+
+            pictureBoxLogo.Location = new Point(centerX - pictureBoxLogo.Width / 2, startY);
+
+            lblBrandName.Location = new Point(0, startY + logoH + gap1);
+            lblBrandName.Size = new Size(panel.Width, brandH);
+
+            lblTagline.Location = new Point(0, lblBrandName.Bottom + gap2);
+            lblTagline.Size = new Size(panel.Width, tagH);
+
+            // Version at bottom
+            lblversi.Location = new Point(0, panel.Height - 30);
+            lblversi.Size = new Size(panel.Width, 20);
         }
+
         private void Login_Click(object sender, EventArgs e)
         {
+            Login.Enabled = false;
+            simpleButton1.Enabled = false;
             try
             {
                 using var handle = SplashScreenManager.ShowOverlayForm(this);
@@ -166,17 +209,17 @@ namespace Penjualan
                 XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 --kesempatan;
             }
+            finally
+            {
+                Login.Enabled = true;
+                simpleButton1.Enabled = true;
+            }
 
         }
         private void SimpleButton1_Click(object sender, EventArgs e)
         {
             //con.Close();
             this.Close();
-        }
-
-        private void txtpwd_EditValueChanged(object sender, EventArgs e)
-        {
-
         }
     }
 }

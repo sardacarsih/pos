@@ -138,7 +138,7 @@ namespace BackOffice.UC
             }
         }
 
-        public static decimal SubtotalCalc(TextBox txtqty, TextBox txthargabeli, TextBox txtpotongan, TextBox txttotal)
+        public static decimal SubtotalCalc(TextEdit txtqty, TextEdit txthargabeli, TextEdit txtpotongan, TextEdit txttotal)
         {
             if (!decimal.TryParse(txtqty.Text, out decimal qty)) qty = 0;
             if (!decimal.TryParse(txthargabeli.Text, out decimal harga)) harga = 0;
@@ -185,14 +185,14 @@ namespace BackOffice.UC
 
         public static TransactionDataBeli ValidateAndCreateProduct(
             ref int productid,
-            TextBox barcodeTextBox,
-            TextBox txtItemBarang,
-            TextBox txtnamabarang,
-            TextBox txtsatuan,
-            TextBox txtqty,
-            TextBox txthargabeli,
-            TextBox texthargajual,
-            TextBox txtpotongan)
+            TextEdit barcodeTextBox,
+            TextEdit txtItemBarang,
+            TextEdit txtnamabarang,
+            TextEdit txtsatuan,
+            TextEdit txtqty,
+            TextEdit txthargabeli,
+            TextEdit texthargajual,
+            TextEdit txtpotongan)
         {
             if (!decimal.TryParse(txtqty.Text, out decimal qty) || qty <= 0 || string.IsNullOrEmpty(txtItemBarang.Text))
             {
@@ -226,16 +226,16 @@ namespace BackOffice.UC
         }
 
         public static void ClearInputFields(
-            TextBox barcodeTextBox,
-            TextBox txtItemBarang,
-            TextBox txtnamabarang,
-            TextBox txtsatuan,
-            TextBox txtqty,
-            TextBox txthargabeli,
-            TextBox txtpotongan,
-            TextBox texthpplama,
-            TextBox texthargajual,
-            TextBox txttotal = null)
+            TextEdit barcodeTextBox,
+            TextEdit txtItemBarang,
+            TextEdit txtnamabarang,
+            TextEdit txtsatuan,
+            TextEdit txtqty,
+            TextEdit txthargabeli,
+            TextEdit txtpotongan,
+            TextEdit texthpplama,
+            TextEdit texthargajual,
+            TextEdit txttotal = null)
         {
             barcodeTextBox.Text = string.Empty;
             txtItemBarang.Text = string.Empty;
