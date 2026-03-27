@@ -1,4 +1,5 @@
 ﻿using Oracle.ManagedDataAccess.Client;
+using Serilog;
 using System.ComponentModel;
 using System.Data;
 using System.Text;
@@ -396,7 +397,7 @@ namespace BackOffice.UC
             catch (Exception ex)
             {
                 connection?.Dispose();
-                System.Diagnostics.Debug.WriteLine($"Warning: Could not initialize PeriodeDAL: {ex.Message}");
+                Log.Warning(ex, "Could not initialize PeriodeDAL");
                 throw;
             }
         }

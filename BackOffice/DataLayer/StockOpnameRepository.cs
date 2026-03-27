@@ -116,11 +116,10 @@ namespace BackOffice.DataLayer
 
                 transaction.Commit();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 transaction.Rollback();
-                // Handle or log the exception here
-                throw ex;
+                throw;
             }
         }
 
@@ -438,11 +437,10 @@ WHERE B.NO_TRANSAKSI = :idtransaksi ORDER BY B.BARIS";
 
                 transaction.Commit();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 transaction.Rollback();
-                // Handle or log the exception here
-                throw ex;
+                throw;
             }
         }
     }

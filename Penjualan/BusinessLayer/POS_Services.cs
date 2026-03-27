@@ -12,13 +12,13 @@ namespace Penjualan.BusinessLayer
             repository = new FakturPenjualan();
         }
 
-        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null)
+        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null)
         {
-            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan, creditCheck);
+            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan, creditCheck, pendingNoTransaksi);
         }
-        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null)
+        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null)
         {
-            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan, creditCheck);
+            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan, creditCheck, pendingNoTransaksi);
         }
         public static string GenerateTransactionNumber(DateTime date)
         {
@@ -52,9 +52,9 @@ namespace Penjualan.BusinessLayer
         {
             return repository.GetPelangganAktif();
         }
-        public static decimal CheckingJumlahHutang(string nik, string status, DateTime dari, DateTime sampai)
+        public static decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai)
         {
-            return repository.CheckingJumlahHutang(nik, status, dari, sampai);
+            return repository.CheckingJumlahHutang(nik, dari, sampai);
         }
     }
 }

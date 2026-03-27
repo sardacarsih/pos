@@ -5,6 +5,7 @@ using Dapper;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Views.Grid;
 using Oracle.ManagedDataAccess.Client;
+using Serilog;
 using System.ComponentModel;
 using System.Data;
 
@@ -308,7 +309,7 @@ namespace BackOffice.UC
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating quantity: {ex.Message}");
+                Log.Error(ex, "Failed to update quantity in sales grid");
             }
             finally
             {

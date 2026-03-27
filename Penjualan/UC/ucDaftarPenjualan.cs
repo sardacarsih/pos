@@ -93,7 +93,7 @@ namespace Penjualan.UC
         {
            
             var rekap = DaftarPenjualan.GroupBy(p => new {
-                Jenis=p.NIK== "00.00004" ? "Tunai":"Kredit",
+                Jenis=p.NIK== Global.DefaultCustomerNIK ? "Tunai":"Kredit",
                 p.TANGGAL })
                 .Select(g => new DTORekapPenjualan
                 {
@@ -282,7 +282,7 @@ namespace Penjualan.UC
             var rowhandle = gridView1.FocusedRowHandle;
             var Nik = gridView1.GetRowCellValue(rowhandle, "NIK").ToString();
             var Nama = gridView1.GetRowCellValue(rowhandle, "NAMA_PELANGGAN").ToString();
-            if (Nik == "00.00004")
+            if (Nik == Global.DefaultCustomerNIK)
             {
                 XtraMessageBox.Show("Penjualan Tunai tidak dapat diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;

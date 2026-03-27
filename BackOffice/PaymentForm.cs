@@ -12,13 +12,14 @@ namespace BackOffice
 {
     public partial class PaymentForm : DevExpress.XtraEditors.XtraForm
     {
-        private const string DEFAULT_CUSTOMER_NIK = "00.00004";
+        private static readonly string DEFAULT_CUSTOMER_NIK = DataLayer.global.DefaultCustomerNIK;
         PendingController controller = new();
         public bool PendingFaktur { get; set; }
         private string jenis_pembayaran="TUNAI";
         private string ket_pembayaran = "KAS";
         string NIK, STATUS, UNIT_KERJA;
-        double ID, LIMIT_HUTANG, JUMLAHFAKTUR;
+        int ID;
+        double LIMIT_HUTANG, JUMLAHFAKTUR;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTOFakturPenjualanDetail> ListItemsPenjualan { get; set; }
 
@@ -130,7 +131,7 @@ namespace BackOffice
             FakturPenjualanHeader.STATUS = STATUS;
             FakturPenjualanHeader.UNIT_KERJA = UNIT_KERJA;
             FakturPenjualanHeader.TENOR = tenor;
-            FakturPenjualanHeader.ANGSURAN = FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR;
+            FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = ispending;
 
             if (tenor == 1)
@@ -214,7 +215,7 @@ namespace BackOffice
 
                     // Access the values from the selected object
                    
-                    ID = Convert.ToDouble(selectedObject.ID_PELANGGAN);
+                    ID = Convert.ToInt32(selectedObject.ID_PELANGGAN);
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;

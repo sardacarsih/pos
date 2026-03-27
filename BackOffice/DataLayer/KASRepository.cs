@@ -3,6 +3,7 @@ using BackOffice.Model;
 using BackOffice.UC;
 using Dapper;
 using Oracle.ManagedDataAccess.Client;
+using Serilog;
 using System;
 using System.Data;
 using System.Linq;
@@ -32,7 +33,7 @@ namespace BackOffice.DataLayer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                Log.Error(ex, "Failed to retrieve payment via list");
                 // Handle the exception as needed
                 return new List<FinBayarVia>(); // Or throw the exception if appropriate
             }
@@ -58,7 +59,7 @@ namespace BackOffice.DataLayer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                Log.Error(ex, "Failed to retrieve payment type list");
                 // Handle the exception as needed
                 return new List<FinJenisBayar>(); // Or throw the exception if appropriate
             }

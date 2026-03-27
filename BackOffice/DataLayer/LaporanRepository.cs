@@ -1,6 +1,7 @@
 ﻿using BackOffice.Interface;
 using BackOffice.Model;
 using Oracle.ManagedDataAccess.Client;
+using Serilog;
 using static BackOffice.DataLayer.PeriodeGlobal;
 
 namespace BackOffice.DataLayer
@@ -224,7 +225,7 @@ namespace BackOffice.DataLayer
             catch (Exception ex)
             {
                 // Handle the exception (log, rethrow, etc.)
-                Console.WriteLine($"Error: {ex.Message}");
+                Log.Error(ex, "Failed to retrieve Waserda sales detail");
                 // Optionally, you might want to throw the exception again or log it.
                 throw;
             }

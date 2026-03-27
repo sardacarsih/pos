@@ -91,7 +91,7 @@ namespace Penjualan.DataLayer
             return result;
         }
 
-        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null)
+        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null)
         {
             using OracleConnection conn = new(Global.connectionString);
             conn.Open();
@@ -113,7 +113,7 @@ namespace Penjualan.DataLayer
                 var masterParameters = new DynamicParameters(faktur_header);
                 masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-                int rowsAffected = conn.Execute(insertFakturJual_Master, masterParameters, transaction);
+                conn.Execute(insertFakturJual_Master, masterParameters, transaction);
 
                 Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
 
@@ -124,9 +124,14 @@ namespace Penjualan.DataLayer
                 {
                     detail.ID_PENJUALAN = newPenjualanId;
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
+                }
+                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
 
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertFakturJual_Detail, detailParameters, transaction);
+                // Delete pending record within the same transaction
+                if (!string.IsNullOrEmpty(pendingNoTransaksi))
+                {
+                    conn.Execute("DELETE FROM POS_PENDING_DETAIL WHERE NO_TRANSAKSI = :notransaksi", new { notransaksi = pendingNoTransaksi }, transaction);
+                    conn.Execute("DELETE FROM POS_PENDING WHERE NO_TRANSAKSI = :notransaksi", new { notransaksi = pendingNoTransaksi }, transaction);
                 }
 
                 transaction.Commit();
@@ -139,7 +144,7 @@ namespace Penjualan.DataLayer
         }
 
 
-        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null)
+        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null)
         {
             using OracleConnection conn = new(Global.connectionString);
             conn.Open();
@@ -158,9 +163,9 @@ namespace Penjualan.DataLayer
                                                 "(:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN) RETURNING ID_PENJUALAN INTO :penjualanId";
 
                 var masterParameters = new DynamicParameters(faktur_header);
-                 masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-                int rowsAffected = conn.Execute(insertFakturJual_Master, masterParameters, transaction);
+                conn.Execute(insertFakturJual_Master, masterParameters, transaction);
 
                 Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
 
@@ -172,9 +177,8 @@ namespace Penjualan.DataLayer
                 {
                     detail.ID_PENJUALAN = newPenjualanId;
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertFakturJual_Detail, detailParameters, transaction);
                 }
+                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
 
                 // Insert credit installment information
                 string insertTagihanKredit = "INSERT INTO POS_KREDIT_ANGSURAN (PERIODE, NO_TRANSAKSI, TANGGALJATUHTEMPO, ANGSURANKE, SALDOAWAL,ANGSURAN,SALDOAKHIR) " +
@@ -183,8 +187,14 @@ namespace Penjualan.DataLayer
                 foreach (var detail in DaftarWaktuTagihan)
                 {
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertTagihanKredit, detailParameters, transaction);
+                }
+                conn.Execute(insertTagihanKredit, DaftarWaktuTagihan, transaction);
+
+                // Delete pending record within the same transaction
+                if (!string.IsNullOrEmpty(pendingNoTransaksi))
+                {
+                    conn.Execute("DELETE FROM POS_PENDING_DETAIL WHERE NO_TRANSAKSI = :notransaksi", new { notransaksi = pendingNoTransaksi }, transaction);
+                    conn.Execute("DELETE FROM POS_PENDING WHERE NO_TRANSAKSI = :notransaksi", new { notransaksi = pendingNoTransaksi }, transaction);
                 }
 
                 transaction.Commit();
@@ -192,7 +202,7 @@ namespace Penjualan.DataLayer
             catch (Exception)
             {
                 transaction.Rollback();
-                throw; // Rethrow the exception to be handled by the caller
+                throw;
             }
         }
 
@@ -309,7 +319,8 @@ namespace Penjualan.DataLayer
                 SELECT NVL(SUM(TOTAL), 0)
                 FROM POS_PENJUALAN
                 WHERE NIK = :Nik
-                AND TANGGAL BETWEEN :Dari AND :Sampai";
+                AND TANGGAL BETWEEN :Dari AND :Sampai
+                FOR UPDATE";
 
             using var cmd = new OracleCommand(query, conn);
             cmd.Transaction = transaction;
@@ -393,7 +404,7 @@ namespace Penjualan.DataLayer
             return connection.Query<DTOPelanggan>(query).ToList();
         }
 
-        public decimal CheckingJumlahHutang(string nik, string status, DateTime dari, DateTime sampai)
+        public decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai)
         {
             using var connection = new OracleConnection(Global.connectionString);
             connection.Open();

@@ -3,6 +3,7 @@ using BackOffice.Model;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid;
 using DevExpress.XtraGrid.Views.Grid;
+using Serilog;
 using System.ComponentModel;
 
 namespace BackOffice.UC
@@ -45,7 +46,7 @@ namespace BackOffice.UC
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"CellValueChanged error: {ex.Message}");
+                Log.Error(ex, "Failed to handle cell value change in purchase grid");
             }
             finally
             {

@@ -9,13 +9,13 @@ namespace Penjualan
 {
     public partial class PaymentForm : DevExpress.XtraEditors.XtraForm
     {
-        private const string DEFAULT_CUSTOMER_NIK = "00.00004";
+        private static readonly string DEFAULT_CUSTOMER_NIK = Global.DefaultCustomerNIK;
         PendingController controller = new();
         public bool PendingFaktur { get; set; }
         private string jenis_pembayaran = "TUNAI";
         private string ket_pembayaran = "KAS";
         string NIK, STATUS, UNIT_KERJA;
-        double ID;
+        int ID;
         decimal JUMLAHFAKTUR, LIMIT;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTOFakturPenjualanDetail> ListItemsPenjualan { get; set; }
@@ -119,11 +119,11 @@ namespace Penjualan
             FakturPenjualanHeader.KET_BAYAR = ket_pembayaran;
             FakturPenjualanHeader.ID_PELANGGAN = ID;
             FakturPenjualanHeader.NIK = NIK;
-            FakturPenjualanHeader.NAMA_PELANGGAN = searchLookUpEdit1.Text;
+            FakturPenjualanHeader.NAMA_PELANGGAN = searchLookUpEdit1.Text ?? string.Empty;
             FakturPenjualanHeader.STATUS = STATUS;
             FakturPenjualanHeader.UNIT_KERJA = UNIT_KERJA;
             FakturPenjualanHeader.TENOR = tenor;
-            FakturPenjualanHeader.ANGSURAN = FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR;
+            FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = ispending;
 
             // Build credit limit check for non-cash customers
@@ -153,19 +153,16 @@ namespace Penjualan
                 };
             }
 
+            string? pendingNo = PendingFaktur ? FakturPenjualanHeader.NO_TRANSAKSI : null;
+
             if (tenor == SinglePaymentTenor)
             {
-                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan, creditCheck);
+                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan, creditCheck, pendingNo);
             }
             else
             {
                 List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
-                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang, creditCheck);
-            }
-
-            if (PendingFaktur)
-            {
-                controller.DeletePendingFaktur(FakturPenjualanHeader.NO_TRANSAKSI);
+                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang, creditCheck, pendingNo);
             }
         }
 
@@ -195,7 +192,7 @@ namespace Penjualan
 
             report.Parameters["Nama_Toko"].Value = "KOPKAR - KUSUMA LESTARI";
             report.Parameters["NoFaktur"].Value = FakturPenjualanHeader.NO_TRANSAKSI;
-            report.Parameters["Pelanggan"].Value = FakturPenjualanHeader.NIK + ", " + FakturPenjualanHeader.NAMA_PELANGGAN.ToUpper() + " , " + FakturPenjualanHeader.UNIT_KERJA;
+            report.Parameters["Pelanggan"].Value = FakturPenjualanHeader.NIK + ", " + (FakturPenjualanHeader.NAMA_PELANGGAN ?? string.Empty).ToUpper() + " , " + FakturPenjualanHeader.UNIT_KERJA;
             report.Parameters["Jenis_Bayar"].Value = FakturPenjualanHeader.JENIS_BAYAR;
             report.Parameters["Waktu"].Value = FakturPenjualanHeader.TANGGAL.ToString("dd-MMM-yy") + " " + FakturPenjualanHeader.JAM;
             report.Parameters["Tenor"].Value = FakturPenjualanHeader.TENOR;
@@ -260,7 +257,7 @@ namespace Penjualan
 
                     // Access the values from the selected object
 
-                    ID = Convert.ToDouble(selectedObject.ID_PELANGGAN);
+                    ID = Convert.ToInt32(selectedObject.ID_PELANGGAN);
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
@@ -346,7 +343,7 @@ namespace Penjualan
                 sampai = Remise2Sampai;
             }
 
-            return POS_Services.CheckingJumlahHutang(nIK, sTATUS, dari, sampai);
+            return POS_Services.CheckingJumlahHutang(nIK, dari, sampai);
         }
 
 

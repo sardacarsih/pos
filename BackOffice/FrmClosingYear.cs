@@ -6,6 +6,7 @@ using BackOffice.Model;
 using DevExpress.XtraEditors;
 using DevExpress.XtraSplashScreen;
 using Oracle.ManagedDataAccess.Client;
+using Serilog;
 
 namespace BackOffice
 {
@@ -212,7 +213,7 @@ namespace BackOffice
             else
             {
                 // Handle the case when the record already exists
-                Console.WriteLine("The record already exists. Skipping the insert operation.");
+                Log.Warning("Next periode record already exists, skipping insert operation");
             }
         }
 
@@ -360,7 +361,7 @@ namespace BackOffice
                     {
                         // Rollback the transaction in case of an error
                         transaction.Rollback();
-                        Console.WriteLine($"Error: {ex.Message}");
+                        Log.Error(ex, "Failed to insert stock balance transfer records");
                         // You may choose to rethrow the exception here for further handling
                         throw;
                     }
@@ -369,7 +370,7 @@ namespace BackOffice
             catch (Exception ex)
             {
                 // Handle the exception (log, display an error message, etc.)
-                Console.WriteLine($"Error: {ex.Message}");
+                Log.Error(ex, "Failed to process year-end stock balance transfer");
                 // You may choose to rethrow the exception here for further handling
                 throw;
             }

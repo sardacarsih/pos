@@ -1,15 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 
 namespace BackOffice.DataLayer
 {
     public static class global
     {
+        public static readonly string connectionString;
+        public static readonly string DefaultCustomerNIK;
 
-    public static readonly string connectionString = "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ERP)));User Id=YOUR_USER;Password=YOUR_PASSWORD;";
+        static global()
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+                .Build();
 
+            connectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException(
+                    "Connection string 'OracleConnection' not found in appsettings.json");
+
+            DefaultCustomerNIK = configuration["AppSettings:DefaultCustomerNIK"] ?? "00.00004";
+        }
     }
 }

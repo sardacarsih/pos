@@ -113,7 +113,7 @@ namespace BackOffice.UC
             if (radioGroup1.SelectedIndex == 0)
             {
                 var rekap = DaftarPenjualan.GroupBy(p => new {
-                    Jenis = p.NIK == "00.00004" ? "Tunai" : "Kredit",
+                    Jenis = p.NIK == DataLayer.global.DefaultCustomerNIK ? "Tunai" : "Kredit",
                     p.TANGGAL
                 })
                 .Select(g => new DTORekapPenjualan
@@ -172,7 +172,7 @@ namespace BackOffice.UC
             }
             else if (radioGroup1.SelectedIndex == 2)
             {
-                var REKAPBULANAN = DaftarPenjualan.Where(p => p.STATUS == "BULANAN" && p.NIK != "00.00004")
+                var REKAPBULANAN = DaftarPenjualan.Where(p => p.STATUS == "BULANAN" && p.NIK != DataLayer.global.DefaultCustomerNIK)
                     .GroupBy(g => new { g.UNIT_KERJA, g.NIK, g.NAMA_PELANGGAN })
                     .Select(group => new DTORekapPenjualanByNik
                     {
@@ -181,7 +181,7 @@ namespace BackOffice.UC
                         NAMA_PELANGGAN = group.Key.NAMA_PELANGGAN,
                         TOTAL = group.Sum(x => x.TOTAL)
                     });
-                var BULANAN = DaftarPenjualan.Where(p => p.STATUS == "BULANAN" && p.NIK != "00.00004");
+                var BULANAN = DaftarPenjualan.Where(p => p.STATUS == "BULANAN" && p.NIK != DataLayer.global.DefaultCustomerNIK);
                 // Create instances of the reports you want to merge
                 XtraReport report1 = new rptPenjualanRekap();
                 XtraReport report2 = new rptPenjualan();
@@ -358,7 +358,7 @@ namespace BackOffice.UC
             var rowhandle = gridView1.FocusedRowHandle;
             var Nik = gridView1.GetRowCellValue(rowhandle, "NIK").ToString();
             var Nama = gridView1.GetRowCellValue(rowhandle, "NAMA_PELANGGAN").ToString();
-            if (Nik == "00.00004")
+            if (Nik == DataLayer.global.DefaultCustomerNIK)
             {
                 XtraMessageBox.Show("Penjualan Tunai tidak dapat diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;

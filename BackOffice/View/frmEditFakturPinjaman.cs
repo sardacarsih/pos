@@ -11,7 +11,8 @@ namespace BackOffice.View
     public partial class frmEditFakturPinjaman : DevExpress.XtraEditors.XtraForm
     {
         string NIK, STATUS, UNIT_KERJA,ket_pembayaran,jenis_pembayaran;
-        double ID,LIMIT_HUTANG;
+        int ID;
+        double LIMIT_HUTANG;
         AnggotaController controller = new();
         public DTOPinjaman FakturPinjamanHeader { get; set; }
         public List<DTOPinjamanDetail> ListPinjamanDetail { get; set; }
@@ -173,7 +174,7 @@ namespace BackOffice.View
 
                     // Access the values from the selected object
                    
-                    ID = Convert.ToDouble(selectedObject.ID_PELANGGAN);
+                    ID = Convert.ToInt32(selectedObject.ID_PELANGGAN);
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNITKERJA;

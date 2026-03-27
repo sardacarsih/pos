@@ -7,6 +7,7 @@ using DevExpress.Xpo.DB.Helpers;
 using DevExpress.XtraEditors;
 using DevExpress.XtraSplashScreen;
 using Oracle.ManagedDataAccess.Client;
+using Serilog;
 using System.Diagnostics;
 using System.Globalization;
 using System.Media;
@@ -545,7 +546,7 @@ namespace BackOffice
             else
             {
                 // Handle the case when the record already exists
-                Console.WriteLine("The record already exists. Skipping the insert operation.");
+                Log.Warning("Next periode record already exists, skipping insert operation");
             }
         }
 

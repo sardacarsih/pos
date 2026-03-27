@@ -1,21 +1,61 @@
 using DevExpress.XtraEditors;
+using Microsoft.Extensions.Configuration;
+using Serilog;
 
 namespace BackOffice
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            WindowsFormsSettings.LoadApplicationSettings();
-            ApplicationConfiguration.Initialize();
-            Application.Run(new Frmlogin());
+            Environment.CurrentDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+                .Build();
+
+            Log.Logger = new LoggerConfiguration()
+                .ReadFrom.Configuration(configuration)
+                .CreateLogger();
+
+            try
+            {
+                Log.Information("BackOffice application starting up");
+
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+
+                Application.ThreadException += (sender, e) =>
+                {
+                    Log.Fatal(e.Exception, "Unhandled UI thread exception");
+                    MessageBox.Show(
+                        $"Terjadi kesalahan: {e.Exception.Message}",
+                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                };
+
+                AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+                {
+                    Log.Fatal((Exception)e.ExceptionObject, "Unhandled non-UI exception");
+                    Log.CloseAndFlush();
+                };
+
+                WindowsFormsSettings.LoadApplicationSettings();
+                ApplicationConfiguration.Initialize();
+                Application.Run(new Frmlogin());
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "Application terminated unexpectedly");
+                throw;
+            }
+            finally
+            {
+                Log.Information("BackOffice application shutting down");
+                Log.CloseAndFlush();
+            }
         }
     }
 }

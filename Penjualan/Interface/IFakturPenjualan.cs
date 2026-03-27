@@ -4,8 +4,8 @@ namespace Penjualan.Interface
 {
     public interface IFakturPenjualan
     {
-        void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null);
-        void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null);
+        void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null);
+        void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null);
         string GenerateTransactionNumber(DateTime date);
         void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header);
         DTOProductInfo RetrieveProductInfo(string barcode);
@@ -14,6 +14,6 @@ namespace Penjualan.Interface
         DTOPeriodeDates? GetTanggalByPeriode(int periode);
         DTOPotonganHarga? GetPotonganByKodeItem(string kodeItem);
         List<DTOPelanggan> GetPelangganAktif();
-        decimal CheckingJumlahHutang(string nik, string status, DateTime dari, DateTime sampai);
+        decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai);
     }
 }

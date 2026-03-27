@@ -167,18 +167,15 @@ namespace BackOffice.DataLayer
                 {
                     detail.ID_PENJUALAN = newPenjualanId;
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertFakturJual_Detail, detailParameters, transaction);
                 }
+                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
 
                 transaction.Commit();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 transaction.Rollback();
-                // Handle or log the exception here
-                throw ex;
+                throw;
             }
         }
 
@@ -210,9 +207,8 @@ namespace BackOffice.DataLayer
                 {
                     detail.ID_PENJUALAN = newPenjualanId;
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertFakturJual_Detail, detailParameters, transaction);
                 }
+                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
 
                 // Insert credit installment information
                 string insertTagihanKredit = "INSERT INTO POS_KREDIT_ANGSURAN (PERIODE, NO_TRANSAKSI, TANGGALJATUHTEMPO, ANGSURANKE, SALDOAWAL,ANGSURAN,SALDOAKHIR) " +
@@ -221,9 +217,8 @@ namespace BackOffice.DataLayer
                 foreach (var detail in DaftarWaktuTagihan)
                 {
                     detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                    var detailParameters = new DynamicParameters(detail);
-                    conn.Execute(insertTagihanKredit, detailParameters, transaction);
                 }
+                conn.Execute(insertTagihanKredit, DaftarWaktuTagihan, transaction);
 
                 transaction.Commit();
             }

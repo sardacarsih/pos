@@ -14,7 +14,7 @@ namespace Penjualan
     public partial class frmEditFaktur : DevExpress.XtraEditors.XtraForm
     {
         string NIK, STATUS, UNIT_KERJA,ket_pembayaran,jenis_pembayaran;
-        double ID;
+        int ID;
         decimal LIMIT_HUTANG;
         public DTOFakturPenjualanHeader FakturPenjualanHeader { get; set; }
         public List<DTODaftarBarang> ListItemsPenjualan { get; set; }
@@ -114,7 +114,7 @@ namespace Penjualan
             FakturPenjualanHeader.STATUS = STATUS;
             FakturPenjualanHeader.UNIT_KERJA = UNIT_KERJA;
             FakturPenjualanHeader.TENOR = tenor;
-            FakturPenjualanHeader.ANGSURAN = FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR;
+            FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             
 
             //if (tenor == 1)
@@ -186,12 +186,12 @@ namespace Penjualan
 
                     // Access the values from the selected object
                    
-                    ID = Convert.ToDouble(selectedObject.ID_PELANGGAN);
+                    ID = Convert.ToInt32(selectedObject.ID_PELANGGAN);
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
 
-                    if (NIK == "00.00004")
+                    if (NIK == Global.DefaultCustomerNIK)
                     {
                         jenis_pembayaran = "TUNAI";
                         ket_pembayaran = "KAS";
@@ -232,7 +232,7 @@ namespace Penjualan
                     else
                     {
                         // Set the default value for searchLookUpEdit1
-                        //int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
+                        //int index2 = datasource.FindIndex(item => item.NIK == Global.DefaultCustomerNIK);
 
                         //searchLookUpEdit1.EditValue = datasource[index2].NIK;
                         searchLookUpEdit1.EditValue = null;
@@ -257,7 +257,7 @@ namespace Penjualan
             if (e.KeyCode == Keys.F5)
             {
                 // Set the default value for searchLookUpEdit1
-                int index2 = datasource.FindIndex(item => item.NIK == "00.00004");
+                int index2 = datasource.FindIndex(item => item.NIK == Global.DefaultCustomerNIK);
 
                 searchLookUpEdit1.EditValue = datasource[index2].NIK;
                 sbsimpancetak.Enabled = true;

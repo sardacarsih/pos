@@ -17,7 +17,8 @@ namespace BackOffice.UC
         private string jenis_pembayaran = string.Empty;
         private string ket_pembayaran = string.Empty;
         string NIK, STATUS, UNIT_KERJA;
-        double ID, LIMIT_HUTANG;
+        int ID;
+        double LIMIT_HUTANG;
         bool ispending = false;
         List<DTOPRODUCTS> Barang;
         private BindingList<TransactionDataJual> transactionDataList;
@@ -676,7 +677,7 @@ namespace BackOffice.UC
             FakturPenjualanHeader.STATUS = STATUS;
             FakturPenjualanHeader.UNIT_KERJA = UNIT_KERJA;
             FakturPenjualanHeader.TENOR = tenor;
-            FakturPenjualanHeader.ANGSURAN = FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR;
+            FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = "T";
             //menghapus faktur penjualan,detail penjualan dan daftar angsuran penjualan kredit
             controller.HapusFakturPenjualan(FakturPenjualanHeader.NO_TRANSAKSI);
@@ -743,7 +744,7 @@ namespace BackOffice.UC
 
                     // Access the values from the selected object
 
-                    ID = Convert.ToDouble(selectedObject.ID_PELANGGAN);
+                    ID = Convert.ToInt32(selectedObject.ID_PELANGGAN);
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
