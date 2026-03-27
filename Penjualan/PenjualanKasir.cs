@@ -1,5 +1,4 @@
-﻿using DevExpress.Utils.CodedUISupport;
-using DevExpress.XtraBars;
+﻿using DevExpress.XtraBars;
 using DevExpress.XtraBars.FluentDesignSystem;
 using DevExpress.XtraBars.Navigation;
 using DevExpress.XtraEditors;
