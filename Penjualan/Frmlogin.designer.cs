@@ -2,15 +2,8 @@ namespace Penjualan
 {
     partial class Frmlogin
     {
-        /// <summary>
-        /// Required designer variable.
-        /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        /// <summary>
-        /// Clean up any resources being used.
-        /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -20,496 +13,289 @@ namespace Penjualan
             base.Dispose(disposing);
         }
 
-        #region Windows Form Designer generated code
-
-        /// <summary>
-        /// Required method for Designer support - do not modify
-        /// the contents of this method with the code editor.
-        /// </summary>
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Frmlogin));
-            behaviorManager1 = new DevExpress.Utils.Behaviors.BehaviorManager(components);
-            tableLayoutMain = new System.Windows.Forms.TableLayoutPanel();
-            panelBranding = new DevExpress.XtraEditors.PanelControl();
-            pictureBoxLogo = new DevExpress.XtraEditors.PictureEdit();
-            lblBrandName = new DevExpress.XtraEditors.LabelControl();
-            lblTagline = new DevExpress.XtraEditors.LabelControl();
-            lblversi = new DevExpress.XtraEditors.LabelControl();
-            panelRight = new DevExpress.XtraEditors.PanelControl();
-            layoutControl1 = new DevExpress.XtraLayout.LayoutControl();
-            lblWelcome = new DevExpress.XtraEditors.LabelControl();
-            lblSubtitle = new DevExpress.XtraEditors.LabelControl();
+            System.ComponentModel.ComponentResourceManager resources = new(typeof(Frmlogin));
+            cardPanel = new PosLoginUi.LoginCardPanel();
+            avatarControl = new PosLoginUi.LoginAvatarControl();
+            lblWelcome = new Label();
+            lblApplication = new Label();
+            lblSubtitle = new Label();
+            accentLine = new Panel();
+            lblUserId = new Label();
+            userInputPanel = new PosLoginUi.RoundedInputPanel();
             txtuserid = new DevExpress.XtraEditors.TextEdit();
+            lblPassword = new Label();
+            passwordInputPanel = new PosLoginUi.RoundedInputPanel();
             txtpwd = new DevExpress.XtraEditors.TextEdit();
-            simpleButton1 = new DevExpress.XtraEditors.SimpleButton();
-            Login = new DevExpress.XtraEditors.SimpleButton();
-            layoutControlGroup1 = new DevExpress.XtraLayout.LayoutControlGroup();
-            emptySpaceTop = new DevExpress.XtraLayout.EmptySpaceItem();
-            layoutItemWelcome = new DevExpress.XtraLayout.LayoutControlItem();
-            layoutItemSubtitle = new DevExpress.XtraLayout.LayoutControlItem();
-            emptySpaceAfterTitle = new DevExpress.XtraLayout.EmptySpaceItem();
-            layoutItemUserID = new DevExpress.XtraLayout.LayoutControlItem();
-            layoutItemPassword = new DevExpress.XtraLayout.LayoutControlItem();
-            layoutGroupButtons = new DevExpress.XtraLayout.LayoutControlGroup();
-            layoutItemCancel = new DevExpress.XtraLayout.LayoutControlItem();
-            emptySpaceBetweenButtons = new DevExpress.XtraLayout.EmptySpaceItem();
-            layoutItemLogin = new DevExpress.XtraLayout.LayoutControlItem();
-            emptySpaceBottom = new DevExpress.XtraLayout.EmptySpaceItem();
-            ((System.ComponentModel.ISupportInitialize)behaviorManager1).BeginInit();
-            tableLayoutMain.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)panelBranding).BeginInit();
-            panelBranding.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBoxLogo.Properties).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)panelRight).BeginInit();
-            panelRight.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)layoutControl1).BeginInit();
-            layoutControl1.SuspendLayout();
+            passwordEyeButton = new PosLoginUi.PasswordEyeButton();
+            Login = new PosLoginUi.RoundedActionButton();
+            footerLine = new Panel();
+            securityShield = new PosLoginUi.SecurityShieldControl();
+            lblSecurityTitle = new Label();
+            lblSecurityText = new Label();
+            lblversi = new Label();
+            simpleButton1 = new PosLoginUi.CircularCloseButton();
+            cardPanel.SuspendLayout();
+            userInputPanel.SuspendLayout();
+            passwordInputPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)txtuserid.Properties).BeginInit();
             ((System.ComponentModel.ISupportInitialize)txtpwd.Properties).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutControlGroup1).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceTop).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemWelcome).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemSubtitle).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceAfterTitle).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemUserID).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemPassword).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutGroupButtons).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemCancel).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceBetweenButtons).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemLogin).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceBottom).BeginInit();
             SuspendLayout();
-            //
-            // tableLayoutMain
-            //
-            tableLayoutMain.ColumnCount = 2;
-            tableLayoutMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
-            tableLayoutMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
-            tableLayoutMain.RowCount = 1;
-            tableLayoutMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tableLayoutMain.Controls.Add(panelBranding, 0, 0);
-            tableLayoutMain.Controls.Add(panelRight, 1, 0);
-            tableLayoutMain.Dock = DockStyle.Fill;
-            tableLayoutMain.Location = new Point(0, 0);
-            tableLayoutMain.Margin = new Padding(0);
-            tableLayoutMain.Name = "tableLayoutMain";
-            tableLayoutMain.Size = new Size(820, 520);
-            tableLayoutMain.TabIndex = 0;
-            //
-            // panelBranding
-            //
-            panelBranding.Appearance.BackColor = Color.FromArgb(15, 23, 42);
-            panelBranding.Appearance.Options.UseBackColor = true;
-            panelBranding.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-            panelBranding.Controls.Add(pictureBoxLogo);
-            panelBranding.Controls.Add(lblBrandName);
-            panelBranding.Controls.Add(lblTagline);
-            panelBranding.Controls.Add(lblversi);
-            panelBranding.Dock = DockStyle.Fill;
-            panelBranding.Location = new Point(0, 0);
-            panelBranding.Margin = new Padding(0);
-            panelBranding.Name = "panelBranding";
-            panelBranding.Size = new Size(328, 520);
-            panelBranding.TabIndex = 0;
-            panelBranding.Paint += panelBranding_Paint;
-            panelBranding.Resize += panelBranding_Resize;
-            //
-            // pictureBoxLogo
-            //
-            pictureBoxLogo.EditValue = (Image)resources.GetObject("Frmlogin.IconOptions.Image");
-            pictureBoxLogo.Location = new Point(124, 160);
-            pictureBoxLogo.Name = "pictureBoxLogo";
-            pictureBoxLogo.Properties.AllowFocused = false;
-            pictureBoxLogo.Properties.Appearance.BackColor = Color.Transparent;
-            pictureBoxLogo.Properties.Appearance.Options.UseBackColor = true;
-            pictureBoxLogo.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-            pictureBoxLogo.Properties.ShowCameraMenuItem = DevExpress.XtraEditors.Controls.CameraMenuItemVisibility.Never;
-            pictureBoxLogo.Properties.ShowMenu = false;
-            pictureBoxLogo.Properties.SizeMode = DevExpress.XtraEditors.Controls.PictureSizeMode.Zoom;
-            pictureBoxLogo.Properties.ReadOnly = true;
-            pictureBoxLogo.Size = new Size(80, 80);
-            pictureBoxLogo.TabIndex = 0;
-            pictureBoxLogo.TabStop = false;
-            //
-            // lblBrandName
-            //
-            lblBrandName.Appearance.Font = new Font("Segoe UI", 22F, FontStyle.Bold, GraphicsUnit.Point);
-            lblBrandName.Appearance.ForeColor = Color.White;
-            lblBrandName.Appearance.Options.UseFont = true;
-            lblBrandName.Appearance.Options.UseForeColor = true;
-            lblBrandName.Appearance.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Center;
-            lblBrandName.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            lblBrandName.Location = new Point(0, 252);
-            lblBrandName.Name = "lblBrandName";
-            lblBrandName.Size = new Size(328, 40);
-            lblBrandName.TabIndex = 1;
-            lblBrandName.Text = "Point of Sale";
-            //
-            // lblTagline
-            //
-            lblTagline.Appearance.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            lblTagline.Appearance.ForeColor = Color.FromArgb(148, 163, 184);
-            lblTagline.Appearance.Options.UseFont = true;
-            lblTagline.Appearance.Options.UseForeColor = true;
-            lblTagline.Appearance.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Center;
-            lblTagline.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
-            lblTagline.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            lblTagline.Location = new Point(0, 298);
-            lblTagline.Name = "lblTagline";
-            lblTagline.Size = new Size(328, 40);
-            lblTagline.TabIndex = 2;
-            lblTagline.Text = "Smart Accounting && Inventory System";
-            //
-            // lblversi
-            //
-            lblversi.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            lblversi.Appearance.ForeColor = Color.FromArgb(100, 116, 139);
-            lblversi.Appearance.Options.UseFont = true;
-            lblversi.Appearance.Options.UseForeColor = true;
-            lblversi.Appearance.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Center;
-            lblversi.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            lblversi.Location = new Point(0, 490);
-            lblversi.Name = "lblversi";
-            lblversi.Size = new Size(328, 20);
-            lblversi.TabIndex = 3;
-            lblversi.Text = "Version";
-            //
-            // panelRight
-            //
-            panelRight.Appearance.BackColor = Color.White;
-            panelRight.Appearance.Options.UseBackColor = true;
-            panelRight.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-            panelRight.Controls.Add(layoutControl1);
-            panelRight.Dock = DockStyle.Fill;
-            panelRight.Location = new Point(328, 0);
-            panelRight.Margin = new Padding(0);
-            panelRight.Name = "panelRight";
-            panelRight.Size = new Size(492, 520);
-            panelRight.TabIndex = 1;
-            //
-            // layoutControl1
-            //
-            layoutControl1.AllowCustomization = false;
-            layoutControl1.Appearance.Control.BackColor = Color.White;
-            layoutControl1.Appearance.Control.Options.UseBackColor = true;
-            layoutControl1.Controls.Add(lblWelcome);
-            layoutControl1.Controls.Add(lblSubtitle);
-            layoutControl1.Controls.Add(txtuserid);
-            layoutControl1.Controls.Add(txtpwd);
-            layoutControl1.Controls.Add(simpleButton1);
-            layoutControl1.Controls.Add(Login);
-            layoutControl1.Dock = DockStyle.Fill;
-            layoutControl1.Location = new Point(0, 0);
-            layoutControl1.Name = "layoutControl1";
-            layoutControl1.Root = layoutControlGroup1;
-            layoutControl1.Size = new Size(492, 520);
-            layoutControl1.TabIndex = 0;
-            //
-            // lblWelcome
-            //
-            lblWelcome.Appearance.Font = new Font("Segoe UI", 20F, FontStyle.Bold, GraphicsUnit.Point);
-            lblWelcome.Appearance.ForeColor = Color.FromArgb(30, 41, 59);
-            lblWelcome.Appearance.Options.UseFont = true;
-            lblWelcome.Appearance.Options.UseForeColor = true;
-            lblWelcome.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.Vertical;
-            lblWelcome.Location = new Point(52, 140);
+
+            cardPanel.Controls.Add(avatarControl);
+            cardPanel.Controls.Add(lblWelcome);
+            cardPanel.Controls.Add(lblApplication);
+            cardPanel.Controls.Add(lblSubtitle);
+            cardPanel.Controls.Add(accentLine);
+            cardPanel.Controls.Add(lblUserId);
+            cardPanel.Controls.Add(userInputPanel);
+            cardPanel.Controls.Add(lblPassword);
+            cardPanel.Controls.Add(passwordInputPanel);
+            cardPanel.Controls.Add(Login);
+            cardPanel.Controls.Add(footerLine);
+            cardPanel.Controls.Add(securityShield);
+            cardPanel.Controls.Add(lblSecurityTitle);
+            cardPanel.Controls.Add(lblSecurityText);
+            cardPanel.Controls.Add(lblversi);
+            cardPanel.Location = new Point(920, 60);
+            cardPanel.Name = "cardPanel";
+            cardPanel.Size = new Size(470, 744);
+            cardPanel.TabIndex = 0;
+
+            userInputPanel.Controls.Add(txtuserid);
+            userInputPanel.InputKind = PosLoginUi.LoginInputKind.User;
+            userInputPanel.Location = new Point(54, 322);
+            userInputPanel.Name = "userInputPanel";
+            userInputPanel.Size = new Size(362, 54);
+            userInputPanel.TabIndex = 6;
+
+            passwordInputPanel.Controls.Add(txtpwd);
+            passwordInputPanel.Controls.Add(passwordEyeButton);
+            passwordInputPanel.InputKind = PosLoginUi.LoginInputKind.Password;
+            passwordInputPanel.Location = new Point(54, 427);
+            passwordInputPanel.Name = "passwordInputPanel";
+            passwordInputPanel.Size = new Size(362, 54);
+            passwordInputPanel.TabIndex = 8;
+
+            avatarControl.Location = new Point(191, 50);
+            avatarControl.Name = "avatarControl";
+            avatarControl.Size = new Size(88, 88);
+            avatarControl.TabIndex = 0;
+
+            lblWelcome.BackColor = Color.Transparent;
+            lblWelcome.Font = new Font("Bahnschrift", 26F, FontStyle.Bold);
+            lblWelcome.ForeColor = Color.FromArgb(8, 39, 91);
+            lblWelcome.Location = new Point(42, 150);
             lblWelcome.Name = "lblWelcome";
-            lblWelcome.Size = new Size(388, 37);
-            lblWelcome.TabIndex = 10;
-            lblWelcome.Text = "Welcome Back";
-            //
-            // lblSubtitle
-            //
-            lblSubtitle.Appearance.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            lblSubtitle.Appearance.ForeColor = Color.FromArgb(100, 108, 139);
-            lblSubtitle.Appearance.Options.UseFont = true;
-            lblSubtitle.Appearance.Options.UseForeColor = true;
-            lblSubtitle.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.Vertical;
-            lblSubtitle.Location = new Point(52, 181);
+            lblWelcome.Size = new Size(386, 48);
+            lblWelcome.TabIndex = 1;
+            lblWelcome.Text = "";
+            lblWelcome.TextAlign = ContentAlignment.MiddleCenter;
+            lblWelcome.Visible = false;
+
+            lblApplication.BackColor = Color.Transparent;
+            lblApplication.Font = new Font("Bahnschrift", 20F, FontStyle.Bold);
+            lblApplication.ForeColor = Color.FromArgb(10, 84, 218);
+            lblApplication.Location = new Point(42, 198);
+            lblApplication.Name = "lblApplication";
+            lblApplication.Size = new Size(386, 24);
+            lblApplication.TabIndex = 2;
+            lblApplication.Text = "Penjualan";
+            lblApplication.TextAlign = ContentAlignment.MiddleCenter;
+
+            lblSubtitle.BackColor = Color.Transparent;
+            lblSubtitle.Font = new Font("Segoe UI", 10.5F);
+            lblSubtitle.ForeColor = Color.FromArgb(80, 96, 126);
+            lblSubtitle.Location = new Point(42, 224);
             lblSubtitle.Name = "lblSubtitle";
-            lblSubtitle.Size = new Size(388, 19);
-            lblSubtitle.TabIndex = 11;
-            lblSubtitle.Text = "Sign in to your account";
-            //
-            // txtuserid
-            //
-            txtuserid.Location = new Point(52, 244);
+            lblSubtitle.Size = new Size(386, 26);
+            lblSubtitle.TabIndex = 3;
+            lblSubtitle.Text = "Silakan masuk untuk melanjutkan";
+            lblSubtitle.TextAlign = ContentAlignment.MiddleCenter;
+
+            accentLine.BackColor = Color.FromArgb(13, 91, 224);
+            accentLine.Location = new Point(204, 262);
+            accentLine.Name = "accentLine";
+            accentLine.Size = new Size(62, 3);
+            accentLine.TabIndex = 4;
+
+            lblUserId.BackColor = Color.Transparent;
+            lblUserId.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            lblUserId.ForeColor = Color.FromArgb(8, 39, 91);
+            lblUserId.Location = new Point(54, 294);
+            lblUserId.Name = "lblUserId";
+            lblUserId.Size = new Size(350, 24);
+            lblUserId.TabIndex = 5;
+            lblUserId.Text = "Username";
+
+            txtuserid.Dock = DockStyle.Fill;
+            txtuserid.Location = new Point(48, 2);
             txtuserid.Name = "txtuserid";
-            txtuserid.Properties.Appearance.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
+            txtuserid.Properties.Appearance.Font = new Font("Segoe UI", 11F);
+            txtuserid.Properties.Appearance.ForeColor = Color.FromArgb(45, 61, 91);
             txtuserid.Properties.Appearance.Options.UseFont = true;
-            txtuserid.Size = new Size(388, 36);
-            txtuserid.StyleController = layoutControl1;
+            txtuserid.Properties.Appearance.Options.UseForeColor = true;
+            txtuserid.Properties.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            txtuserid.Properties.AutoHeight = false;
+            txtuserid.Properties.Appearance.BackColor = Color.FromArgb(253, 254, 255);
+            txtuserid.Properties.Appearance.Options.UseBackColor = true;
+            txtuserid.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            txtuserid.Properties.NullValuePrompt = "Masukkan username";
+            txtuserid.Properties.NullValuePromptShowForEmptyValue = true;
+            txtuserid.Size = new Size(268, 50);
             txtuserid.TabIndex = 0;
             txtuserid.KeyDown += txtuserid_KeyDown;
-            //
-            // txtpwd
-            //
-            txtpwd.Location = new Point(52, 314);
+
+            lblPassword.BackColor = Color.Transparent;
+            lblPassword.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            lblPassword.ForeColor = Color.FromArgb(8, 39, 91);
+            lblPassword.Location = new Point(54, 399);
+            lblPassword.Name = "lblPassword";
+            lblPassword.Size = new Size(350, 24);
+            lblPassword.TabIndex = 7;
+            lblPassword.Text = "Password";
+
+            txtpwd.Dock = DockStyle.Fill;
+            txtpwd.Location = new Point(48, 2);
             txtpwd.Name = "txtpwd";
-            txtpwd.Properties.Appearance.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
+            txtpwd.Properties.Appearance.Font = new Font("Segoe UI", 11F);
+            txtpwd.Properties.Appearance.ForeColor = Color.FromArgb(45, 61, 91);
             txtpwd.Properties.Appearance.Options.UseFont = true;
+            txtpwd.Properties.Appearance.Options.UseForeColor = true;
+            txtpwd.Properties.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            txtpwd.Properties.AutoHeight = false;
+            txtpwd.Properties.Appearance.BackColor = Color.FromArgb(253, 254, 255);
+            txtpwd.Properties.Appearance.Options.UseBackColor = true;
+            txtpwd.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            txtpwd.Properties.NullValuePrompt = "Masukkan password";
+            txtpwd.Properties.NullValuePromptShowForEmptyValue = true;
             txtpwd.Properties.UseSystemPasswordChar = true;
-            txtpwd.Size = new Size(388, 36);
-            txtpwd.StyleController = layoutControl1;
+            txtpwd.Size = new Size(268, 50);
             txtpwd.TabIndex = 1;
             txtpwd.KeyDown += txtpwd_KeyDown;
-            //
-            // simpleButton1
-            //
-            simpleButton1.Appearance.BackColor = Color.FromArgb(241, 245, 249);
-            simpleButton1.Appearance.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            simpleButton1.Appearance.ForeColor = Color.FromArgb(100, 116, 139);
-            simpleButton1.Appearance.Options.UseBackColor = true;
-            simpleButton1.Appearance.Options.UseFont = true;
-            simpleButton1.Appearance.Options.UseForeColor = true;
-            simpleButton1.Location = new Point(52, 384);
-            simpleButton1.MinimumSize = new Size(100, 44);
-            simpleButton1.Name = "simpleButton1";
-            simpleButton1.Size = new Size(136, 44);
-            simpleButton1.TabIndex = 3;
-            simpleButton1.Text = "Cancel";
-            simpleButton1.Click += SimpleButton1_Click;
-            //
-            // Login
-            //
-            Login.Appearance.BackColor = Color.FromArgb(37, 99, 235);
-            Login.Appearance.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
-            Login.Appearance.ForeColor = Color.White;
-            Login.Appearance.Options.UseBackColor = true;
-            Login.Appearance.Options.UseFont = true;
-            Login.Appearance.Options.UseForeColor = true;
-            Login.Location = new Point(304, 384);
-            Login.MinimumSize = new Size(100, 44);
+
+            passwordEyeButton.Dock = DockStyle.Right;
+            passwordEyeButton.Location = new Point(316, 2);
+            passwordEyeButton.Name = "passwordEyeButton";
+            passwordEyeButton.Size = new Size(40, 50);
+            passwordEyeButton.TabIndex = 9;
+            passwordEyeButton.Click += PasswordEyeButton_Click;
+
+            Login.BackColor = Color.FromArgb(10, 84, 218);
+            Login.CornerRadius = 15;
+            Login.Cursor = Cursors.Hand;
+            Login.FlatAppearance.BorderSize = 0;
+            Login.Font = new Font("Bahnschrift", 12F, FontStyle.Bold);
+            Login.ForeColor = Color.White;
+            Login.Location = new Point(54, 514);
             Login.Name = "Login";
-            Login.Size = new Size(136, 44);
+            Login.Size = new Size(362, 58);
             Login.TabIndex = 2;
-            Login.Text = "Login";
+            Login.Text = "LOGIN";
+            Login.UseVisualStyleBackColor = false;
             Login.Click += Login_Click;
-            //
-            // layoutControlGroup1
-            //
-            layoutControlGroup1.EnableIndentsWithoutBorders = DevExpress.Utils.DefaultBoolean.True;
-            layoutControlGroup1.GroupBordersVisible = false;
-            layoutControlGroup1.Items.AddRange(new DevExpress.XtraLayout.BaseLayoutItem[] {
-                emptySpaceTop,
-                layoutItemWelcome,
-                layoutItemSubtitle,
-                emptySpaceAfterTitle,
-                layoutItemUserID,
-                layoutItemPassword,
-                layoutGroupButtons,
-                emptySpaceBottom
-            });
-            layoutControlGroup1.Name = "Root";
-            layoutControlGroup1.Padding = new DevExpress.XtraLayout.Utils.Padding(50, 50, 30, 30);
-            layoutControlGroup1.Size = new Size(492, 520);
-            layoutControlGroup1.TextVisible = false;
-            //
-            // emptySpaceTop
-            //
-            emptySpaceTop.AllowHotTrack = false;
-            emptySpaceTop.Location = new Point(0, 0);
-            emptySpaceTop.MinSize = new Size(1, 20);
-            emptySpaceTop.Name = "emptySpaceTop";
-            emptySpaceTop.Size = new Size(392, 108);
-            emptySpaceTop.SizeConstraintsType = DevExpress.XtraLayout.SizeConstraintsType.Custom;
-            emptySpaceTop.TextSize = new Size(0, 0);
-            //
-            // layoutItemWelcome
-            //
-            layoutItemWelcome.Control = lblWelcome;
-            layoutItemWelcome.Location = new Point(0, 108);
-            layoutItemWelcome.Name = "layoutItemWelcome";
-            layoutItemWelcome.Size = new Size(392, 41);
-            layoutItemWelcome.TextSize = new Size(0, 0);
-            layoutItemWelcome.TextVisible = false;
-            //
-            // layoutItemSubtitle
-            //
-            layoutItemSubtitle.Control = lblSubtitle;
-            layoutItemSubtitle.Location = new Point(0, 149);
-            layoutItemSubtitle.Name = "layoutItemSubtitle";
-            layoutItemSubtitle.Size = new Size(392, 23);
-            layoutItemSubtitle.TextSize = new Size(0, 0);
-            layoutItemSubtitle.TextVisible = false;
-            //
-            // emptySpaceAfterTitle
-            //
-            emptySpaceAfterTitle.AllowHotTrack = false;
-            emptySpaceAfterTitle.Location = new Point(0, 172);
-            emptySpaceAfterTitle.MaxSize = new Size(0, 24);
-            emptySpaceAfterTitle.MinSize = new Size(1, 24);
-            emptySpaceAfterTitle.Name = "emptySpaceAfterTitle";
-            emptySpaceAfterTitle.Size = new Size(392, 24);
-            emptySpaceAfterTitle.SizeConstraintsType = DevExpress.XtraLayout.SizeConstraintsType.Custom;
-            emptySpaceAfterTitle.TextSize = new Size(0, 0);
-            //
-            // layoutItemUserID
-            //
-            layoutItemUserID.Control = txtuserid;
-            layoutItemUserID.Location = new Point(0, 196);
-            layoutItemUserID.Name = "layoutItemUserID";
-            layoutItemUserID.Size = new Size(392, 60);
-            layoutItemUserID.Text = "User ID";
-            layoutItemUserID.TextLocation = DevExpress.Utils.Locations.Top;
-            layoutItemUserID.TextSize = new Size(60, 15);
-            layoutItemUserID.AppearanceItemCaption.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            layoutItemUserID.AppearanceItemCaption.ForeColor = Color.FromArgb(30, 41, 59);
-            layoutItemUserID.AppearanceItemCaption.Options.UseFont = true;
-            layoutItemUserID.AppearanceItemCaption.Options.UseForeColor = true;
-            //
-            // layoutItemPassword
-            //
-            layoutItemPassword.Control = txtpwd;
-            layoutItemPassword.Location = new Point(0, 256);
-            layoutItemPassword.Name = "layoutItemPassword";
-            layoutItemPassword.Size = new Size(392, 60);
-            layoutItemPassword.Text = "Password";
-            layoutItemPassword.TextLocation = DevExpress.Utils.Locations.Top;
-            layoutItemPassword.TextSize = new Size(60, 15);
-            layoutItemPassword.AppearanceItemCaption.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            layoutItemPassword.AppearanceItemCaption.ForeColor = Color.FromArgb(30, 41, 59);
-            layoutItemPassword.AppearanceItemCaption.Options.UseFont = true;
-            layoutItemPassword.AppearanceItemCaption.Options.UseForeColor = true;
-            //
-            // layoutGroupButtons
-            //
-            layoutGroupButtons.GroupBordersVisible = false;
-            layoutGroupButtons.Items.AddRange(new DevExpress.XtraLayout.BaseLayoutItem[] {
-                layoutItemCancel,
-                emptySpaceBetweenButtons,
-                layoutItemLogin
-            });
-            layoutGroupButtons.LayoutMode = DevExpress.XtraLayout.Utils.LayoutMode.Table;
-            layoutGroupButtons.Location = new Point(0, 326);
-            layoutGroupButtons.Name = "layoutGroupButtons";
-            layoutGroupButtons.Padding = new DevExpress.XtraLayout.Utils.Padding(0, 0, 10, 0);
-            layoutGroupButtons.Size = new Size(392, 70);
-            layoutGroupButtons.TextVisible = false;
-            layoutGroupButtons.OptionsTableLayoutGroup.ColumnDefinitions.AddRange(new DevExpress.XtraLayout.ColumnDefinition[] {
-                new DevExpress.XtraLayout.ColumnDefinition { SizeType = System.Windows.Forms.SizeType.Percent, Width = 35 },
-                new DevExpress.XtraLayout.ColumnDefinition { SizeType = System.Windows.Forms.SizeType.Percent, Width = 30 },
-                new DevExpress.XtraLayout.ColumnDefinition { SizeType = System.Windows.Forms.SizeType.Percent, Width = 35 }
-            });
-            layoutGroupButtons.OptionsTableLayoutGroup.RowDefinitions.AddRange(new DevExpress.XtraLayout.RowDefinition[] {
-                new DevExpress.XtraLayout.RowDefinition { SizeType = System.Windows.Forms.SizeType.AutoSize }
-            });
-            //
-            // layoutItemCancel
-            //
-            layoutItemCancel.Control = simpleButton1;
-            layoutItemCancel.Location = new Point(0, 0);
-            layoutItemCancel.Name = "layoutItemCancel";
-            layoutItemCancel.Size = new Size(136, 48);
-            layoutItemCancel.TextSize = new Size(0, 0);
-            layoutItemCancel.TextVisible = false;
-            layoutItemCancel.OptionsTableLayoutItem.ColumnIndex = 0;
-            layoutItemCancel.OptionsTableLayoutItem.RowIndex = 0;
-            //
-            // emptySpaceBetweenButtons
-            //
-            emptySpaceBetweenButtons.AllowHotTrack = false;
-            emptySpaceBetweenButtons.Location = new Point(136, 0);
-            emptySpaceBetweenButtons.Name = "emptySpaceBetweenButtons";
-            emptySpaceBetweenButtons.Size = new Size(116, 48);
-            emptySpaceBetweenButtons.TextSize = new Size(0, 0);
-            emptySpaceBetweenButtons.OptionsTableLayoutItem.ColumnIndex = 1;
-            emptySpaceBetweenButtons.OptionsTableLayoutItem.RowIndex = 0;
-            //
-            // layoutItemLogin
-            //
-            layoutItemLogin.Control = Login;
-            layoutItemLogin.Location = new Point(252, 0);
-            layoutItemLogin.Name = "layoutItemLogin";
-            layoutItemLogin.Size = new Size(136, 48);
-            layoutItemLogin.TextSize = new Size(0, 0);
-            layoutItemLogin.TextVisible = false;
-            layoutItemLogin.OptionsTableLayoutItem.ColumnIndex = 2;
-            layoutItemLogin.OptionsTableLayoutItem.RowIndex = 0;
-            //
-            // emptySpaceBottom
-            //
-            emptySpaceBottom.AllowHotTrack = false;
-            emptySpaceBottom.Location = new Point(0, 396);
-            emptySpaceBottom.MinSize = new Size(1, 20);
-            emptySpaceBottom.Name = "emptySpaceBottom";
-            emptySpaceBottom.Size = new Size(392, 64);
-            emptySpaceBottom.SizeConstraintsType = DevExpress.XtraLayout.SizeConstraintsType.Custom;
-            emptySpaceBottom.TextSize = new Size(0, 0);
-            //
-            // Frmlogin
-            //
-            Appearance.Options.UseFont = true;
-            AutoScaleDimensions = new SizeF(7F, 15F);
-            AutoScaleMode = AutoScaleMode.Font;
-            BackColor = Color.White;
-            ClientSize = new Size(820, 520);
-            Controls.Add(tableLayoutMain);
-            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+
+            footerLine.BackColor = Color.FromArgb(224, 231, 242);
+            footerLine.Location = new Point(54, 610);
+            footerLine.Name = "footerLine";
+            footerLine.Size = new Size(362, 1);
+            footerLine.TabIndex = 11;
+
+            securityShield.Location = new Point(54, 630);
+            securityShield.Name = "securityShield";
+            securityShield.Size = new Size(38, 42);
+            securityShield.TabIndex = 12;
+
+            lblSecurityTitle.BackColor = Color.Transparent;
+            lblSecurityTitle.Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold);
+            lblSecurityTitle.ForeColor = Color.FromArgb(26, 53, 99);
+            lblSecurityTitle.Location = new Point(103, 628);
+            lblSecurityTitle.Name = "lblSecurityTitle";
+            lblSecurityTitle.Size = new Size(313, 22);
+            lblSecurityTitle.TabIndex = 13;
+            lblSecurityTitle.Text = "Keamanan data adalah prioritas utama";
+
+            lblSecurityText.BackColor = Color.Transparent;
+            lblSecurityText.Font = new Font("Segoe UI", 8F);
+            lblSecurityText.ForeColor = Color.FromArgb(91, 109, 140);
+            lblSecurityText.Location = new Point(103, 651);
+            lblSecurityText.Name = "lblSecurityText";
+            lblSecurityText.Size = new Size(313, 22);
+            lblSecurityText.TabIndex = 14;
+            lblSecurityText.Text = "Dilindungi dengan keamanan berlapis";
+
+            lblversi.BackColor = Color.Transparent;
+            lblversi.Font = new Font("Segoe UI", 7.5F);
+            lblversi.ForeColor = Color.FromArgb(130, 145, 169);
+            lblversi.Location = new Point(54, 696);
+            lblversi.Name = "lblversi";
+            lblversi.Size = new Size(362, 18);
+            lblversi.TabIndex = 15;
+            lblversi.Text = "Version";
+            lblversi.TextAlign = ContentAlignment.MiddleCenter;
+
+            simpleButton1.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            simpleButton1.BackColor = Color.Transparent;
+            simpleButton1.Cursor = Cursors.Hand;
+            simpleButton1.DialogResult = DialogResult.Cancel;
+            simpleButton1.FlatAppearance.BorderSize = 0;
+            simpleButton1.Location = new Point(1472, 18);
+            simpleButton1.Name = "simpleButton1";
+            simpleButton1.Size = new Size(46, 42);
+            simpleButton1.TabIndex = 3;
+            simpleButton1.UseVisualStyleBackColor = false;
+            simpleButton1.Click += SimpleButton1_Click;
+
+            AcceptButton = Login;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            BackColor = Color.FromArgb(234, 242, 255);
+            CancelButton = simpleButton1;
+            ClientSize = new Size(1536, 864);
+            Controls.Add(simpleButton1);
+            Controls.Add(cardPanel);
+            DoubleBuffered = true;
             FormBorderStyle = FormBorderStyle.None;
             IconOptions.Image = (Image)resources.GetObject("Frmlogin.IconOptions.Image");
+            KeyPreview = true;
             MaximizeBox = false;
             MinimizeBox = false;
-            MinimumSize = new Size(820, 520);
             Name = "Frmlogin";
-            StartPosition = FormStartPosition.CenterScreen;
-            Text = "Login";
+            StartPosition = FormStartPosition.Manual;
+            Text = "Login - Point of Sale";
+            FormClosed += Frmlogin_FormClosed;
             Load += Frmlogin_Load;
-            ((System.ComponentModel.ISupportInitialize)behaviorManager1).EndInit();
-            tableLayoutMain.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)panelBranding).EndInit();
-            panelBranding.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)pictureBoxLogo.Properties).EndInit();
-            ((System.ComponentModel.ISupportInitialize)panelRight).EndInit();
-            panelRight.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)layoutControl1).EndInit();
-            layoutControl1.ResumeLayout(false);
+            Resize += Frmlogin_Resize;
+            Shown += Frmlogin_Shown;
+            userInputPanel.ResumeLayout(false);
+            passwordInputPanel.ResumeLayout(false);
+            cardPanel.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)txtuserid.Properties).EndInit();
             ((System.ComponentModel.ISupportInitialize)txtpwd.Properties).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutControlGroup1).EndInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceTop).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemWelcome).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemSubtitle).EndInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceAfterTitle).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemUserID).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemPassword).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutGroupButtons).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemCancel).EndInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceBetweenButtons).EndInit();
-            ((System.ComponentModel.ISupportInitialize)layoutItemLogin).EndInit();
-            ((System.ComponentModel.ISupportInitialize)emptySpaceBottom).EndInit();
             ResumeLayout(false);
         }
 
-        #endregion
-        private DevExpress.Utils.Behaviors.BehaviorManager behaviorManager1;
-        private System.Windows.Forms.TableLayoutPanel tableLayoutMain;
-        private DevExpress.XtraEditors.PanelControl panelBranding;
-        private DevExpress.XtraEditors.PanelControl panelRight;
-        private DevExpress.XtraEditors.PictureEdit pictureBoxLogo;
-        private DevExpress.XtraEditors.LabelControl lblBrandName;
-        private DevExpress.XtraEditors.LabelControl lblTagline;
-        private DevExpress.XtraEditors.LabelControl lblversi;
-        private DevExpress.XtraLayout.LayoutControl layoutControl1;
-        private DevExpress.XtraEditors.LabelControl lblWelcome;
-        private DevExpress.XtraEditors.LabelControl lblSubtitle;
+        private PosLoginUi.LoginCardPanel cardPanel;
+        private PosLoginUi.LoginAvatarControl avatarControl;
+        private Label lblWelcome;
+        private Label lblApplication;
+        private Label lblSubtitle;
+        private Panel accentLine;
+        private Label lblUserId;
+        private PosLoginUi.RoundedInputPanel userInputPanel;
         private DevExpress.XtraEditors.TextEdit txtuserid;
+        private Label lblPassword;
+        private PosLoginUi.RoundedInputPanel passwordInputPanel;
         private DevExpress.XtraEditors.TextEdit txtpwd;
-        private DevExpress.XtraEditors.SimpleButton simpleButton1;
-        private DevExpress.XtraEditors.SimpleButton Login;
-        private DevExpress.XtraLayout.LayoutControlGroup layoutControlGroup1;
-        private DevExpress.XtraLayout.EmptySpaceItem emptySpaceTop;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemWelcome;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemSubtitle;
-        private DevExpress.XtraLayout.EmptySpaceItem emptySpaceAfterTitle;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemUserID;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemPassword;
-        private DevExpress.XtraLayout.LayoutControlGroup layoutGroupButtons;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemCancel;
-        private DevExpress.XtraLayout.EmptySpaceItem emptySpaceBetweenButtons;
-        private DevExpress.XtraLayout.LayoutControlItem layoutItemLogin;
-        private DevExpress.XtraLayout.EmptySpaceItem emptySpaceBottom;
+        private PosLoginUi.PasswordEyeButton passwordEyeButton;
+        private PosLoginUi.RoundedActionButton Login;
+        private Panel footerLine;
+        private PosLoginUi.SecurityShieldControl securityShield;
+        private Label lblSecurityTitle;
+        private Label lblSecurityText;
+        private Label lblversi;
+        private PosLoginUi.CircularCloseButton simpleButton1;
     }
 }

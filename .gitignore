@@ -52,9 +52,10 @@ Desktop.ini
 ## Publish profiles (may contain sensitive info)
 *.pubxml.user
 
-## Sensitive config
+## Sensitive config (real configs hold DB credentials - never commit)
+appsettings.json
 appsettings.*.json
-!appsettings.json
+!appsettings.example.json
 
 ## DevExpress license
 DevExpress*.lic

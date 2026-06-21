@@ -69,6 +69,11 @@
 
   <ItemGroup>
     <Content Include="penjualan.ico" />
+    <Compile Include="..\Shared\LoginVisuals.cs" Link="Shared\LoginVisuals.cs" />
+    <Compile Include="..\Shared\Auth\*.cs" Link="Shared\Auth\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\LOGIN KOPKAR.png"
+                      Link="Resources\LOGIN KOPKAR.png"
+                      LogicalName="Penjualan.Assets.LoginKopkar.png" />
   </ItemGroup>
 
   <ItemGroup>
