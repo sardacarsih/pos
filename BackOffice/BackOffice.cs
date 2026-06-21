@@ -10,19 +10,74 @@ using BackOffice.View;
 using DevExpress.XtraEditors;
 using DevExpress.XtraReports.UI;
 using Oracle.ManagedDataAccess.Client;
+using Pos.Shared.Auth;
 
 namespace BackOffice
 {
     public partial class BackOffice : DevExpress.XtraBars.FluentDesignSystem.FluentDesignForm
     {
-        private readonly RBACController rbacController;
         public BackOffice()
         {
             InitializeComponent();
-            IRBACManager repository = new RBACManager(); // Initialize your repository implementation
-            rbacController = new RBACController(repository);
+            SetupUserManagementMenu();
+        }
+
+        /// <summary>
+        /// Tambah menu "Manajemen User" secara dinamis, hanya untuk role ADMIN.
+        /// </summary>
+        private void SetupUserManagementMenu()
+        {
+            if (!string.Equals(LoginInfo.role, "ADMIN", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var element = new DevExpress.XtraBars.Navigation.AccordionControlElement
+            {
+                Name = "accordionControlManajemenUser",
+                Style = DevExpress.XtraBars.Navigation.ElementStyle.Item,
+                Text = "Manajemen User"
+            };
+            element.Click += (_, _) =>
+            {
+                using var frm = new View.frmUserManagement();
+                frm.ShowDialog(this);
+            };
+            accordionControl1.Elements.Add(element);
         }
         DateTime MAXBULANTAGIHAN;
+
+        /// <summary>
+        /// True jika user yang login punya akses ke modul Pembelian (APP_ID PEMBELIAN).
+        /// Menampilkan pesan dan return false bila tidak.
+        /// </summary>
+        private static bool HasPembelianAccess()
+        {
+            if (LoginInfo.AccessibleApps.Contains(AppIds.Pembelian))
+            {
+                return true;
+            }
+
+            XtraMessageBox.Show(
+                "Anda tidak punya akses ke modul Pembelian.",
+                "Akses Ditolak",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return false;
+        }
+
+        /// <summary>True jika role user yang login termasuk salah satu <paramref name="roles"/>.</summary>
+        private static bool HasRole(params string[] roles)
+        {
+            foreach (string role in roles)
+            {
+                if (string.Equals(LoginInfo.role, role, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
 
         private void accordionControlElementDaftarPenjualan_Click(object sender, EventArgs e)
@@ -208,10 +263,7 @@ namespace BackOffice
 
         private void acctutupbuku_Click(object sender, EventArgs e)
         {
-            string username = "admin";
-            string permissionName = "Tutup Buku Periode";
-
-            if (rbacController.CheckPermission(username, permissionName))
+            if (HasRole("ADMIN", "MANAGER"))
             {
                 // User has the required permission, perform the action
                 FrmClosing frm = new()
@@ -476,6 +528,11 @@ namespace BackOffice
 
         private void accordionControlElement1_Click_1(object sender, EventArgs e)
         {
+            if (!HasPembelianAccess())
+            {
+                return;
+            }
+
             // Change the form's text
             this.Text = "Pembelian";
             //Add module1 to panel control
@@ -497,6 +554,11 @@ namespace BackOffice
 
         private void accordionControlElement8_Click(object sender, EventArgs e)
         {
+            if (!HasPembelianAccess())
+            {
+                return;
+            }
+
             // Change the form's text
             this.Text = "Daftar Pembelian";
 
@@ -698,10 +760,7 @@ namespace BackOffice
 
         private void accordionControlElement6_Click_1(object sender, EventArgs e)
         {
-            string username = "admin";
-            string permissionName = "Tutup Buku Periode";
-
-            if (rbacController.CheckPermission(username, permissionName))
+            if (HasRole("ADMIN", "MANAGER"))
             {
                 // User has the required permission, perform the action
                 FrmClosingYear frm = new()
