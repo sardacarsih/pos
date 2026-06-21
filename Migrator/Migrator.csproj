@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Migrator</RootNamespace>
+    <AssemblyName>PosMigrator</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pakai ulang lapisan auth (hashing + AuthRepository) tanpa duplikasi -->
+    <Compile Include="..\Shared\Auth\*.cs" Link="Shared\Auth\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.28" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.130" />
+  </ItemGroup>
+
+</Project>

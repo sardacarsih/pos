@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Penjualan", "Penjualan\Penj
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BackOffice", "BackOffice\BackOffice.csproj", "{7D8E3D14-934A-4676-B3CA-1D79C1FAD47F}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Migrator", "Migrator\Migrator.csproj", "{3F2A1B4C-5D6E-4F70-8A91-2B3C4D5E6F70}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{7D8E3D14-934A-4676-B3CA-1D79C1FAD47F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7D8E3D14-934A-4676-B3CA-1D79C1FAD47F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7D8E3D14-934A-4676-B3CA-1D79C1FAD47F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F2A1B4C-5D6E-4F70-8A91-2B3C4D5E6F70}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F2A1B4C-5D6E-4F70-8A91-2B3C4D5E6F70}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F2A1B4C-5D6E-4F70-8A91-2B3C4D5E6F70}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F2A1B4C-5D6E-4F70-8A91-2B3C4D5E6F70}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
