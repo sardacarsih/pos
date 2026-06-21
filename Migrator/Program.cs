@@ -98,9 +98,10 @@ static string? ResolveConnection(Dictionary<string, string?> opts)
         return env;
     }
 
+    // Cari appsettings.json di folder kerja maupun di samping exe.
     IConfigurationRoot config = new ConfigurationBuilder()
-        .SetBasePath(Directory.GetCurrentDirectory())
-        .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+        .AddJsonFile(Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json"), optional: true, reloadOnChange: false)
+        .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json"), optional: true, reloadOnChange: false)
         .Build();
     return config.GetConnectionString("OracleConnection");
 }

@@ -68,16 +68,45 @@ Oracle Database with key tables:
 
 ### Configuration
 
-1. Copy `appsettings.json` and create environment-specific overrides:
-   ```json
-   {
-     "ConnectionStrings": {
-       "DefaultConnection": "Data Source=your_host:1521/your_service;User Id=your_user;Password=your_password;"
-     }
-   }
-   ```
+The real `appsettings.json` files hold DB credentials and are **gitignored**.
+Each project ships an `appsettings.example.json` template — copy it and fill in
+your Oracle connection:
 
-2. Ensure the Oracle database schema is set up with the required tables.
+```bash
+cp Penjualan/appsettings.example.json  Penjualan/appsettings.json
+cp BackOffice/appsettings.example.json BackOffice/appsettings.json
+cp Migrator/appsettings.example.json   Migrator/appsettings.json
+```
+
+```json
+{
+  "ConnectionStrings": {
+    "OracleConnection": "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=your_host)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=your_service)));User Id=your_user;Password=your_password;"
+  }
+}
+```
+
+### Database setup (migrations + admin)
+
+Run the migrator once against your Oracle instance. It creates the login/RBAC
+tables (`POS_APP`, `POS_ROLE`, `POS_USER`, `POS_USER_ACCESS`), tracks applied
+migrations in `POS_SCHEMA_MIGRATION` (idempotent — safe to re-run), and seeds a
+default `admin` user with the `ADMIN` role on all apps:
+
+```bash
+# uses Migrator/appsettings.json, or pass --connection / set POS_CONNECTION
+dotnet run --project Migrator -- --admin-password "ChangeMe#1"
+
+dotnet run --project Migrator -- --skip-admin   # schema only, no admin
+dotnet run --project Migrator -- --help
+```
+
+> The default admin password is `Admin#2026` if `--admin-password` is omitted —
+> change it immediately via **BackOffice → Manajemen User**.
+
+Logins are validated against these tables (PBKDF2-SHA256 hashes); there is no
+hardcoded account. Each user is granted a role **per app** (Penjualan,
+BackOffice, Pembelian).
 
 ### Build & Run
 
