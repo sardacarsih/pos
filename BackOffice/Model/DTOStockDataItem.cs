@@ -14,5 +14,6 @@ namespace BackOffice.Model
         public decimal JualQty { get; set; }
         public decimal StockOpname { get; set; }
         public decimal StockAkhir { get; set; }
+        public decimal TotalCostAvg { get; set; }
     }
 }

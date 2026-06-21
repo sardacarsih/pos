@@ -1,15 +1,9 @@
-﻿using BackOffice.DataLayer;
+using BackOffice.DataLayer;
 using BackOffice.Interface;
 using BackOffice.Model;
 using BackOffice.UC;
-using DevExpress.Office.Utils;
-using DevExpress.XtraRichEdit.Model;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static BackOffice.Model.DTOStoctOpnameDetail;
 
 namespace BackOffice.Controller
 {
@@ -21,10 +15,6 @@ namespace BackOffice.Controller
         {
             repository = new StockOpnamenRepository();
         }
-        public List<DTODaftarBarang> GetDaftarPembelianBarang(string no_transaksi)
-        {
-            return repository.GetDaftarPembelianBarang(no_transaksi);
-        }
         public List<DTOStoctOpnameMaster> DaftarStockOpname(int tahun)
         {
             return repository.DaftarStockOpname(tahun);
@@ -35,28 +25,28 @@ namespace BackOffice.Controller
         }
         public DTOStockDataItem GetStockData(string kodeBarang, DateTime startDate, DateTime endDate)
         {
-            return repository.GetStockData( kodeBarang,  startDate,  endDate);
+            return repository.GetStockData(kodeBarang, startDate, endDate);
         }
         public List<DTOStockData> GetProductStockInfo(DateTime startDate, DateTime endDate)
         {
-            return repository.GetProductStockInfo( startDate, endDate);
+            return repository.GetProductStockInfo(startDate, endDate);
         }
-        public void Insert_StockOpname(List<TransactionStockOpname> StockOpname_List)
+        public string SaveStockOpname(DateTime transactionDate, IReadOnlyCollection<TransactionStockOpname> items)
         {
-            repository.Insert_StockOpname(StockOpname_List);
+            return repository.SaveStockOpname(transactionDate, items);
         }
         public void UpdateTransactionNumber(string transactionNumber)
         {
-             repository.UpdateTransactionNumber(transactionNumber);
+            repository.UpdateTransactionNumber(transactionNumber);
         }
-        public void HapusStockOpname(string no_faktur_pembeian)
+        public void HapusStockOpname(string no_faktur)
         {
-            repository.HapusStockOpname(no_faktur_pembeian);
+            repository.HapusStockOpname(no_faktur);
         }
 
-        public void Insert_BarangRusak(List<TransactionBarangRusak> BarangRusak_List)
+        public string Insert_BarangRusak(DateTime transactionDate, IReadOnlyCollection<TransactionBarangRusak> items)
         {
-            repository.Insert_BarangRusak(BarangRusak_List);
+            return repository.Insert_BarangRusak(transactionDate, items);
         }
     }
 }

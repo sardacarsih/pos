@@ -12,10 +12,10 @@ namespace BackOffice.Model
             public string NOMOR_SO { get; set; }
             public string KODE_BARANG { get; set; }
             public string PRODUCTNAME { get; set; }
-            public double JUMLAHSISTEM { get; set; }
-            public double JUMLAHFISIK { get; set; }
-            public double SELISIH { get; set; }
-            public double HPP { get; set; }
-            public double TOTAL { get; set; }
+            public decimal JUMLAHSISTEM { get; set; }
+            public decimal JUMLAHFISIK { get; set; }
+            public decimal SELISIH { get; set; }
+            public decimal HPP { get; set; }
+            public decimal TOTAL { get; set; }
     }
 }

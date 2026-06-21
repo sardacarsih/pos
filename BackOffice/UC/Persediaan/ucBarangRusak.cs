@@ -1,12 +1,9 @@
 ﻿using BackOffice.BussinessLayer;
 using BackOffice.Controller;
-using BackOffice.DataLayer;
 using BackOffice.Model;
-using Dapper;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Columns;
 using DevExpress.XtraGrid.Views.Grid;
-using Oracle.ManagedDataAccess.Client;
 using System.ComponentModel;
 
 namespace BackOffice.UC
@@ -52,12 +49,11 @@ namespace BackOffice.UC
                     string satuan = productInfo.Satuan.ToString();
                     decimal hpp = Convert.ToDecimal(productInfo.Hpp);
 
-                    //var exist_so = controller.CheckStockOpname(kodeitem, enddate);
-                    //if (exist_so)
-                    //{
-                    //    XtraMessageBox.Show("Item Barang rusak sudah ada pada tanggal diatasnya\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    //    return;
-                    //}
+                    if (controller.CheckStockOpname(kodeitem, enddate))
+                    {
+                        XtraMessageBox.Show("Stock Opname Item Barang sudah ada pada tanggal yang sama atau diatasnya\n" + kodeitem + " " + productname, "Info", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
 
                     var existingProduct = transactionDataList.FirstOrDefault(p => p.Barcode == barcode);
                     if (existingProduct != null)
@@ -138,42 +134,13 @@ namespace BackOffice.UC
         {
             detanggal.Text = DateTime.Today.ToString("dd-MMM-yyyy");
 
-            txtnotransaksi.Text = GenerateTransactionNumber(Convert.ToDateTime(detanggal.Text));
-            transactionDataList.Clear();           
+            // The real number is allocated atomically at save time.
+            txtnotransaksi.Text = $"SO-{Convert.ToDateTime(detanggal.Text).Year % 100:D2}-(otomatis)";
+            transactionDataList.Clear();
             txtqtyfisik.Text = "0";
             txthpp.Text = "0";
             txtketerangan.Text = "Rusak";
             barcodeTextBox.Focus();
-        }
-
-        public string GenerateTransactionNumber(DateTime date)
-        {
-            // Mendapatkan tahun dari parameter tanggal
-            int currentYear = date.Year % 100;
-
-            // Ambil nomor transaksi terakhir dari database untuk tahun saat ini
-            string selectQuery = $"SELECT nomor FROM nomor_transaksi WHERE kode = 'STOCK_OPNAME' AND nomor LIKE 'SO-{currentYear}%' ORDER BY nomor DESC FETCH FIRST 1 ROWS ONLY";
-            using OracleConnection connection = new(global.connectionString);
-            connection.Open();
-            using OracleCommand selectCommand = new(selectQuery, connection);
-            string lastTransactionNumber = selectCommand.ExecuteScalar()?.ToString();
-
-            // Buat nomor transaksi baru untuk tahun saat ini
-            string newTransactionNumber;
-            if (string.IsNullOrEmpty(lastTransactionNumber))
-            {
-                newTransactionNumber = $"SO-{currentYear.ToString("D2")}-000001"; // Jika belum ada nomor transaksi sebelumnya
-
-
-            }
-            else
-            {
-                int lastNumber = int.Parse(lastTransactionNumber.Substring(lastTransactionNumber.Length - 6));
-                int newNumber = lastNumber + 1;
-                newTransactionNumber = $"SO-{currentYear.ToString("D2")}-{newNumber.ToString("D6")}"; // Format nomor transaksi dengan leading zero
-            }
-
-            return newTransactionNumber;
         }
 
         private void gridView1_RowCountChanged(object sender, EventArgs e)
@@ -368,21 +335,30 @@ namespace BackOffice.UC
 
         private void blbisimpan_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));
-
             if (transactionDataList.Count == 0) return;
 
+            DateTime transactionDate = Convert.ToDateTime(detanggal.Text);
 
-            // Assuming you have a list of TransactionStockOpname objects
-            List<TransactionBarangRusak> barangrusakList = transactionDataList.ToList();
-
-            controller.Insert_BarangRusak(barangrusakList);
-            controller.UpdateTransactionNumber(txtnotransaksi.Text);
-
-            NewTransaction();
+            try
+            {
+                // The number is allocated atomically inside the same transaction
+                // that writes the rows, so it cannot collide with a Stock Opname save.
+                string nomor = controller.Insert_BarangRusak(transactionDate, transactionDataList.ToList());
+                XtraMessageBox.Show(
+                    $"Barang Rusak berhasil disimpan.\nNomor transaksi: {nomor}",
+                    "Simpan Berhasil",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                NewTransaction();
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(
+                    $"Barang Rusak gagal disimpan.\n{ex.Message}",
+                    "Simpan Gagal",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
         private void detanggal_KeyDown(object sender, KeyEventArgs e)
         {

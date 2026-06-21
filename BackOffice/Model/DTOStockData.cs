@@ -19,6 +19,7 @@ namespace BackOffice.Model
         public decimal JUAL_QTY { get; set; }
         public decimal RUSAK_QTY { get; set; }
         public decimal STOCK_OPNAME { get; set; }
+        public int STOCK_OPNAME_COUNT { get; set; }
         public decimal STOCK_AKHIR { get; set; }
         public decimal TOTAL_COST_AVG { get; set; }
         public decimal PERSEDIAAN { get; set; }

@@ -156,7 +156,7 @@
             // 
             // barLargeButtonItem1
             // 
-            barLargeButtonItem1.Caption = "Import";
+            barLargeButtonItem1.Caption = "Impor Stok Minus";
             barLargeButtonItem1.Id = 15;
             barLargeButtonItem1.ImageOptions.Image = (Image)resources.GetObject("barLargeButtonItem1.ImageOptions.Image");
             barLargeButtonItem1.ImageOptions.LargeImage = (Image)resources.GetObject("barLargeButtonItem1.ImageOptions.LargeImage");
@@ -165,7 +165,7 @@
             // 
             // barLargeButtonItem4
             // 
-            barLargeButtonItem4.Caption = "set fisik=0,jikatidak ada stokopname sebelumnya";
+            barLargeButtonItem4.Caption = "Set Nol Barang Belum Diopname";
             barLargeButtonItem4.Id = 16;
             barLargeButtonItem4.ImageOptions.Image = (Image)resources.GetObject("barLargeButtonItem4.ImageOptions.Image");
             barLargeButtonItem4.ImageOptions.LargeImage = (Image)resources.GetObject("barLargeButtonItem4.ImageOptions.LargeImage");

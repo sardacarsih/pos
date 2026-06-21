@@ -1,4 +1,4 @@
-﻿using BackOffice.Interface;
+using BackOffice.Interface;
 using BackOffice.Model;
 using BackOffice.UC;
 using Dapper;
@@ -9,118 +9,206 @@ namespace BackOffice.DataLayer
 {
     public class StockOpnamenRepository : IStockOpname
     {
-        
+        // Stock Opname and Barang Rusak share a single running number sequence.
+        private const string TransactionCode = "STOCK_OPNAME";
 
-        private List<DTOFakturPembelianDetail> GetItemBarang(string idtransaksi)
+        // Legacy single-row mirror of the latest allocated number. Kept for any
+        // external readers; POS_TRANSACTION_COUNTER is the authoritative source.
+        private const string MergeLegacyNumberSql = @"
+            MERGE INTO nomor_transaksi target
+            USING (
+                SELECT 'STOCK_OPNAME' AS kode, :nomor AS nomor
+                FROM dual
+            ) source
+            ON (target.kode = source.kode)
+            WHEN MATCHED THEN
+                UPDATE SET target.nomor = source.nomor
+            WHEN NOT MATCHED THEN
+                INSERT (kode, nomor) VALUES (source.kode, source.nomor)";
+
+        public string SaveStockOpname(
+            DateTime transactionDate,
+            IReadOnlyCollection<TransactionStockOpname> items)
         {
-            List<DTOFakturPembelianDetail> Detail = new();
-
-            string query = "SELECT BARIS,PRODUCT_ID,KODE_BARANG,NAMA_BARANG,SATUAN,quantity,HARGA_BELI,BRUTO,POTONGAN,TOTAL FROM  POS_PEMBELIANDETAIL WHERE NO_TRANSAKSI = :idtransaksi ORDER BY BARIS";
-
-            using (OracleConnection connection = new(global.connectionString))
+            if (!StockOpnameValidator.TryValidate(transactionDate, items, out string validationError))
             {
-                connection.Open();
-
-                using OracleCommand command = new(query, connection);
-                command.Parameters.Add(":idtransaksi", OracleDbType.Varchar2).Value = idtransaksi;
-
-                using OracleDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    DTOFakturPembelianDetail DaftarBarang = new()
-                    {
-                        NO_TRANSAKSI= idtransaksi,
-                        BARIS = Convert.ToInt32(reader["BARIS"]),
-                        PRODUCT_ID = Convert.ToInt32(reader["PRODUCT_ID"]),
-                        KODE_BARANG = reader["KODE_BARANG"].ToString(),
-                        NAMA_BARANG = reader["NAMA_BARANG"].ToString(),
-                        SATUAN = reader["SATUAN"].ToString(),
-                        QUANTITY = Convert.ToInt32(reader["QUANTITY"]),
-                        HARGA_BELI = Convert.ToDecimal(reader["HARGA_BELI"]),
-                        BRUTO = Convert.ToDecimal(reader["BRUTO"]),
-                        POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
-                        TOTAL = Convert.ToDecimal(reader["TOTAL"])
-                    };
-
-                    Detail.Add(DaftarBarang);
-                }
+                throw new ArgumentException(validationError, nameof(items));
             }
 
-            return Detail;
-        }
-
-        public List<DTODaftarBarang> GetDaftarBarang(string idtransaksi)
-        {
-            List<DTODaftarBarang> Detail = new();
-
-            string query = "SELECT BARIS,NAMA_BARANG,SATUAN,JUMLAH_BARANG,HARGA_BARANG,POTONGAN,TOTAL_HARGA FROM  POS_PENJUALAN_DETAIL WHERE NO_TRANSAKSI = :idtransaksi ORDER BY BARIS";
-
-            using (OracleConnection connection = new(global.connectionString))
-            {
-                connection.Open();
-
-                using OracleCommand command = new(query, connection);
-                command.Parameters.Add(":idtransaksi", OracleDbType.Varchar2).Value = idtransaksi;
-
-                using OracleDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    DTODaftarBarang DaftarBarang = new()
-                    {
-                        NO_TRANSAKSI = idtransaksi,
-                        BARIS = Convert.ToInt32(reader["BARIS"]),
-                        NAMA_BARANG = reader["NAMA_BARANG"].ToString(),
-                        SATUAN = reader["SATUAN"].ToString(),
-                        JUMLAH_BARANG = Convert.ToInt32(reader["JUMLAH_BARANG"]),
-                        HARGA_BARANG = Convert.ToDecimal(reader["HARGA_BARANG"]),
-                        POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
-                        TOTAL_HARGA = Convert.ToDecimal(reader["TOTAL_HARGA"])
-                    };
-
-                    Detail.Add(DaftarBarang);
-                }
-            }
-
-            return Detail;
-        }
-
-
-        public void Insert_StockOpname(List<TransactionStockOpname> StockOpname_List)
-        {
             using OracleConnection conn = new(global.connectionString);
             conn.Open();
-            OracleTransaction transaction = conn.BeginTransaction();
+            using OracleTransaction transaction = conn.BeginTransaction();
 
             try
             {
-                string insert_Stock_Opname = @"
-                INSERT INTO POS_STOCKOPNAME 
-                (NOMOR_SO, TANGGAL, KODE_BARANG, JUMLAHSISTEM, JUMLAHFISIK, SELISIH, HPP,TOTAL) 
-                VALUES 
-                (:p_NOMOR_SO, :p_TANGGAL, :p_KODE_BARANG, :p_JUMLAHSISTEM, :p_JUMLAHFISIK, :p_SELISIH, :p_HPP, :p_TOTAL)";
+                string transactionNumber = AllocateTransactionNumber(
+                    conn,
+                    transaction,
+                    transactionDate.Year);
 
-                // Adjust the Dapper call to use parameters explicitly
-                //karena nama pada database dan object ga sama persis
-                conn.Execute(insert_Stock_Opname,
-                    StockOpname_List.Select(opname => new {
-                        p_NOMOR_SO = opname.Nomor_SO,
-                        p_TANGGAL = opname.Tanggal,
-                        p_KODE_BARANG = opname.Kode_Item,
+                const string insertStockOpname = @"
+                    INSERT INTO POS_STOCKOPNAME
+                    (NOMOR_SO, TANGGAL, KODE_BARANG, JUMLAHSISTEM, JUMLAHFISIK, SELISIH, HPP, TOTAL)
+                    VALUES
+                    (:p_NOMOR_SO, :p_TANGGAL, :p_KODE_BARANG, :p_JUMLAHSISTEM, :p_JUMLAHFISIK, :p_SELISIH, :p_HPP, :p_TOTAL)";
+
+                // Parameter names differ from the column names, so map explicitly.
+                conn.Execute(insertStockOpname,
+                    items.Select(opname => new
+                    {
+                        p_NOMOR_SO = transactionNumber,
+                        p_TANGGAL = transactionDate.Date,
+                        p_KODE_BARANG = opname.Kode_Item.Trim(),
                         p_JUMLAHSISTEM = opname.QtySystem,
                         p_JUMLAHFISIK = opname.QtyFisik,
                         p_SELISIH = opname.Selisih,
                         p_HPP = opname.Hpp,
-                        p_TOTAL=opname.Total
+                        p_TOTAL = opname.Total
                     }),
                     transaction);
 
+                conn.Execute(MergeLegacyNumberSql, new { nomor = transactionNumber }, transaction);
+
                 transaction.Commit();
+                return transactionNumber;
             }
-            catch (Exception)
+            catch
             {
                 transaction.Rollback();
                 throw;
             }
+        }
+
+        public string Insert_BarangRusak(
+            DateTime transactionDate,
+            IReadOnlyCollection<TransactionBarangRusak> items)
+        {
+            ValidateBarangRusak(transactionDate, items);
+
+            using OracleConnection conn = new(global.connectionString);
+            conn.Open();
+            using OracleTransaction transaction = conn.BeginTransaction();
+
+            try
+            {
+                string transactionNumber = AllocateTransactionNumber(
+                    conn,
+                    transaction,
+                    transactionDate.Year);
+
+                const string insertBarangRusak = @"
+                    INSERT INTO POS_BARANGRUSAK
+                    (NOMOR_SO, TANGGAL, KODE_BARANG, JUMLAHFISIK, HPP, TOTAL, KETERANGAN)
+                    VALUES
+                    (:p_NOMOR_SO, :p_TANGGAL, :p_KODE_BARANG, :p_JUMLAHFISIK, :p_HPP, :p_TOTAL, :p_KETERANGAN)";
+
+                conn.Execute(insertBarangRusak,
+                    items.Select(rusak => new
+                    {
+                        p_NOMOR_SO = transactionNumber,
+                        p_TANGGAL = transactionDate.Date,
+                        p_KODE_BARANG = rusak.Kode_Item.Trim(),
+                        p_JUMLAHFISIK = rusak.QtyFisik,
+                        p_HPP = rusak.Hpp,
+                        p_TOTAL = rusak.Total,
+                        p_KETERANGAN = rusak.Keterangan
+                    }),
+                    transaction);
+
+                conn.Execute(MergeLegacyNumberSql, new { nomor = transactionNumber }, transaction);
+
+                transaction.Commit();
+                return transactionNumber;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        private static void ValidateBarangRusak(
+            DateTime transactionDate,
+            IReadOnlyCollection<TransactionBarangRusak> items)
+        {
+            if (transactionDate == default)
+            {
+                throw new ArgumentException("Tanggal Barang Rusak tidak valid.", nameof(transactionDate));
+            }
+
+            if (items is null || items.Count == 0)
+            {
+                throw new ArgumentException("Daftar Barang Rusak masih kosong.", nameof(items));
+            }
+
+            foreach (TransactionBarangRusak item in items)
+            {
+                if (string.IsNullOrWhiteSpace(item.Kode_Item))
+                {
+                    throw new ArgumentException("Terdapat baris dengan kode barang kosong.", nameof(items));
+                }
+
+                if (item.QtyFisik <= 0)
+                {
+                    throw new ArgumentException(
+                        $"Qty Fisik {item.ProductName} harus lebih besar dari nol.", nameof(items));
+                }
+
+                if (item.Hpp < 0)
+                {
+                    throw new ArgumentException(
+                        $"HPP {item.ProductName} tidak boleh negatif.", nameof(items));
+                }
+            }
+        }
+
+        private static string AllocateTransactionNumber(
+            OracleConnection connection,
+            OracleTransaction transaction,
+            int transactionYear)
+        {
+            const string updateCounter = @"
+                UPDATE POS_TRANSACTION_COUNTER
+                SET LAST_NUMBER = LAST_NUMBER + 1
+                WHERE TRANSACTION_CODE = :code
+                  AND TRANSACTION_YEAR = :year";
+
+            var parameters = new
+            {
+                code = TransactionCode,
+                year = transactionYear
+            };
+
+            int affectedRows = connection.Execute(updateCounter, parameters, transaction);
+            if (affectedRows == 0)
+            {
+                const string insertCounter = @"
+                    INSERT INTO POS_TRANSACTION_COUNTER
+                        (TRANSACTION_CODE, TRANSACTION_YEAR, LAST_NUMBER)
+                    VALUES (:code, :year, 1)";
+
+                try
+                {
+                    connection.Execute(insertCounter, parameters, transaction);
+                }
+                catch (OracleException ex) when (ex.Number == 1)
+                {
+                    connection.Execute(updateCounter, parameters, transaction);
+                }
+            }
+
+            const string selectCounter = @"
+                SELECT LAST_NUMBER
+                FROM POS_TRANSACTION_COUNTER
+                WHERE TRANSACTION_CODE = :code
+                  AND TRANSACTION_YEAR = :year";
+
+            int sequenceNumber = connection.QuerySingle<int>(
+                selectCounter,
+                parameters,
+                transaction);
+
+            return $"SO-{transactionYear % 100:D2}-{sequenceNumber:D6}";
         }
 
         public void UpdateTransactionNumber(string transactionNumber)
@@ -128,153 +216,38 @@ namespace BackOffice.DataLayer
             using OracleConnection connection = new(global.connectionString);
             connection.Open();
 
-            // Check if record exists
-            string checkQuery = "SELECT COUNT(*) FROM nomor_transaksi WHERE kode = 'STOCK_OPNAME'";
-            using OracleCommand checkCommand = new(checkQuery, connection);
-            int count = Convert.ToInt32(checkCommand.ExecuteScalar());
-
-            if (count == 0)
-            {
-                // Insert new record
-                string insertQuery = "INSERT INTO nomor_transaksi (kode, nomor) VALUES ('STOCK_OPNAME', :nomor)";
-                using OracleCommand insertCommand = new(insertQuery, connection);
-                insertCommand.Parameters.Add("nomor", transactionNumber);
-                insertCommand.ExecuteNonQuery();
-            }
-            else
-            {
-
-                // Update existing record
-                string updateQuery = "UPDATE nomor_transaksi SET nomor = :nomor WHERE kode = 'STOCK_OPNAME'";
-                using OracleCommand updateCommand = new(updateQuery, connection);
-                updateCommand.Parameters.Add("nomor", transactionNumber);
-                updateCommand.ExecuteNonQuery();
-
-            }
+            connection.Execute(MergeLegacyNumberSql, new { nomor = transactionNumber });
         }
 
         public void HapusStockOpname(string no_faktur)
         {
             using OracleConnection connection = new(global.connectionString);
             connection.Open();
+            using OracleTransaction transaction = connection.BeginTransaction();
 
-            // DELETE existing record
-            string deleteQuery = "DELETE FROM POS_PEMBELIAN WHERE NO_TRANSAKSI = :nomor";
-
-            using OracleCommand deleteCommand = new(deleteQuery, connection);
-            deleteCommand.Parameters.Add("nomor", no_faktur);
-            deleteCommand.ExecuteNonQuery();
-        }
-
-
-        public void EditStockOpname(string no_faktur)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void CetakStockOpname(string no_faktur)
-        {
-            throw new NotImplementedException();
-        }
-
-        public List<DTODaftarBarang> GetDaftarPembelianBarang(string idtransaksi)
-        {
-            List<DTODaftarBarang> Detail = new();
-
-            string query = @"SELECT B.BARIS,B.PRODUCT_ID,B.KODE_BARANG,B.NAMA_BARANG,B.SATUAN,B.QUANTITY,B.HARGA_BELI,M.PRICE HARGA_JUAL,B.BRUTO,B.POTONGAN,B.TOTAL FROM  POS_PEMBELIANDETAIL B
-JOIN POS_PRODUCT M ON M.PRODUCTID=B.PRODUCT_ID
-WHERE B.NO_TRANSAKSI = :idtransaksi ORDER BY B.BARIS";
-
-            using (OracleConnection connection = new(global.connectionString))
+            try
             {
-                connection.Open();
+                const string deleteQuery =
+                    "DELETE FROM POS_STOCKOPNAME WHERE NOMOR_SO = :nomor";
 
-                using OracleCommand command = new(query, connection);
-                command.Parameters.Add(":idtransaksi", OracleDbType.Varchar2).Value = idtransaksi;
+                int affectedRows = connection.Execute(
+                    deleteQuery,
+                    new { nomor = no_faktur },
+                    transaction);
 
-                using OracleDataReader reader = command.ExecuteReader();
-                while (reader.Read())
+                if (affectedRows == 0)
                 {
-                    DTODaftarBarang DaftarBarang = new()
-                    {
-                        BARIS = Convert.ToInt32(reader["BARIS"]),
-                        PRODUCTID = Convert.ToInt32(reader["PRODUCT_ID"]),
-                        KODE_BARANG = reader["KODE_BARANG"].ToString(),
-                        NAMA_BARANG = reader["NAMA_BARANG"].ToString(),
-                        SATUAN = reader["SATUAN"].ToString(),
-                        JUMLAH_BARANG = Convert.ToInt32(reader["QUANTITY"]),
-                        HPP = Convert.ToDecimal(reader["HARGA_BELI"]),
-                        HARGA_BARANG = Convert.ToDecimal(reader["HARGA_JUAL"]),
-                        BRUTO = Convert.ToDecimal(reader["BRUTO"]),
-                        POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
-                        TOTAL_HARGA = Convert.ToDecimal(reader["TOTAL"])
-                    };
-
-                    Detail.Add(DaftarBarang);
+                    throw new InvalidOperationException(
+                        $"Stock Opname {no_faktur} tidak ditemukan.");
                 }
+
+                transaction.Commit();
             }
-
-            return Detail;
-        }
-        public DTOStockDataItem GetStockData(string kodeBarang, DateTime startDate, DateTime endDate)
-        {
-            using OracleConnection connection = new(global.connectionString);
-            connection.Open();
-
-            string sqlQuery = @"
-                SELECT 
-                    all_data.kode_item AS KodeBarang,
-                    NVL(stock.quantity, 0) AS StockQty,
-                    NVL(purchases.quantity, 0) AS BeliQty,
-                    NVL(sales.jumlah_barang, 0) AS JualQty,
-                    NVL(STOCKOPNAME.jumlah_barang, 0) AS StockOpname,
-                    COALESCE(stock.quantity, 0) + COALESCE(purchases.quantity, 0) + COALESCE(STOCKOPNAME.jumlah_barang, 0) - (COALESCE(sales.jumlah_barang, 0)+ COALESCE(RUSAK.jumlah_barang, 0)) AS StockAkhir
-                FROM
-                    (SELECT kode_item FROM POS_PRODUCT WHERE kode_item=:p_kode_barang) all_data
-                LEFT JOIN
-                    (SELECT kode_barang,quantity FROM pos_stock WHERE tanggal = :start_date AND KODE_BARANG=:p_kode_barang) stock ON all_data.kode_item = stock.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        d.kode_barang,
-                        SUM(d.quantity) AS quantity,
-                        AVG(d.harga_beli) AS harga_beli
-                    FROM pos_pembeliandetail d
-                    JOIN pos_pembelian m ON m.purchase_id = d.purchase_id
-                    WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_kode_barang
-                    GROUP BY d.kode_barang) purchases ON all_data.kode_item = purchases.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        d.kode_barang,
-                        SUM(d.jumlah_barang) AS jumlah_barang
-                    FROM pos_penjualan_detail d
-                    JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
-                    WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_kode_barang
-                    GROUP BY d.kode_barang) sales ON all_data.kode_item = sales.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        KODE_BARANG,
-                        SUM(JUMLAHFISIK) AS jumlah_barang
-                    FROM POS_BARANGRUSAK
-                    WHERE TANGGAL BETWEEN :start_date AND :end_date AND KODE_BARANG = :p_kode_barang
-                    GROUP BY KODE_BARANG) RUSAK ON all_data.kode_item = RUSAK.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        KODE_BARANG,
-                        SUM(SELISIH) AS jumlah_barang
-                    FROM POS_STOCKOPNAME
-                    WHERE TANGGAL BETWEEN :start_date AND :end_date AND KODE_BARANG = :p_kode_barang
-                    GROUP BY KODE_BARANG) STOCKOPNAME ON all_data.kode_item = STOCKOPNAME.kode_barang";
-
-            var parameters = new
+            catch
             {
-                p_kode_barang = kodeBarang,
-                start_date = startDate,
-                end_date = endDate
-            };
-
-            var result = connection.QueryFirstOrDefault<DTOStockDataItem>(sqlQuery, parameters, commandType: CommandType.Text);
-
-            return result;
+                transaction.Rollback();
+                throw;
+            }
         }
 
         public bool CheckStockOpname(string kodeBarang, DateTime SODate)
@@ -282,103 +255,141 @@ WHERE B.NO_TRANSAKSI = :idtransaksi ORDER BY B.BARIS";
             using OracleConnection connection = new(global.connectionString);
             connection.Open();
 
-            using OracleCommand command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(1) FROM POS_STOCKOPNAME WHERE KODE_BARANG = :p_kode_barang AND tanggal >= :p_tanggal";
-            command.Parameters.Add(new OracleParameter("p_kode_barang", OracleDbType.Varchar2)).Value = kodeBarang;
-            command.Parameters.Add(new OracleParameter("p_tanggal", OracleDbType.Date)).Value = SODate;
+            const string sql =
+                "SELECT COUNT(1) FROM POS_STOCKOPNAME WHERE KODE_BARANG = :p_kode_barang AND tanggal >= :p_tanggal";
 
-            int count = Convert.ToInt32(command.ExecuteScalar());
+            int count = connection.ExecuteScalar<int>(
+                sql,
+                new { p_kode_barang = kodeBarang, p_tanggal = SODate });
+
             return count > 0;
         }
-        public List<DTOStockData> GetStockAkhir(DateTime startDate, DateTime endDate, int opsistock)
+
+        public DTOStockDataItem GetStockData(string kodeBarang, DateTime startDate, DateTime endDate)
         {
-            List<DTOStockData> stockList;
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
 
-            using (IDbConnection dbConnection = new OracleConnection(global.connectionString))
+            DTOStockData row = connection.QueryFirstOrDefault<DTOStockData>(
+                BuildStockInfoQuery(singleItem: true),
+                new
+                {
+                    start_date = startDate.Date,
+                    end_date = endDate.Date,
+                    p_kode_barang = kodeBarang
+                });
+
+            if (row is null)
             {
-                dbConnection.Open();
-
-                // Initial query without WHERE clause
-                string sqlQuery = @"
-                SELECT 
-                    all_data.kode_ITEM,
-                    all_data.productname,
-                    all_data.SATUAN,
-                    NVL(stock.quantity, 0) AS stock_qty,
-                    NVL(stock.hpp, 0) AS stock_hpp,
-                    NVL(purchases.quantity, 0) AS beli_qty,
-                    ROUND(NVL(purchases.harga_beli, 0), 2) AS beli_harga_AVG,
-                    NVL(ROUND(((stock.quantity * stock.hpp) + NVL((purchases.quantity * purchases.harga_beli), 0)) / (stock.quantity + NVL(purchases.quantity, 0)), 2), 0) AS TOTAL_COST_AVG,
-                    NVL(sales.jumlah_barang, 0) AS jual_qty,
-                    NVL(STOCKOPNAME.jumlah_barang, 0) AS stock_opname,
-                    COALESCE(stock.quantity, 0) + COALESCE(purchases.quantity, 0) + COALESCE(STOCKOPNAME.jumlah_barang, 0) - COALESCE(sales.jumlah_barang, 0) AS stock_akhir
-                FROM
-                    (SELECT kode_item, productname, SATUAN FROM POS_PRODUCT ) all_data
-                LEFT JOIN
-                    (SELECT kode_barang, quantity, hpp FROM pos_stock WHERE tanggal BETWEEN :StartDate AND :EndDate) stock ON all_data.kode_item = stock.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        d.kode_barang,
-                        SUM(d.quantity) AS quantity,
-                        AVG(d.harga_beli) AS harga_beli
-                    FROM pos_pembeliandetail d
-                    JOIN pos_pembelian m ON m.purchase_id = d.purchase_id
-                    WHERE m.tanggal BETWEEN :StartDate AND :EndDate
-                    GROUP BY d.kode_barang) purchases ON all_data.kode_item = purchases.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        d.kode_barang,
-                        SUM(d.jumlah_barang) AS jumlah_barang
-                    FROM pos_penjualan_detail d
-                    JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
-                    WHERE m.tanggal BETWEEN :StartDate AND :EndDate
-                    GROUP BY d.kode_barang) sales ON all_data.kode_item = sales.kode_barang
-                LEFT JOIN
-                    (SELECT 
-                        KODE_BARANG,
-                        SUM(SELISIH) AS jumlah_barang
-                    FROM  POS_STOCKOPNAME
-                    WHERE TANGGAL BETWEEN :StartDate AND :EndDate
-                    GROUP BY KODE_BARANG) STOCKOPNAME  ON all_data.kode_item = STOCKOPNAME.kode_barang
-            ";
-
-                // Dynamic WHERE clause based on opsistock
-                //opsistock 0=semua stock || -1 stock minus only
-                if (opsistock == 0)
-                {
-                    sqlQuery += " WHERE COALESCE(stock.quantity, 0) + COALESCE(purchases.quantity, 0) + COALESCE(STOCKOPNAME.jumlah_barang, 0) - COALESCE(sales.jumlah_barang, 0) <> 0";
-                }
-                else if (opsistock < 0)
-                {
-                    sqlQuery += " WHERE COALESCE(stock.quantity, 0) + COALESCE(purchases.quantity, 0) + COALESCE(STOCKOPNAME.jumlah_barang, 0) - COALESCE(sales.jumlah_barang, 0) < 0";
-                }
-
-                // Order by clause
-                sqlQuery += " ORDER BY all_data.PRODUCTNAME ASC";
-
-                var parameters = new { StartDate = startDate, EndDate = endDate };
-
-                stockList = dbConnection.Query<DTOStockData>(sqlQuery, parameters).AsList();
+                return null;
             }
 
-            return stockList;
+            return new DTOStockDataItem
+            {
+                KodeBarang = row.KODE_ITEM,
+                StockQty = row.STOCKAWAL_QTY,
+                BeliQty = row.BELI_QTY,
+                JualQty = row.JUAL_QTY,
+                StockOpname = row.STOCK_OPNAME,
+                StockAkhir = row.STOCK_AKHIR,
+                TotalCostAvg = row.TOTAL_COST_AVG
+            };
         }
 
         public List<DTOStockData> GetProductStockInfo(DateTime startDate, DateTime endDate)
         {
             using IDbConnection dbConnection = new OracleConnection(global.connectionString);
-            // Ensure the connection is open
             dbConnection.Open();
 
-            // Execute the Oracle function using Dapper
-            var result = dbConnection.Query<DTOStockData>(
-                sql: "SELECT * FROM GET_PRODUCT_STOCK_INFO_PIPELINE(:p_start_date, :p_end_date)",
-                param: new { p_start_date = startDate, p_end_date = endDate }
-            );
+            return dbConnection.Query<DTOStockData>(
+                BuildStockInfoQuery(singleItem: false),
+                new
+                {
+                    start_date = startDate.Date,
+                    end_date = endDate.Date
+                }).AsList();
+        }
 
-            // Optionally, you can handle the result or perform additional actions
+        // Single source of truth for the running-stock calculation. Both the
+        // single-item lookup (GetStockData) and the all-items report
+        // (GetProductStockInfo) use this so the Qty System and HPP shown when an
+        // operator adds one item match what bulk import / year-end closing use.
+        private static string BuildStockInfoQuery(bool singleItem)
+        {
+            string openingFilter = singleItem ? " AND kode_barang = :p_kode_barang" : string.Empty;
+            string detailFilter = singleItem ? " AND detail.kode_barang = :p_kode_barang" : string.Empty;
+            string flatFilter = singleItem ? " AND kode_barang = :p_kode_barang" : string.Empty;
+            string productFilter = singleItem ? "WHERE product.kode_item = :p_kode_barang" : string.Empty;
 
-            return result.ToList();
+            return $@"
+                SELECT
+                    product.kode_item,
+                    product.productname,
+                    product.satuan,
+                    NVL(opening.quantity, 0) AS stock_qty,
+                    NVL(opening.hpp, 0) AS stock_hpp,
+                    NVL(purchases.quantity, 0) AS beli_qty,
+                    NVL(purchases.harga_beli, 0) AS beli_harga_avg,
+                    CASE
+                        WHEN NVL(opening.quantity, 0) + NVL(purchases.quantity, 0) = 0
+                            THEN NVL(purchases.harga_beli, NVL(opening.hpp, 0))
+                        ELSE ROUND(
+                            (
+                                NVL(opening.quantity, 0) * NVL(opening.hpp, 0)
+                                + NVL(purchases.quantity, 0) * NVL(purchases.harga_beli, 0)
+                            )
+                            / (NVL(opening.quantity, 0) + NVL(purchases.quantity, 0)),
+                            2)
+                    END AS total_cost_avg,
+                    NVL(sales.quantity, 0) AS jual_qty,
+                    NVL(opname.quantity, 0) AS stock_opname,
+                    NVL(opname.item_count, 0) AS stock_opname_count,
+                    NVL(opening.quantity, 0)
+                        + NVL(purchases.quantity, 0)
+                        + NVL(opname.quantity, 0)
+                        - NVL(sales.quantity, 0)
+                        - NVL(damaged.quantity, 0) AS stock_akhir
+                FROM POS_PRODUCT product
+                LEFT JOIN (
+                    SELECT kode_barang, SUM(quantity) AS quantity, MAX(hpp) AS hpp
+                    FROM POS_STOCK
+                    WHERE tanggal = :start_date{openingFilter}
+                    GROUP BY kode_barang
+                ) opening ON opening.kode_barang = product.kode_item
+                LEFT JOIN (
+                    SELECT detail.kode_barang,
+                           SUM(detail.quantity) AS quantity,
+                           AVG(detail.harga_beli) AS harga_beli
+                    FROM POS_PEMBELIANDETAIL detail
+                    JOIN POS_PEMBELIAN header
+                      ON header.purchase_id = detail.purchase_id
+                    WHERE header.tanggal BETWEEN :start_date AND :end_date{detailFilter}
+                    GROUP BY detail.kode_barang
+                ) purchases ON purchases.kode_barang = product.kode_item
+                LEFT JOIN (
+                    SELECT detail.kode_barang, SUM(detail.jumlah_barang) AS quantity
+                    FROM POS_PENJUALAN_DETAIL detail
+                    JOIN POS_PENJUALAN header
+                      ON header.no_transaksi = detail.no_transaksi
+                    WHERE header.tanggal BETWEEN :start_date AND :end_date{detailFilter}
+                    GROUP BY detail.kode_barang
+                ) sales ON sales.kode_barang = product.kode_item
+                LEFT JOIN (
+                    SELECT kode_barang, SUM(jumlahfisik) AS quantity
+                    FROM POS_BARANGRUSAK
+                    WHERE tanggal BETWEEN :start_date AND :end_date{flatFilter}
+                    GROUP BY kode_barang
+                ) damaged ON damaged.kode_barang = product.kode_item
+                LEFT JOIN (
+                    SELECT kode_barang,
+                           SUM(selisih) AS quantity,
+                           COUNT(*) AS item_count
+                    FROM POS_STOCKOPNAME
+                    WHERE tanggal BETWEEN :start_date AND :end_date{flatFilter}
+                    GROUP BY kode_barang
+                ) opname ON opname.kode_barang = product.kode_item
+                {productFilter}
+                ORDER BY product.productname";
         }
 
         public List<DTOStoctOpnameMaster> DaftarStockOpname(int tahun)
@@ -405,43 +416,6 @@ WHERE B.NO_TRANSAKSI = :idtransaksi ORDER BY B.BARIS";
             }
 
             return masterResults;
-        }
-
-        public void Insert_BarangRusak(List<TransactionBarangRusak> BarangRusak_List)
-        {
-            using OracleConnection conn = new(global.connectionString);
-            conn.Open();
-            OracleTransaction transaction = conn.BeginTransaction();
-
-            try
-            {
-                string insert_Barang_Rusak = @"
-                INSERT INTO POS_BARANGRUSAK
-                (NOMOR_SO, TANGGAL, KODE_BARANG, JUMLAHFISIK, HPP,TOTAL, KETERANGAN) 
-                VALUES 
-                (:p_NOMOR_SO, :p_TANGGAL, :p_KODE_BARANG, :p_JUMLAHFISIK, :p_HPP, :p_TOTAL, :p_KETERANGAN)";
-
-                // Adjust the Dapper call to use parameters explicitly
-                //karena nama pada database dan object ga sama persis
-                conn.Execute(insert_Barang_Rusak,
-                    BarangRusak_List.Select(Rusak => new {
-                        p_NOMOR_SO = Rusak.Nomor_SO,
-                        p_TANGGAL = Rusak.Tanggal,
-                        p_KODE_BARANG = Rusak.Kode_Item,
-                        p_JUMLAHFISIK = Rusak.QtyFisik,
-                        p_HPP = Rusak.Hpp,
-                        p_TOTAL = Rusak.Total,
-                        p_KETERANGAN = Rusak.Keterangan
-                    }),
-                    transaction);
-
-                transaction.Commit();
-            }
-            catch (Exception)
-            {
-                transaction.Rollback();
-                throw;
-            }
         }
     }
 }
