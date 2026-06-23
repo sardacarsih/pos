@@ -52,9 +52,9 @@ namespace Penjualan.BusinessLayer
         {
             return repository.GetPelangganAktif();
         }
-        public static decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai)
+        public static decimal GetPeriodCreditSpend(string nik, string status, DateTime date)
         {
-            return repository.CheckingJumlahHutang(nik, dari, sampai);
+            return repository.GetPeriodCreditSpend(nik, status, date);
         }
     }
 }

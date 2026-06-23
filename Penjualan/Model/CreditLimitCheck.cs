@@ -3,11 +3,11 @@ namespace Penjualan.Model
     public class CreditLimitCheck
     {
         public string NIK { get; set; }
+        // Member billing status (e.g. "BULANAN") — selects the accounting-period window.
         public string STATUS { get; set; }
-        public decimal Limit { get; set; }
+        // Faktur date — used to resolve the current period window from POS_PERIODE.
+        public DateTime TransactionDate { get; set; }
         public decimal InvoiceAmount { get; set; }
-        public DateTime PeriodFrom { get; set; }
-        public DateTime PeriodTo { get; set; }
     }
 
     public class CreditLimitExceededException : Exception

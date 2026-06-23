@@ -452,6 +452,7 @@ namespace Penjualan.UC
 
         private void ucPenjualanAngsuran_Load(object sender, EventArgs e)
         {
+            txtkasir.Text = LoginInfo.userID;
             NewTransaction();
             Load_Pelanggan();
             Load_angsuran();
@@ -496,11 +497,11 @@ namespace Penjualan.UC
             string nofaktur = txtnotransaksi.Text;
             DateTime tanggal = Convert.ToDateTime(detanggal.Text);
             string jam = txtjam.Text;
-            string kasir = txtkasir.Text;
+            string kasir = LoginInfo.userID;
             Int32 kode_pelanggan = Convert.ToInt32(lepelanggan.EditValue.ToString());
             string nama_pelanggan = lepelanggan.Text;
             int angsuran = Convert.ToInt16(leangsuran.EditValue.ToString());
-            decimal uang_muka = decimal.Parse(txtuangmuka.Text);
+            if (!decimal.TryParse(txtuangmuka.Text, out decimal uang_muka)) uang_muka = 0;
             decimal sisa_tagihan = Total - uang_muka;
             int waktu_angsuran = Convert.ToUInt16(leangsuran.EditValue.ToString());
             decimal jlh_angsuran = sisa_tagihan / waktu_angsuran;
@@ -512,6 +513,7 @@ namespace Penjualan.UC
                 TANGGAL = tanggal,
                 JAM = jam,
                 KASIR = kasir,
+                NAMA_KASIR = LoginInfo.FullName,
                 ID_PELANGGAN = kode_pelanggan,
                 NIK = NIK,
                 NAMA_PELANGGAN = nama_pelanggan,
@@ -527,11 +529,33 @@ namespace Penjualan.UC
 
             List <DTOFakturPenjualanDetail> fakturPenjualanData = GetFakturPenjualanData(gridView1);
 
-            List<DTOAngsuranKreditBarang> Dafrtar_Tagihan_Kredit = CalculateAngsuranKreditBarang(nofaktur, tanggal, sisa_tagihan, waktu_angsuran);
+            List<DTOAngsuranKreditBarang> Dafrtar_Tagihan_Kredit = AngsuranCalculator.Calculate(nofaktur, tanggal, sisa_tagihan, waktu_angsuran);
 
+            // Enforce the member's per-period credit limit. The authoritative limit and the
+            // period window are resolved server-side inside the txn. InvoiceAmount uses the
+            // full faktur TOTAL to match what is stored/summed in POS_PENJUALAN.TOTAL.
+            CreditLimitCheck creditCheck = new()
+            {
+                NIK = NIK,
+                STATUS = STATUS,
+                TransactionDate = tanggal,
+                InvoiceAmount = Total
+            };
 
-            POS_Services.InsertFaktur_Penjualan_Angsuran(faktur_angsuran, fakturPenjualanData, Dafrtar_Tagihan_Kredit);
-            NewTransaction();
+            try
+            {
+                POS_Services.InsertFaktur_Penjualan_Angsuran(faktur_angsuran, fakturPenjualanData, Dafrtar_Tagihan_Kredit, creditCheck);
+                NewTransaction();
+            }
+            catch (CreditLimitExceededException ex)
+            {
+                XtraMessageBox.Show(
+                    $"Transaksi tidak dapat disimpan karena limit hutang telah terlampaui.\n\n" +
+                    $"Hutang Saat Ini     : Rp. {ex.CurrentDebt:N0}\n" +
+                    $"Jumlah Faktur Baru  : Rp. {ex.InvoiceAmount:N0}\n" +
+                    $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
+                    "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
 
@@ -564,7 +588,7 @@ namespace Penjualan.UC
         private void blbisimulasi_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
             var Total = Convert.ToDecimal(gridView1.Columns["Total"].SummaryItem.SummaryValue.ToString());
-            decimal uang_muka = decimal.Parse(txtuangmuka.Text);
+            if (!decimal.TryParse(txtuangmuka.Text, out decimal uang_muka)) uang_muka = 0;
             decimal jumlahPinjaman = Total - uang_muka;
             int waktuangsuran = Convert.ToUInt16(leangsuran.EditValue.ToString());
             string nofaktur = txtnotransaksi.Text;
@@ -573,7 +597,7 @@ namespace Penjualan.UC
 
             rptSimulasiAngsuran report = new()
             {
-                DataSource = CalculateAngsuranKreditBarang(nofaktur,tanggalPinjaman, jumlahPinjaman, waktuangsuran)
+                DataSource = AngsuranCalculator.Calculate(nofaktur, tanggalPinjaman, jumlahPinjaman, waktuangsuran)
             };
             report.Parameters["nomor"].Value = txtnotransaksi.Text;
             report.Parameters["nikdannama"].Value = lepelanggan.Text;
@@ -624,38 +648,6 @@ namespace Penjualan.UC
             {
                 XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-        public static List<DTOAngsuranKreditBarang> CalculateAngsuranKreditBarang(string nomortransaksi, DateTime tanggalBelanja, decimal jumlahBelanja, int waktuangsuran)
-        {
-            List<DTOAngsuranKreditBarang> listAngsuran = new List<DTOAngsuranKreditBarang>();
-            decimal saldoAwal = jumlahBelanja;
-            decimal P; // Installment amount
-
-            // Calculate the installment amount
-            P = saldoAwal / waktuangsuran;
-
-            // Calculate installment for each month within the specified duration
-            for (int i = 1; i <= waktuangsuran; i++)
-            {
-                DateTime bulanBerikutnya = tanggalBelanja.AddMonths(i);
-                DateTime tanggalJatuhTempo = new(bulanBerikutnya.Year, bulanBerikutnya.Month, 1);
-                decimal saldoAkhir = saldoAwal - P;
-
-                DTOAngsuranKreditBarang angsuran = new()
-                {
-                    NO_TRANSAKSI = nomortransaksi,
-                    TANGGALJATUHTEMPO = tanggalJatuhTempo,
-                    ANGSURANKE = i,
-                    SALDOAWAL = Math.Round(saldoAwal, 2),
-                    ANGSURAN = Math.Round(P, 2),
-                    SALDOAKHIR = Math.Round(saldoAkhir, 2)
-                };
-
-                listAngsuran.Add(angsuran);
-                saldoAwal = saldoAkhir;
-            }
-
-            return listAngsuran;
         }
     }
 

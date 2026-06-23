@@ -126,30 +126,17 @@ namespace Penjualan
             FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = ispending;
 
-            // Build credit limit check for non-cash customers
+            // Build credit limit check for non-cash (credit) customers. The authoritative
+            // limit and the period window are resolved server-side in ValidateCreditLimit.
             CreditLimitCheck? creditCheck = null;
-            if (NIK != DEFAULT_CUSTOMER_NIK && LIMIT != 0)
+            if (NIK != DEFAULT_CUSTOMER_NIK)
             {
-                DateTime dari, sampai;
-                if (STATUS == "BULANAN")
-                {
-                    dari = BulananDari;
-                    sampai = BulananSampai;
-                }
-                else
-                {
-                    dari = Remise1Dari;
-                    sampai = Remise2Sampai;
-                }
-
                 creditCheck = new CreditLimitCheck
                 {
                     NIK = NIK,
                     STATUS = STATUS,
-                    Limit = LIMIT,
-                    InvoiceAmount = FakturPenjualanHeader.TOTAL,
-                    PeriodFrom = dari,
-                    PeriodTo = sampai
+                    TransactionDate = FakturPenjualanHeader.TANGGAL,
+                    InvoiceAmount = FakturPenjualanHeader.TOTAL
                 };
             }
 
@@ -161,7 +148,7 @@ namespace Penjualan
             }
             else
             {
-                List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
+                List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = AngsuranCalculator.Calculate(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
                 POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang, creditCheck, pendingNo);
             }
         }
@@ -290,7 +277,7 @@ namespace Penjualan
                         sbsimpancetak.Enabled = true;
                         if (LIMIT != 0)
                         {
-                            decimal totalHutang = Checking_JumlahHutang(NIK, STATUS);
+                            decimal totalHutang = POS_Services.GetPeriodCreditSpend(NIK, STATUS, FakturPenjualanHeader.TANGGAL);
                             decimal totalSetelahFaktur = totalHutang + JUMLAHFAKTUR;
 
                             if (totalSetelahFaktur > LIMIT)
@@ -327,25 +314,6 @@ namespace Penjualan
         }
 
         
-
-        private decimal Checking_JumlahHutang(string nIK, string sTATUS)
-        {
-            DateTime dari, sampai;
-
-            if (sTATUS == "BULANAN")
-            {
-                dari = BulananDari;
-                sampai = BulananSampai;
-            }
-            else
-            {
-                dari = Remise1Dari;
-                sampai = Remise2Sampai;
-            }
-
-            return POS_Services.CheckingJumlahHutang(nIK, dari, sampai);
-        }
-
 
         private void PelangganTextBox_KeyDown(object sender, KeyEventArgs e)
         {
@@ -418,39 +386,6 @@ namespace Penjualan
             this.Close();
         }
 
-
-        public static List<DTOAngsuranKreditBarang> CalculateAngsuranKreditBarang(string nomortransaksi, DateTime tanggalBelanja, decimal jumlahBelanja, int waktuangsuran)
-        {
-            List<DTOAngsuranKreditBarang> listAngsuran = new();
-            decimal saldoAwal = jumlahBelanja;
-            decimal P = Math.Floor(saldoAwal / waktuangsuran);
-
-            for (int i = 1; i <= waktuangsuran; i++)
-            {
-                DateTime bulanBerikutnya = tanggalBelanja.AddMonths(i - 1);
-                DateTime tanggalJatuhTempo = new DateTime(bulanBerikutnya.Year, bulanBerikutnya.Month, DateTime.DaysInMonth(bulanBerikutnya.Year, bulanBerikutnya.Month));
-                int p_periode = int.Parse(tanggalJatuhTempo.ToString("yyyyMM"));
-
-                decimal angsuranBulanIni = (i == waktuangsuran) ? saldoAwal : P;
-                decimal saldoAkhir = saldoAwal - angsuranBulanIni;
-
-                DTOAngsuranKreditBarang angsuran = new()
-                {
-                    PERIODE = p_periode,
-                    NO_TRANSAKSI = nomortransaksi,
-                    TANGGALJATUHTEMPO = tanggalJatuhTempo,
-                    ANGSURANKE = i,
-                    SALDOAWAL = Math.Round(saldoAwal, 2),
-                    ANGSURAN = Math.Round(angsuranBulanIni, 2),
-                    SALDOAKHIR = Math.Round(saldoAkhir, 2)
-                };
-
-                listAngsuran.Add(angsuran);
-                saldoAwal = saldoAkhir;
-            }
-
-            return listAngsuran;
-        }
 
         private void leangsuran_EditValueChanged(object sender, EventArgs e)
         {
