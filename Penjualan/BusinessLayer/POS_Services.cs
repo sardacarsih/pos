@@ -24,9 +24,9 @@ namespace Penjualan.BusinessLayer
         {
             return repository.GenerateTransactionNumber(date);
         }
-        public static void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header)
+        public static void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header, CreditLimitCheck? creditCheck = null)
         {
-            repository.UpdateFakturPenjualan(faktur_header);
+            repository.UpdateFakturPenjualan(faktur_header, creditCheck);
         }
         public static DTOProductInfo RetrieveProductInfo(string barcode)
         {
