@@ -1,4 +1,5 @@
-﻿using BackOffice.Interface;
+using BackOffice.BussinessLayer;
+using BackOffice.Interface;
 using Kopkar.Shared;
 using BackOffice.Model;
 using Dapper;
@@ -141,7 +142,7 @@ namespace BackOffice.DataLayer
         /// </summary>
         /// <param name="faktur_header"></param>
         /// <param name="ListItemsPenjualan"></param>
-        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan)
+        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null)
         {
             using OracleConnection conn = new(global.connectionString);
             conn.Open();
@@ -151,6 +152,12 @@ namespace BackOffice.DataLayer
             {
                 // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
                 PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
+                // Validate the member's credit limit inside the same transaction.
+                if (creditCheck != null)
+                {
+                    ValidateCreditLimit(conn, transaction, creditCheck);
+                }
 
                 // Insert master records
                 string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN,PENDING) " +
@@ -184,7 +191,7 @@ namespace BackOffice.DataLayer
         }
 
 
-        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan)
+        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null)
         {
             using OracleConnection conn = new(global.connectionString);
             conn.Open();
@@ -194,6 +201,12 @@ namespace BackOffice.DataLayer
             {
                 // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
                 PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
+                // Validate the member's credit limit inside the same transaction.
+                if (creditCheck != null)
+                {
+                    ValidateCreditLimit(conn, transaction, creditCheck);
+                }
 
                 // Insert master record
                 string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN) VALUES " +
@@ -236,7 +249,106 @@ namespace BackOffice.DataLayer
             }
         }
 
-        
+        // ----- Credit limit (mirrors Penjualan.DataLayer.FakturPenjualan) -----
+
+        // Resolve the member's accounting-period window from POS_PERIODE for the period
+        // (yyyyMM) of the given date. BULANAN members use the monthly window; remise members
+        // use the full remise span. Returns null when the period is not configured.
+        private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
+            OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
+        {
+            // Periode dicari dari rentang tanggal (BDARI..BSAMPAI), bukan bulan kalender.
+            int? ditemukan = PeriodeGuard.PeriodeUntukTanggal(conn, transaction, date);
+            if (ditemukan == null) return null;
+            int periode = ditemukan.Value;
+            bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
+
+            string sql = bulanan
+                ? @"SELECT TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode"
+                : @"SELECT TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode";
+
+            using var cmd = new OracleCommand(sql, conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("periode", OracleDbType.Int32).Value = periode;
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1))
+            {
+                return (reader.GetDateTime(0), reader.GetDateTime(1));
+            }
+            return null;
+        }
+
+        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window,
+        // optionally excluding a faktur (used when re-checking an edit of an existing faktur).
+        private static decimal SumPeriodSpend(
+            OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai,
+            string? excludeNoTransaksi = null)
+        {
+            string sql = "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL BETWEEN :Dari AND :Sampai";
+            if (!string.IsNullOrEmpty(excludeNoTransaksi))
+                sql += " AND NO_TRANSAKSI <> :Exclude";
+
+            using var cmd = new OracleCommand(sql, conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
+            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
+            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
+            if (!string.IsNullOrEmpty(excludeNoTransaksi))
+                cmd.Parameters.Add("Exclude", OracleDbType.Varchar2).Value = excludeNoTransaksi;
+
+            return Convert.ToDecimal(cmd.ExecuteScalar());
+        }
+
+        // Non-locking read of the member's credit spend in the period of the given date.
+        // Used by the BackOffice edit screen as a pre-check before its destructive
+        // delete-then-reinsert, so an over-limit edit is rejected before anything is deleted.
+        // null = jendela periode tidak dapat ditentukan; pemanggil wajib menolak (gagal tertutup).
+        public decimal? GetPeriodCreditSpend(string nik, string status, DateTime date, string? excludeNoTransaksi = null)
+        {
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+
+            var window = ResolvePeriodWindow(connection, null, date, status);
+            if (window == null) return null;
+            return SumPeriodSpend(connection, null, nik, window.Value.Dari, window.Value.Sampai, excludeNoTransaksi);
+        }
+
+        internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck)
+        {
+            // Lock the member row, read the authoritative limit, and serialize concurrent sales.
+            decimal limit;
+            using (var limitCmd = new OracleCommand(
+                "SELECT NVL(LIMIT_HUTANG, 0) FROM FIN_ANGGOTA WHERE NIK = :Nik FOR UPDATE", conn))
+            {
+                limitCmd.Transaction = transaction;
+                limitCmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
+                object? result = limitCmd.ExecuteScalar();
+                if (result == null)
+                    throw new InvalidOperationException(
+                        $"Anggota dengan NIK '{creditCheck.NIK}' tidak ditemukan; limit hutang tidak dapat diperiksa.");
+                limit = Convert.ToDecimal(result);
+            }
+
+            if (limit == 0)
+                return; // 0 = unlimited
+
+            var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
+            if (window == null)
+                throw new InvalidOperationException(
+                    $"Periode {creditCheck.TransactionDate:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
+
+            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
+
+            if (CreditLimitPolicy.IsExceeded(periodSpend, creditCheck.InvoiceAmount, limit))
+            {
+                throw new CreditLimitExceededException(periodSpend, creditCheck.InvoiceAmount, limit);
+            }
+        }
 
         public void UpdateTransactionNumber(string transactionNumber)
         {
