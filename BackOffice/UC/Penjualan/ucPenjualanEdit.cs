@@ -698,6 +698,27 @@ namespace BackOffice.UC
             FakturPenjualanHeader.TENOR = tenor;
             FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = "T";
+
+            // Re-check the target member's per-period credit limit BEFORE the destructive
+            // delete-then-reinsert below, so an over-limit edit is rejected without losing
+            // the faktur. The current faktur is excluded from the period spend so editing the
+            // same member (changing only the total) is not double-counted.
+            if (LIMIT_HUTANG != 0)
+            {
+                decimal periodSpend = POS_Services.GetPeriodCreditSpend(
+                    NIK, STATUS, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.NO_TRANSAKSI);
+                if (CreditLimitPolicy.IsExceeded(periodSpend, FakturPenjualanHeader.TOTAL, (decimal)LIMIT_HUTANG))
+                {
+                    XtraMessageBox.Show(
+                        $"Faktur tidak dapat disimpan karena limit hutang pelanggan telah terlampaui.\n\n" +
+                        $"Hutang Saat Ini     : Rp. {periodSpend:N0}\n" +
+                        $"Jumlah Faktur       : Rp. {FakturPenjualanHeader.TOTAL:N0}\n" +
+                        $"Batas Limit Hutang  : Rp. {LIMIT_HUTANG:N0}",
+                        "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
             //menghapus faktur penjualan,detail penjualan dan daftar angsuran penjualan kredit
             controller.HapusFakturPenjualan(FakturPenjualanHeader.NO_TRANSAKSI);
             if (tenor == 1)
@@ -767,6 +788,7 @@ namespace BackOffice.UC
                     NIK = selectedObject.NIK;
                     STATUS = selectedObject.STATUS;
                     UNIT_KERJA = selectedObject.UNIT_KERJA;
+                    LIMIT_HUTANG = (double)selectedObject.LIMIT_HUTANG;
 
 
                 }
