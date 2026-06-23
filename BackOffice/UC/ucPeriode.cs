@@ -4,6 +4,9 @@ using System.ComponentModel;
 using System.Data;
 using System.Text;
 using BackOffice.DataLayer;
+using BackOffice.UI;
+using DevExpress.XtraEditors;
+using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraGrid.Views.Base;
 
 namespace BackOffice.UC
@@ -27,9 +30,99 @@ namespace BackOffice.UC
         public ucPeriode()
         {
             InitializeComponent();
+            ConfigurePageLayout();
             gridView1.CellValueChanged += GridView1_CellValueChanged;
             gridView1.ValidateRow += GridView1_ValidateRow;
             setahun.EditValueChanged += Setahun_EditValueChanged;
+        }
+
+        private void ConfigurePageLayout()
+        {
+            BackColor = BackOfficeTheme.Canvas;
+            Padding = new Padding(0);
+
+            sidePanel1.Height = 92;
+            sidePanel1.Padding = new Padding(24, 12, 24, 12);
+            sidePanel1.Appearance.BackColor = BackOfficeTheme.Surface;
+            sidePanel1.Appearance.Options.UseBackColor = true;
+
+            var title = new LabelControl
+            {
+                Text = "Pengaturan Periode",
+                Tag = "ui-title",
+                AutoSizeMode = LabelAutoSizeMode.None,
+                Location = new Point(24, 13),
+                Size = new Size(360, 28)
+            };
+            title.Appearance.Font = new Font("Segoe UI Semibold", 15F);
+            title.Appearance.ForeColor = BackOfficeTheme.TextPrimary;
+            title.Appearance.Options.UseFont = true;
+            title.Appearance.Options.UseForeColor = true;
+
+            var description = new LabelControl
+            {
+                Text = "Atur jadwal remise dan periode bulanan untuk setiap bulan.",
+                AutoSizeMode = LabelAutoSizeMode.None,
+                Location = new Point(25, 45),
+                Size = new Size(520, 22)
+            };
+            description.Appearance.Font = new Font("Segoe UI", 9F);
+            description.Appearance.ForeColor = BackOfficeTheme.TextMuted;
+            description.Appearance.Options.UseFont = true;
+            description.Appearance.Options.UseForeColor = true;
+
+            var yearLabel = new LabelControl
+            {
+                Text = "Tahun",
+                AutoSizeMode = LabelAutoSizeMode.None,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Size = new Size(50, 24)
+            };
+            yearLabel.Appearance.Font = new Font("Segoe UI Semibold", 9F);
+            yearLabel.Appearance.ForeColor = BackOfficeTheme.TextMuted;
+            yearLabel.Appearance.Options.UseFont = true;
+            yearLabel.Appearance.Options.UseForeColor = true;
+
+            setahun.Parent = sidePanel1;
+            setahun.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            setahun.Size = new Size(120, 32);
+            setahun.Properties.MinValue = 2000;
+            setahun.Properties.MaxValue = 2100;
+            setahun.Properties.IsFloatValue = false;
+            setahun.Properties.MaskSettings.Set("mask", "d");
+            setahun.Properties.Appearance.Font = new Font("Segoe UI Semibold", 10F);
+            setahun.Properties.Appearance.Options.UseFont = true;
+
+            sidePanel1.Controls.Add(title);
+            sidePanel1.Controls.Add(description);
+            sidePanel1.Controls.Add(yearLabel);
+
+            void AlignYearFilter()
+            {
+                setahun.Location = new Point(
+                    Math.Max(24, sidePanel1.ClientSize.Width - setahun.Width - 24),
+                    34);
+                yearLabel.Location = new Point(setahun.Left, 12);
+            }
+
+            sidePanel1.Resize += (_, _) => AlignYearFilter();
+            AlignYearFilter();
+
+            sidePanel2.Padding = new Padding(16);
+            sidePanel2.Appearance.BackColor = BackOfficeTheme.Canvas;
+            sidePanel2.Appearance.Options.UseBackColor = true;
+            gridControl1.Dock = DockStyle.Fill;
+
+            BackOfficeTheme.StyleGrid(gridView1);
+            gridView1.OptionsView.ColumnAutoWidth = true;
+            gridView1.OptionsView.ShowAutoFilterRow = false;
+            gridView1.OptionsView.ShowFooter = false;
+            gridView1.OptionsBehavior.EditorShowMode =
+                DevExpress.Utils.EditorShowMode.MouseDownFocused;
+            gridView1.OptionsSelection.EnableAppearanceFocusedCell = true;
+            gridView1.FocusRectStyle = DrawFocusRectStyle.RowFocus;
+            gridView1.RowHeight = 38;
+            gridView1.ColumnPanelRowHeight = 42;
         }
 
         private void Setahun_EditValueChanged(object? sender, EventArgs e)
@@ -197,7 +290,7 @@ namespace BackOffice.UC
                     // Configure date edit repositories for date columns
                     ConfigureDateColumns();
                     MakeDateColumnsEditable();
-                    gridView1.BestFitColumns();
+                    ConfigureGridColumns();
                 }
             }
             catch (Exception ex)
@@ -207,6 +300,46 @@ namespace BackOffice.UC
             }
         }
 
+        private void ConfigureGridColumns()
+        {
+            gridView1.OptionsView.ColumnAutoWidth = true;
+
+            ConfigureColumn("Periode", "Periode", 90, 0);
+            ConfigureColumn("Bulan", "Bulan", 120, 1);
+            ConfigureColumn("Remise1", "Remise 1", 82, 2, true);
+            ConfigureColumn("R1Dari", "Mulai R1", 135, 3);
+            ConfigureColumn("R1Sampai", "Selesai R1", 135, 4);
+            ConfigureColumn("Remise2", "Remise 2", 82, 5, true);
+            ConfigureColumn("R2Dari", "Mulai R2", 135, 6);
+            ConfigureColumn("R2Sampai", "Selesai R2", 135, 7);
+            ConfigureColumn("Bulanan", "Bulanan", 82, 8, true);
+            ConfigureColumn("BDari", "Mulai Bulanan", 145, 9);
+            ConfigureColumn("BSampai", "Selesai Bulanan", 145, 10);
+        }
+
+        private void ConfigureColumn(
+            string fieldName,
+            string caption,
+            int width,
+            int visibleIndex,
+            bool center = false)
+        {
+            var column = gridView1.Columns[fieldName];
+            if (column is null)
+            {
+                return;
+            }
+
+            column.Caption = caption;
+            column.Width = width;
+            column.MinWidth = Math.Min(width, 72);
+            column.VisibleIndex = visibleIndex;
+            column.AppearanceHeader.TextOptions.HAlignment =
+                center ? DevExpress.Utils.HorzAlignment.Center : DevExpress.Utils.HorzAlignment.Near;
+            column.AppearanceCell.TextOptions.HAlignment =
+                center ? DevExpress.Utils.HorzAlignment.Center : DevExpress.Utils.HorzAlignment.Near;
+        }
+
         private void ConfigureDateColumns()
         {
             // Create DateEdit repository
@@ -214,11 +347,11 @@ namespace BackOffice.UC
             dateEditRepo.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
         new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)
     });
-            dateEditRepo.DisplayFormat.FormatString = "dd-MMM-yyyy";
+            dateEditRepo.DisplayFormat.FormatString = "dd MMM yyyy";
             dateEditRepo.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
-            dateEditRepo.EditFormat.FormatString = "dd-MMM-yyyy";
+            dateEditRepo.EditFormat.FormatString = "dd MMM yyyy";
             dateEditRepo.EditFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
-            dateEditRepo.Mask.EditMask = "dd-MMM-yyyy";
+            dateEditRepo.Mask.EditMask = "dd MMM yyyy";
             dateEditRepo.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
 
             // Create CheckEdit repository for toggle columns (Y/T)
@@ -250,10 +383,10 @@ namespace BackOffice.UC
                         var column = gridView.Columns[config.Field];
                         column.ColumnEdit = dateEditRepo;
                         column.Caption = config.Caption;
-                        column.DisplayFormat.FormatString = "dd-MMM-yyyy";
+                        column.DisplayFormat.FormatString = "dd MMM yyyy";
                         column.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
-                        column.Width = 120;
-                        column.MinWidth = 100;
+                        column.Width = 135;
+                        column.MinWidth = 110;
                     }
                 }
 

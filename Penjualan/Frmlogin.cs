@@ -233,6 +233,8 @@ public partial class Frmlogin : XtraForm
                 }
                 LoginInfo.role = res.RoleName;
                 LoginInfo.userID = res.Username;
+                LoginInfo.UserId = res.UserId;
+                LoginInfo.FullName = res.FullName;
                 Hide();
                 new PenjualanKasir().Show();
             }

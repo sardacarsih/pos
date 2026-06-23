@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using DevExpress.Utils.About;
 using Oracle.ManagedDataAccess.Client;
+using Penjualan.BusinessLayer;
 using Penjualan.Interface;
 using Penjualan.Model;
 using System.Data;
@@ -100,14 +101,14 @@ namespace Penjualan.DataLayer
             try
             {
                 // Validate credit limit inside the same transaction
-                if (creditCheck != null && creditCheck.Limit != 0)
+                if (creditCheck != null)
                 {
                     ValidateCreditLimit(conn, transaction, creditCheck);
                 }
 
                 // Insert master records
-                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN,PENDING) " +
-                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN,:PENDING) " +
+                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN,PENDING) " +
+                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN,:PENDING) " +
                                                 "RETURNING ID_PENJUALAN INTO :penjualanId";
 
                 var masterParameters = new DynamicParameters(faktur_header);
@@ -153,14 +154,14 @@ namespace Penjualan.DataLayer
             try
             {
                 // Validate credit limit inside the same transaction
-                if (creditCheck != null && creditCheck.Limit != 0)
+                if (creditCheck != null)
                 {
                     ValidateCreditLimit(conn, transaction, creditCheck);
                 }
 
                 // Insert master record
-                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN) VALUES " +
-                                                "(:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN) RETURNING ID_PENJUALAN INTO :penjualanId";
+                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN) VALUES " +
+                                                "(:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN) RETURNING ID_PENJUALAN INTO :penjualanId";
 
                 var masterParameters = new DynamicParameters(faktur_header);
                 masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
@@ -313,27 +314,93 @@ namespace Penjualan.DataLayer
             }
         }
 
-        private static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck)
+        // Resolve the member's accounting-period window from POS_PERIODE for the period
+        // (yyyyMM) of the given date. BULANAN members use the monthly window (BDARI..BSAMPAI);
+        // remise members use the full remise span (R1DARI..R2SAMPAI). Returns null when the
+        // period is not configured.
+        private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
+            OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
         {
-            string query = @"
-                SELECT NVL(SUM(TOTAL), 0)
-                FROM POS_PENJUALAN
-                WHERE NIK = :Nik
-                AND TANGGAL BETWEEN :Dari AND :Sampai
-                FOR UPDATE";
+            int periode = date.Year * 100 + date.Month;
+            bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
 
-            using var cmd = new OracleCommand(query, conn);
-            cmd.Transaction = transaction;
-            cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
-            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = creditCheck.PeriodFrom;
-            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = creditCheck.PeriodTo;
+            string sql = bulanan
+                ? @"SELECT TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode"
+                : @"SELECT TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode";
 
-            decimal currentDebt = Convert.ToDecimal(cmd.ExecuteScalar());
-            decimal totalAfterInvoice = currentDebt + creditCheck.InvoiceAmount;
+            using var cmd = new OracleCommand(sql, conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("periode", OracleDbType.Int32).Value = periode;
 
-            if (totalAfterInvoice > creditCheck.Limit)
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1))
             {
-                throw new CreditLimitExceededException(currentDebt, creditCheck.InvoiceAmount, creditCheck.Limit);
+                return (reader.GetDateTime(0), reader.GetDateTime(1));
+            }
+            return null;
+        }
+
+        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window.
+        private static decimal SumPeriodSpend(
+            OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai)
+        {
+            using var cmd = new OracleCommand(
+                "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL BETWEEN :Dari AND :Sampai", conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
+            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
+            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
+            return Convert.ToDecimal(cmd.ExecuteScalar());
+        }
+
+        // Non-locking read of the member's credit spend in the current period, for the UI
+        // pre-check. The authoritative, transaction-scoped check lives in ValidateCreditLimit.
+        public decimal GetPeriodCreditSpend(string nik, string status, DateTime date)
+        {
+            using var connection = new OracleConnection(Global.connectionString);
+            connection.Open();
+
+            var window = ResolvePeriodWindow(connection, null, date, status);
+            if (window == null) return 0m;
+            return SumPeriodSpend(connection, null, nik, window.Value.Dari, window.Value.Sampai);
+        }
+
+        internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck)
+        {
+            // Lock the member row first. This serializes concurrent sales for the same
+            // member (so the limit holds even on a first purchase) and lets us read the
+            // authoritative limit from the DB instead of trusting the client value.
+            decimal limit;
+            using (var limitCmd = new OracleCommand(
+                "SELECT NVL(LIMIT_HUTANG, 0) FROM FIN_ANGGOTA WHERE NIK = :Nik FOR UPDATE", conn))
+            {
+                limitCmd.Transaction = transaction;
+                limitCmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
+                object? result = limitCmd.ExecuteScalar();
+                if (result == null)
+                    return; // member not found — nothing to enforce
+                limit = Convert.ToDecimal(result);
+            }
+
+            // A limit of 0 means "unlimited" (no ceiling enforced).
+            if (limit == 0)
+                return;
+
+            // Per-period spending cap: existing credit spend in the period + this invoice
+            // must not exceed the limit. The cap resets each period.
+            var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
+            if (window == null)
+                return; // period not configured — cannot evaluate the window
+
+            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
+
+            if (CreditLimitPolicy.IsExceeded(periodSpend, creditCheck.InvoiceAmount, limit))
+            {
+                throw new CreditLimitExceededException(periodSpend, creditCheck.InvoiceAmount, limit);
             }
         }
 
@@ -404,22 +471,5 @@ namespace Penjualan.DataLayer
             return connection.Query<DTOPelanggan>(query).ToList();
         }
 
-        public decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai)
-        {
-            using var connection = new OracleConnection(Global.connectionString);
-            connection.Open();
-
-            using var cmd = new OracleCommand(@"
-                SELECT NVL(SUM(TOTAL), 0)
-                FROM POS_PENJUALAN
-                WHERE NIK = :Nik
-                AND TANGGAL BETWEEN :Dari AND :Sampai", connection);
-
-            cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
-            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
-            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
-
-            return Convert.ToDecimal(cmd.ExecuteScalar());
-        }
     }
 }

@@ -10,7 +10,7 @@ namespace BackOffice.DataLayer
     {
         public List<DTOFakturPembelian_Header> DaftarPembelian(int bulan, int tahun)
         {
-            string headerQuery = @"SELECT B.NO_TRANSAKSI,B.TANGGAL,B.SUPPLIER_ID,S.NAMA,B.BRUTO,B.POTONGAN,B.TOTAL,B.TERMIN FROM POS_PEMBELIAN B
+            string headerQuery = @"SELECT B.NO_TRANSAKSI,B.TANGGAL,B.SUPPLIER_ID,S.NAMA,B.BRUTO,B.POTONGAN,B.TOTAL,B.TERMIN,B.USERID,B.NAMA_USER FROM POS_PEMBELIAN B
                             JOIN  POS_SUPPLIER  S ON S.KODE=B.SUPPLIER_ID
                             WHERE EXTRACT(MONTH FROM B.TANGGAL) = :p_bulan AND EXTRACT(YEAR FROM B.TANGGAL) = :p_tahun
                             ORDER BY B.TANGGAL";
@@ -43,6 +43,8 @@ namespace BackOffice.DataLayer
                         POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
                         TOTAL = Convert.ToDecimal(reader["TOTAL"]),
                         TERMIN = Convert.ToInt32(reader["TERMIN"]),
+                        USERID = reader["USERID"] == DBNull.Value ? null : reader["USERID"].ToString(),
+                        NAMA_USER = reader["NAMA_USER"] == DBNull.Value ? null : reader["NAMA_USER"].ToString(),
                         Details = new List<DTOFakturPembelianDetail>()
                     });
                 }
@@ -101,8 +103,8 @@ namespace BackOffice.DataLayer
             try
             {
                 // Insert master records
-                string insertFakturBeli_Master = "INSERT INTO POS_PEMBELIAN (NO_TRANSAKSI, TANGGAL, SUPPLIER_ID, BRUTO, POTONGAN, TOTAL, TERMIN,USERID) " +
-                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :SUPPLIER_ID,:BRUTO, :POTONGAN, :TOTAL, :TERMIN, :USERID) " +
+                string insertFakturBeli_Master = "INSERT INTO POS_PEMBELIAN (NO_TRANSAKSI, TANGGAL, SUPPLIER_ID, BRUTO, POTONGAN, TOTAL, TERMIN,USERID, NAMA_USER) " +
+                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :SUPPLIER_ID,:BRUTO, :POTONGAN, :TOTAL, :TERMIN, :USERID, :NAMA_USER) " +
                                                 "RETURNING PURCHASE_ID INTO :PembelianId";
 
                 var masterParameters = new DynamicParameters(faktur_header);
@@ -238,8 +240,8 @@ namespace BackOffice.DataLayer
                 }
 
                 // Insert master records
-                string insertFakturBeli_Master = "INSERT INTO POS_PEMBELIAN (NO_TRANSAKSI, TANGGAL, SUPPLIER_ID, BRUTO, POTONGAN, TOTAL, TERMIN,USERID) " +
-                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :SUPPLIER_ID,:BRUTO, :POTONGAN, :TOTAL, :TERMIN, :USERID) " +
+                string insertFakturBeli_Master = "INSERT INTO POS_PEMBELIAN (NO_TRANSAKSI, TANGGAL, SUPPLIER_ID, BRUTO, POTONGAN, TOTAL, TERMIN,USERID, NAMA_USER) " +
+                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :SUPPLIER_ID,:BRUTO, :POTONGAN, :TOTAL, :TERMIN, :USERID, :NAMA_USER) " +
                                                 "RETURNING PURCHASE_ID INTO :PembelianId";
 
                 var masterParameters = new DynamicParameters(faktur_header);

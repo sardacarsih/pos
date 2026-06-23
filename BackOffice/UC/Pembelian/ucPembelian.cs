@@ -285,7 +285,8 @@ namespace BackOffice.UC
                 POTONGAN = Potongan,
                 TOTAL = Total,
                 TERMIN = int.TryParse(txttermin.Text, out int termin) ? termin : 0,
-                USERID = txtuser.Text
+                USERID = LoginInfo.userID,
+                NAMA_USER = LoginInfo.FullName
             };
 
 
@@ -298,6 +299,7 @@ namespace BackOffice.UC
         }
         private void ucPembelian_Load(object sender, EventArgs e)
         {
+            txtuser.Text = LoginInfo.userID;
             var supplier = controller.GetSuppliers();
             lookUpEditSupplier.Properties.DataSource= supplier;
             lookUpEditSupplier.Properties.ValueMember = "KODE";

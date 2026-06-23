@@ -1,6 +1,7 @@
 using DevExpress.XtraEditors;
 using Microsoft.Extensions.Configuration;
 using Serilog;
+using BackOffice.UI;
 
 namespace BackOffice
 {
@@ -27,6 +28,7 @@ namespace BackOffice
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+                BackOfficeTheme.Initialize();
 
                 Application.ThreadException += (sender, e) =>
                 {

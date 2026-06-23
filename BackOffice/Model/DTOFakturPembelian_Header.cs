@@ -18,6 +18,7 @@ namespace BackOffice.Model
         public decimal TOTAL { get; set; }
         public int TERMIN { get; set; }
         public string USERID { get; set; }
+        public string NAMA_USER { get; set; }
         public List<DTOFakturPembelianDetail> Details { get; set; }
     }
 }

@@ -152,6 +152,7 @@ namespace BackOffice.UC
 
         private void ucPenjualan_Load(object sender, EventArgs e)
         {
+            txtkasir.Text = LoginInfo.userID;
             controlQtySaldo = POS_Services.GetSettingKontrol_qty_Saldo();
             Load_RefreshData();
             NewTransaction();
@@ -562,7 +563,8 @@ namespace BackOffice.UC
                 NO_TRANSAKSI = txtnotransaksi.Text,
                 TANGGAL = Convert.ToDateTime(detanggal.Text),
                 JAM = txtjam.Text,
-                KASIR = txtkasir.Text,
+                KASIR = LoginInfo.userID,
+                NAMA_KASIR = LoginInfo.FullName,
                 BRUTO = Bruto,
                 POTONGAN = Potongan,
                 TOTAL = Total
@@ -597,7 +599,7 @@ namespace BackOffice.UC
                 NO_TRANSAKSI = txtnotransaksi.Text,
                 TANGGAL = Convert.ToDateTime(detanggal.Text),
                 JAM = txtjam.Text,
-                KASIR = txtkasir.Text
+                KASIR = LoginInfo.userID
             };
             //delete if exist
             controller.DeletePendingFaktur(FakturPenjualanHeader.NO_TRANSAKSI);

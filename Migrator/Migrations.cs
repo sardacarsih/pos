@@ -8,12 +8,13 @@ namespace Migrator
     public static class Migrations
     {
         // ORA-00955 name already used, -01408 column already indexed,
-        // -02260 table can have only one PK, -02275 such a referential constraint already exists.
+        // -01430 column being added already exists, -02260 table can have only one PK,
+        // -02275 such a referential constraint already exists.
         private static string Ddl(string ddl) =>
             "BEGIN\n" +
             "   EXECUTE IMMEDIATE '" + ddl.Replace("'", "''").Trim() + "';\n" +
             "EXCEPTION WHEN OTHERS THEN\n" +
-            "   IF SQLCODE NOT IN (-955, -1408, -2260, -2275) THEN RAISE; END IF;\n" +
+            "   IF SQLCODE NOT IN (-955, -1408, -1430, -2260, -2275) THEN RAISE; END IF;\n" +
             "END;";
 
         // Insert idempotent berdasarkan keberadaan baris.
@@ -76,6 +77,143 @@ namespace Migrator
                     SeedRole("KABAG"),
                     SeedRole("KASIR"),
                     SeedRole("STAFF"),
+                }),
+
+            new Migration(
+                "0002_add_user_name_to_transaksi",
+                "Tambah kolom nama lengkap user pada transaksi (POS_PENJUALAN.NAMA_KASIR, POS_PEMBELIAN.NAMA_USER)",
+                new[]
+                {
+                    Ddl("ALTER TABLE POS_PENJUALAN ADD (NAMA_KASIR VARCHAR2(100))"),
+                    Ddl("ALTER TABLE POS_PEMBELIAN ADD (NAMA_USER VARCHAR2(100))"),
+                }),
+
+            new Migration(
+                "0003_seed_pembelian_role",
+                "Tambah role PEMBELIAN untuk user pembelian di BackOffice",
+                new[]
+                {
+                    SeedRole("PEMBELIAN"),
+                }),
+
+            new Migration(
+                "0004_deactivate_pembelian_app",
+                "Nonaktifkan app PEMBELIAN (pembelian kini = BACKOFFICE + role PEMBELIAN)",
+                new[]
+                {
+                    "UPDATE POS_APP SET IS_ACTIVE = 0 WHERE APP_ID = 'PEMBELIAN'",
+                }),
+
+            new Migration(
+                "0005_remove_role_kabag",
+                "Nonaktifkan role KABAG (tidak dipakai)",
+                new[]
+                {
+                    "UPDATE POS_ROLE SET IS_ACTIVE = 0 WHERE ROLE_NAME = 'KABAG'",
+                }),
+
+            new Migration(
+                "0006_delete_role_kabag",
+                "Hapus permanen role KABAG dari POS_ROLE",
+                new[]
+                {
+                    "DELETE FROM POS_ROLE WHERE ROLE_NAME = 'KABAG'",
+                }),
+
+            new Migration(
+                "0007_harden_stock_opname",
+                "Counter nomor Stock Opname per tahun dan unique item per transaksi",
+                new[]
+                {
+                    Ddl(@"CREATE TABLE POS_TRANSACTION_COUNTER (
+  TRANSACTION_CODE VARCHAR2(30) NOT NULL,
+  TRANSACTION_YEAR NUMBER(4) NOT NULL,
+  LAST_NUMBER      NUMBER(12) DEFAULT 0 NOT NULL,
+  CONSTRAINT PK_POS_TRANSACTION_COUNTER
+    PRIMARY KEY (TRANSACTION_CODE, TRANSACTION_YEAR),
+  CONSTRAINT CK_POS_TRANSACTION_COUNTER
+    CHECK (LAST_NUMBER >= 0))"),
+
+                    @"MERGE INTO POS_TRANSACTION_COUNTER target
+USING (
+  SELECT
+    'STOCK_OPNAME' AS TRANSACTION_CODE,
+    EXTRACT(YEAR FROM TANGGAL) AS TRANSACTION_YEAR,
+    MAX(TO_NUMBER(SUBSTR(NOMOR_SO, -6))) AS LAST_NUMBER
+  FROM POS_STOCKOPNAME
+  WHERE REGEXP_LIKE(NOMOR_SO, '^SO-[0-9]{2}-[0-9]{6}$')
+  GROUP BY EXTRACT(YEAR FROM TANGGAL)
+) source
+ON (
+  target.TRANSACTION_CODE = source.TRANSACTION_CODE
+  AND target.TRANSACTION_YEAR = source.TRANSACTION_YEAR
+)
+WHEN NOT MATCHED THEN
+  INSERT (TRANSACTION_CODE, TRANSACTION_YEAR, LAST_NUMBER)
+  VALUES (
+    source.TRANSACTION_CODE,
+    source.TRANSACTION_YEAR,
+    source.LAST_NUMBER
+  )",
+
+                    @"DECLARE
+  duplicate_count NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO duplicate_count
+  FROM (
+    SELECT NOMOR_SO, KODE_BARANG
+    FROM POS_STOCKOPNAME
+    GROUP BY NOMOR_SO, KODE_BARANG
+    HAVING COUNT(*) > 1
+  );
+
+  IF duplicate_count > 0 THEN
+    RAISE_APPLICATION_ERROR(
+      -20001,
+      'POS_STOCKOPNAME memiliki pasangan NOMOR_SO/KODE_BARANG duplikat'
+    );
+  END IF;
+END;",
+
+                    Ddl(
+                        "CREATE UNIQUE INDEX UQ_POS_STOCKOPNAME_ITEM " +
+                        "ON POS_STOCKOPNAME (NOMOR_SO, KODE_BARANG)"),
+                }),
+
+            new Migration(
+                "0008_advance_counter_for_barang_rusak",
+                "Naikkan POS_TRANSACTION_COUNTER agar mencakup nomor SO yang sudah dipakai POS_BARANGRUSAK (sekuens nomor kini dibagi Stock Opname & Barang Rusak)",
+                new[]
+                {
+                    @"MERGE INTO POS_TRANSACTION_COUNTER target
+USING (
+  SELECT
+    'STOCK_OPNAME' AS TRANSACTION_CODE,
+    TRANSACTION_YEAR,
+    MAX(LAST_NUMBER) AS LAST_NUMBER
+  FROM (
+    SELECT EXTRACT(YEAR FROM TANGGAL) AS TRANSACTION_YEAR,
+           TO_NUMBER(SUBSTR(NOMOR_SO, -6)) AS LAST_NUMBER
+    FROM POS_STOCKOPNAME
+    WHERE REGEXP_LIKE(NOMOR_SO, '^SO-[0-9]{2}-[0-9]{6}$')
+    UNION ALL
+    SELECT EXTRACT(YEAR FROM TANGGAL) AS TRANSACTION_YEAR,
+           TO_NUMBER(SUBSTR(NOMOR_SO, -6)) AS LAST_NUMBER
+    FROM POS_BARANGRUSAK
+    WHERE REGEXP_LIKE(NOMOR_SO, '^SO-[0-9]{2}-[0-9]{6}$')
+  )
+  GROUP BY TRANSACTION_YEAR
+) source
+ON (
+  target.TRANSACTION_CODE = source.TRANSACTION_CODE
+  AND target.TRANSACTION_YEAR = source.TRANSACTION_YEAR
+)
+WHEN MATCHED THEN
+  UPDATE SET target.LAST_NUMBER = GREATEST(target.LAST_NUMBER, source.LAST_NUMBER)
+WHEN NOT MATCHED THEN
+  INSERT (TRANSACTION_CODE, TRANSACTION_YEAR, LAST_NUMBER)
+  VALUES (source.TRANSACTION_CODE, source.TRANSACTION_YEAR, source.LAST_NUMBER)",
                 }),
         };
     }

@@ -12,6 +12,7 @@ namespace Penjualan.Model
         public DateTime TANGGAL { get; set; }
         public string JAM { get; set; }
         public string KASIR { get; set; }
+        public string NAMA_KASIR { get; set; }
         public int ID_PELANGGAN { get; set; }
         public string NIK { get; set; }
         public string NAMA_PELANGGAN { get; set; }

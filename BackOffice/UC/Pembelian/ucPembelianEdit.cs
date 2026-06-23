@@ -25,9 +25,12 @@ namespace BackOffice.UC
             }
         }
 
+        // Nama lengkap user pembuat asli, dipertahankan saat edit.
+        private string _namaUserAsli;
+
         public ucPembelianEdit()
         {
-            InitializeComponent(); 
+            InitializeComponent();
             transactionDataList = new BindingList<TransactionDataBeli>();
             gridControl1.DataSource = transactionDataList;
 
@@ -40,6 +43,9 @@ namespace BackOffice.UC
             txtnotransaksi.Text = PembelianHeader.NO_TRANSAKSI;
             detanggal.EditValue = Convert.ToDateTime(PembelianHeader.TANGGAL.ToString("dd-MMM-yyyy"));
             txttermin.Text = PembelianHeader.TERMIN.ToString();
+            // Pertahankan user pembuat asli (jangan ditimpa user yang sedang login).
+            txtuser.Text = PembelianHeader.USERID;
+            _namaUserAsli = PembelianHeader.NAMA_USER;
 
             // Set the default value for searchLookUpEdit1
             int index = supplier.FindIndex(item => item.KODE == PembelianHeader.SUPPLIER_ID);
@@ -249,7 +255,8 @@ namespace BackOffice.UC
                 POTONGAN = Potongan,
                 TOTAL = Total,
                 TERMIN = int.TryParse(txttermin.Text, out int termin) ? termin : 0,
-                USERID = txtuser.Text
+                USERID = txtuser.Text,
+                NAMA_USER = _namaUserAsli
             };
 
 

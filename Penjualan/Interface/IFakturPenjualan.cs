@@ -14,6 +14,6 @@ namespace Penjualan.Interface
         DTOPeriodeDates? GetTanggalByPeriode(int periode);
         DTOPotonganHarga? GetPotonganByKodeItem(string kodeItem);
         List<DTOPelanggan> GetPelangganAktif();
-        decimal CheckingJumlahHutang(string nik, DateTime dari, DateTime sampai);
+        decimal GetPeriodCreditSpend(string nik, string status, DateTime date);
     }
 }

@@ -25,6 +25,9 @@ namespace BackOffice.UC
         //public DTOFakturPenjualanHeader header { get; set; }
         public List<DTODaftarBarang> items { get; set; }
 
+        // Nama lengkap kasir pembuat asli, dipertahankan saat edit.
+        private string _namaKasirAsli;
+
         public void SetPenjualanHeader(DTOFakturPenjualanHeader penjualanHeader)
         {
             FinSettingsDataAccess finsetting = new();
@@ -33,6 +36,8 @@ namespace BackOffice.UC
             // Set the data from PenjualanHeader to the controls in ucPenjualanEdit
             // Example:
             txtnotransaksi.Text = penjualanHeader.NO_TRANSAKSI;
+            // Pertahankan kasir pembuat asli (jangan ditimpa user yang sedang login).
+            LoadKasirAsli(penjualanHeader.NO_TRANSAKSI);
             detanggal.EditValue = Convert.ToDateTime(penjualanHeader.TANGGAL.ToString("dd-MMM-yyyy"));
             leangsuran.EditValue = penjualanHeader.TENOR;
             txtjam.Text = DateTime.Now.ToString("HH:mm:ss");
@@ -45,6 +50,19 @@ namespace BackOffice.UC
 
             // Set other controls as needed
         }
+
+        // Ambil KASIR & NAMA_KASIR asli dari record untuk dipertahankan saat update.
+        private void LoadKasirAsli(string noTransaksi)
+        {
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+            var asli = connection.QueryFirstOrDefault<DTOFakturPenjualanHeader>(
+                "SELECT KASIR, NAMA_KASIR FROM POS_PENJUALAN WHERE NO_TRANSAKSI = :no",
+                new { no = noTransaksi });
+            txtkasir.Text = asli?.KASIR;
+            _namaKasirAsli = asli?.NAMA_KASIR;
+        }
+
         List<DTOPelanggan> datasource;
         private void Load_Pelanggan()
         {
@@ -651,6 +669,7 @@ namespace BackOffice.UC
                 TANGGAL = Convert.ToDateTime(detanggal.Text),
                 JAM = txtjam.Text,
                 KASIR = txtkasir.Text,
+                NAMA_KASIR = _namaKasirAsli,
                 BRUTO = VBruto,
                 POTONGAN = VPotongan,
                 TOTAL = VTotal,
