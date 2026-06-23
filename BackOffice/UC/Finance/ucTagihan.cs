@@ -157,59 +157,51 @@ namespace BackOffice.UC
             }
         }
 
-        DateTime remisedari, remisesampai, bulanandari, bulanansampai;
+        DateTime? remisedari, remisesampai, bulanandari, bulanansampai;
 
         private void LoadParameterTanggal(int p_periode, int p_remise)
         {
-            string query = "SELECT r1dari, r1sampai, r2dari, r2sampai, bdari, bsampai FROM pos_periode WHERE periode = :periode";
+            const string query = """
+                SELECT R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI
+                FROM POS_PERIODE
+                WHERE PERIODE = :periode
+                """;
 
-            using OracleConnection connection = new OracleConnection(global.connectionString);
+            remisedari = null;
+            remisesampai = null;
+            bulanandari = null;
+            bulanansampai = null;
+
+            using OracleConnection connection = new(global.connectionString);
             connection.Open();
 
-            using OracleCommand command = new OracleCommand(query, connection);
-            // Add parameters to prevent SQL injection
-            command.Parameters.Add(new OracleParameter(":periode", p_periode));
+            using OracleCommand command = new(query, connection);
+            command.BindByName = true;
+            command.Parameters.Add("periode", OracleDbType.Int32).Value = p_periode;
 
             using OracleDataReader reader = command.ExecuteReader();
-
-            while (reader.Read())
+            if (!reader.Read())
             {
-                if (p_remise == 1)
-                {
-                    // Assuming r1dari and r1sampai are of type string in the database
-                    if (DateTime.TryParse(reader["r1dari"].ToString(), out DateTime dariValue)
-                        && DateTime.TryParse(reader["r1sampai"].ToString(), out DateTime sampaiValue))
-                    {
-                        remisedari = dariValue;
-                        remisesampai = sampaiValue;
-                    }
-                    else
-                    {
-                        // Handle parsing errors
-                        XtraMessageBox.Show("Error parsing date values for remise 1.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }
-                else
-                {
-                    if (DateTime.TryParse(reader["r2dari"].ToString(), out DateTime r2DariValue)
-                        && DateTime.TryParse(reader["r2sampai"].ToString(), out DateTime r2SampaiValue)
-                        && DateTime.TryParse(reader["bdari"].ToString(), out DateTime bDariValue)
-                        && DateTime.TryParse(reader["bsampai"].ToString(), out DateTime bSampaiValue))
-                    {
-                        remisedari = r2DariValue;
-                        remisesampai = r2SampaiValue;
-                        bulanandari = bDariValue;
-                        bulanansampai = bSampaiValue;
-                    }
-                    else
-                    {
-                        // Handle parsing errors
-                        // Handle parsing errors with MessageBox
-                        XtraMessageBox.Show("Error parsing date values for remise 2 and Bulanan.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-                    }
-                }
+                return;
             }
+
+            if (p_remise == 1)
+            {
+                remisedari = ReadNullableDate(reader, "R1DARI");
+                remisesampai = ReadNullableDate(reader, "R1SAMPAI");
+                return;
+            }
+
+            remisedari = ReadNullableDate(reader, "R2DARI");
+            remisesampai = ReadNullableDate(reader, "R2SAMPAI");
+            bulanandari = ReadNullableDate(reader, "BDARI");
+            bulanansampai = ReadNullableDate(reader, "BSAMPAI");
+        }
+
+        private static DateTime? ReadNullableDate(OracleDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? null : reader.GetDateTime(ordinal);
         }
 
 
@@ -366,7 +358,8 @@ namespace BackOffice.UC
             var NAMA = gridView1.GetRowCellValue(rowhandle, "NAMA_PELANGGAN").ToString();
             var status = gridView1.GetRowCellValue(rowhandle, "STATUS").ToString();
             var waserda = decimal.Parse(gridView1.GetRowCellValue(rowhandle, "WASERDA").ToString());
-            DateTime daritanggal, sampaitanggal;
+            DateTime? daritanggal;
+            DateTime? sampaitanggal;
 
             if (status == "BULANAN")
             {
@@ -381,17 +374,31 @@ namespace BackOffice.UC
 
             }
 
+            if (!daritanggal.HasValue || !sampaitanggal.HasValue)
+            {
+                XtraMessageBox.Show(
+                    $"Rentang tanggal {status} untuk periode ini belum diatur.\n" +
+                    "Silakan lengkapi tanggal pada menu Pengaturan > Periode.",
+                    "Periode Belum Lengkap",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
             if (waserda != 0)
             {
+                DateTime tanggalAwal = daritanggal.Value;
+                DateTime tanggalAkhir = sampaitanggal.Value;
 
                 XtraReport report1 = new rptTagihan_PenjualanDetails_NIK
                 {
                     // Set the data sources and parameters for each report
-                    DataSource = LaporanManager.PenjualanWaserdaDetail(NIK, daritanggal, sampaitanggal),
+                    DataSource = LaporanManager.PenjualanWaserdaDetail(NIK, tanggalAwal, tanggalAkhir),
                     RequestParameters = true
                 };
                 report1.Parameters["PERIODE"].Value = periode;
-                report1.Parameters["TANGGAL"].Value = daritanggal.ToString("dd-MMM-yyyy") + "to" + sampaitanggal.ToString("dd-MMM-yyyy");
+                report1.Parameters["TANGGAL"].Value =
+                    $"{tanggalAwal:dd-MMM-yyyy} sampai {tanggalAkhir:dd-MMM-yyyy}";
                 report1.Parameters["NIK"].Value = NIK + " " + NAMA;
                 // Create a ReportPrintTool instance and assign the report to it
                 ReportPrintTool printTool = new(report1);

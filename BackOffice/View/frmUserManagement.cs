@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid;
 using DevExpress.XtraGrid.Views.Grid;
 using BackOffice.DataLayer;
+using BackOffice.UI;
 using Pos.Shared.Auth;
 
 namespace BackOffice.View
@@ -16,6 +18,10 @@ namespace BackOffice.View
     /// </summary>
     public class frmUserManagement : XtraForm
     {
+        // Palet warna sederhana agar tampilan konsisten dengan skin terang.
+        private static readonly Color Good = Color.FromArgb(46, 160, 67);
+        private static readonly Color Bad = Color.FromArgb(201, 64, 64);
+
         private readonly AuthRepository _auth = new(global.connectionString);
         private readonly PasswordCryptographyPbkdf2 _crypto = new();
 
@@ -23,11 +29,14 @@ namespace BackOffice.View
         private readonly GridView _userView;
         private readonly TextEdit _txtUsername = new();
         private readonly TextEdit _txtFullName = new();
+        private readonly LabelControl _lblStatus = new();
 
         private readonly GridControl _accessGrid = new();
         private readonly GridView _accessView;
         private readonly LookUpEdit _cmbApp = new();
         private readonly LookUpEdit _cmbRole = new();
+
+        private GroupControl _grpDetail = null!;
 
         private List<UserAccount> _users = new();
         private int? _selectedUserId;
@@ -39,89 +48,247 @@ namespace BackOffice.View
 
             Text = "Manajemen User";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new System.Drawing.Size(940, 560);
+            ClientSize = new Size(1060, 660);
+            MinimumSize = new Size(900, 580);
+            AutoScaleMode = AutoScaleMode.Dpi;
 
             BuildLayout();
+            BackOfficeTheme.StyleGrid(_userView);
+            BackOfficeTheme.StyleGrid(_accessView);
             LoadLookups();
             LoadUsers();
         }
 
         private void BuildLayout()
         {
-            // ---- Daftar user (kiri) ----
+            // ---- Split utama: daftar user (kiri) | detail (kanan) ----
+            var split = new SplitContainerControl
+            {
+                Dock = DockStyle.Fill,
+                Horizontal = true,
+                SplitterPosition = 320,
+                FixedPanel = SplitFixedPanel.Panel1
+            };
+            split.Panel1.MinSize = 280;
+            split.Panel2.MinSize = 560;
+            Controls.Add(split);
+
+            BuildUserListPanel(split.Panel1);
+            BuildDetailPanel(split.Panel2);
+        }
+
+        // ------------------------------------------------------- panel daftar user
+
+        private void BuildUserListPanel(SplitGroupPanel host)
+        {
+            var grp = new GroupControl
+            {
+                Text = "Daftar User",
+                Dock = DockStyle.Fill
+            };
+            grp.Padding = new Padding(2, 0, 2, 2);
+            host.Controls.Add(grp);
+
+            // Footer aksi
+            var footer = new PanelControl
+            {
+                Dock = DockStyle.Bottom,
+                Height = 48,
+                BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder
+            };
+            footer.Padding = new Padding(8);
+            var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight };
+            flow.Controls.Add(MakeButton("Refresh", (_, _) => LoadUsers(), 110));
+            flow.Controls.Add(MakeButton("User Baru", (_, _) => CreateUser(), 120, primary: true));
+            footer.Controls.Add(flow);
+
+            // Grid user
             _userGrid.MainView = _userView;
-            _userGrid.SetBounds(12, 12, 380, 470);
-            _userGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            _userGrid.Dock = DockStyle.Fill;
             _userView.OptionsBehavior.Editable = false;
             _userView.OptionsView.ShowGroupPanel = false;
+            _userView.OptionsView.ShowIndicator = false;
+            _userView.OptionsView.EnableAppearanceEvenRow = true;
+            _userView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            _userView.OptionsFind.AlwaysVisible = true;
+            _userView.OptionsFind.FindNullPrompt = "Cari user...";
             _userView.FocusedRowChanged += (_, _) => OnUserSelected();
-            Controls.Add(_userGrid);
 
-            var btnRefresh = MakeButton("Refresh", 12, 490, 90, (_, _) => LoadUsers());
-            var btnNew = MakeButton("User Baru", 110, 490, 100, (_, _) => CreateUser());
-            Controls.Add(btnRefresh);
-            Controls.Add(btnNew);
+            grp.Controls.Add(_userGrid);
+            grp.Controls.Add(footer);
+            // Sisakan ruang header GroupControl.
+            _userGrid.BringToFront();
+        }
 
-            // ---- Editor (kanan) ----
-            int x = 410;
-            Controls.Add(MakeLabel("Username", x, 16));
+        // ------------------------------------------------------------ panel detail
+
+        private void BuildDetailPanel(SplitGroupPanel host)
+        {
+            // --- Bagian identitas & status (atas) ---
+            var grpId = new GroupControl
+            {
+                Text = "Identitas & Status Akun",
+                Dock = DockStyle.Top,
+                Height = 230
+            };
+            grpId.Padding = new Padding(2, 0, 2, 2);
+
+            var table = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 4,
+                Padding = new Padding(14, 12, 14, 10)
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
             _txtUsername.Properties.ReadOnly = true;
-            _txtUsername.SetBounds(x + 90, 12, 200, 22);
-            _txtUsername.Anchor = AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Left;
-            Controls.Add(_txtUsername);
+            _txtUsername.Dock = DockStyle.Fill;
+            _txtFullName.Properties.NullValuePrompt = "Nama lengkap user";
+            _txtFullName.Dock = DockStyle.Fill;
 
-            Controls.Add(MakeLabel("Nama Lengkap", x, 48));
-            _txtFullName.SetBounds(x + 90, 44, 200, 22);
-            _txtFullName.Anchor = AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Left;
-            Controls.Add(_txtFullName);
+            table.Controls.Add(MakeFieldLabel("Username"), 0, 0);
+            table.Controls.Add(_txtUsername, 1, 0);
+            table.Controls.Add(MakeFieldLabel("Nama Lengkap"), 0, 1);
+            table.Controls.Add(_txtFullName, 1, 1);
 
-            Controls.Add(MakeButton("Simpan Nama", x + 90, 74, 110, (_, _) => SaveFullName()));
-            Controls.Add(MakeButton("Reset Password", x + 210, 74, 110, (_, _) => ResetPassword()));
-            Controls.Add(MakeButton("Aktif/Nonaktif", x, 110, 150, (_, _) => ToggleActive()));
-            Controls.Add(MakeButton("Lock/Unlock", x + 160, 110, 150, (_, _) => ToggleLocked()));
+            // Baris aksi identitas
+            var idActions = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                WrapContents = false,
+                Margin = new Padding(0, 5, 0, 3),
+                Padding = Padding.Empty
+            };
+            idActions.Controls.Add(MakeButton("Simpan Nama", (_, _) => SaveFullName(), 120, primary: true));
+            idActions.Controls.Add(MakeButton("Reset Password", (_, _) => ResetPassword(), 130));
+            idActions.Controls.Add(MakeButton("Aktif / Nonaktif", (_, _) => ToggleActive(), 130));
+            idActions.Controls.Add(MakeButton("Lock / Unlock", (_, _) => ToggleLocked(), 120));
+            table.Controls.Add(idActions, 1, 2);
 
-            // ---- Akses (app + role) ----
-            Controls.Add(MakeLabel("Akses Aplikasi & Role", x, 150));
+            // Baris status
+            table.Controls.Add(MakeFieldLabel("Status"), 0, 3);
+            _lblStatus.AllowHtmlString = true;
+            _lblStatus.Dock = DockStyle.Fill;
+            _lblStatus.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Top;
+            table.Controls.Add(_lblStatus, 1, 3);
+
+            grpId.Controls.Add(table);
+
+            // --- Bagian akses (mengisi sisa) ---
+            var grpAccess = new GroupControl
+            {
+                Text = "Akses Aplikasi & Role",
+                Dock = DockStyle.Fill
+            };
+            grpAccess.Padding = new Padding(2, 0, 2, 2);
+
+            var accessFooter = BuildAccessFooter();
+
             _accessGrid.MainView = _accessView;
-            _accessGrid.SetBounds(x, 174, 510, 230);
-            _accessGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            _accessGrid.Dock = DockStyle.Fill;
             _accessView.OptionsBehavior.Editable = false;
             _accessView.OptionsView.ShowGroupPanel = false;
-            Controls.Add(_accessGrid);
+            _accessView.OptionsView.ShowIndicator = false;
+            _accessView.OptionsView.EnableAppearanceEvenRow = true;
 
-            Controls.Add(MakeLabel("App", x, 420));
+            grpAccess.Controls.Add(_accessGrid);
+            grpAccess.Controls.Add(accessFooter);
+            _accessGrid.BringToFront();
+
+            // Container detail agar bisa di-disable saat tidak ada user terpilih.
+            _grpDetail = new GroupControl
+            {
+                Dock = DockStyle.Fill,
+                ShowCaption = false,
+                BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder
+            };
+            _grpDetail.Controls.Add(grpAccess);
+            _grpDetail.Controls.Add(grpId);
+
+            host.Controls.Add(_grpDetail);
+        }
+
+        private PanelControl BuildAccessFooter()
+        {
+            var footer = new PanelControl
+            {
+                Dock = DockStyle.Bottom,
+                Height = 94,
+                BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder
+            };
+            footer.Padding = new Padding(10, 6, 10, 8);
+
+            var stack = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            stack.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            stack.Controls.Add(MakeFieldLabel("Tambah / ubah akses:"), 0, 0);
+
+            var flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                WrapContents = false,
+                FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(0, 4, 0, 0)
+            };
+
             _cmbApp.Properties.DisplayMember = "AppName";
             _cmbApp.Properties.ValueMember = "AppId";
+            _cmbApp.Properties.NullText = "Pilih aplikasi...";
             _cmbApp.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("AppName", "Aplikasi"));
-            _cmbApp.SetBounds(x + 40, 416, 180, 22);
-            _cmbApp.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            Controls.Add(_cmbApp);
+            _cmbApp.Width = 240;
+            _cmbApp.Margin = new Padding(0, 2, 8, 2);
 
-            Controls.Add(MakeLabel("Role", x + 230, 420));
             _cmbRole.Properties.DisplayMember = "RoleName";
             _cmbRole.Properties.ValueMember = "RoleId";
+            _cmbRole.Properties.NullText = "Pilih role...";
             _cmbRole.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("RoleName", "Role"));
-            _cmbRole.SetBounds(x + 270, 416, 150, 22);
-            _cmbRole.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            Controls.Add(_cmbRole);
+            _cmbRole.Width = 170;
+            _cmbRole.Margin = new Padding(0, 2, 8, 2);
 
-            Controls.Add(MakeButton("Beri / Ubah Akses", x, 448, 160, (_, _) => GrantAccess()));
-            Controls.Add(MakeButton("Cabut Akses", x + 170, 448, 150, (_, _) => RevokeAccess()));
+            flow.Controls.Add(_cmbApp);
+            flow.Controls.Add(_cmbRole);
+            flow.Controls.Add(MakeButton("Beri / Ubah Akses", (_, _) => GrantAccess(), 150, primary: true));
+            flow.Controls.Add(MakeButton("Cabut Akses", (_, _) => RevokeAccess(), 120));
+
+            stack.Controls.Add(flow, 0, 1);
+            footer.Controls.Add(stack);
+            return footer;
         }
 
         // ------------------------------------------------------------ helpers UI
 
-        private static LabelControl MakeLabel(string text, int x, int y)
+        private static LabelControl MakeFieldLabel(string text)
         {
-            var l = new LabelControl { Text = text };
-            l.SetBounds(x, y, 85, 20);
+            var l = new LabelControl { Text = text, Dock = DockStyle.Fill };
+            l.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
             return l;
         }
 
-        private static SimpleButton MakeButton(string text, int x, int y, int w, EventHandler onClick)
+        private SimpleButton MakeButton(string text, EventHandler onClick, int width, bool primary = false)
         {
-            var b = new SimpleButton { Text = text };
-            b.SetBounds(x, y, w, 26);
+            var b = new SimpleButton
+            {
+                Text = text,
+                Width = width,
+                Height = 38,
+                Margin = new Padding(0, 0, 8, 4)
+            };
+            if (primary)
+            {
+                BackOfficeTheme.StylePrimaryButton(b);
+            }
+            else
+            {
+                BackOfficeTheme.StyleSecondaryButton(b);
+            }
             b.Click += onClick;
             return b;
         }
@@ -145,6 +312,7 @@ namespace BackOffice.View
             SetColumnCaption("IsActive", "Aktif", true);
             SetColumnCaption("IsLocked", "Terkunci", true);
             SetColumnCaption("FailedAttempts", "Gagal", true);
+            _userView.BestFitColumns();
             OnUserSelected();
         }
 
@@ -167,30 +335,61 @@ namespace BackOffice.View
             if (_userView.GetFocusedRow() is UserAccount u)
             {
                 _selectedUserId = u.UserId;
+                _grpDetail.Enabled = true;
                 _txtUsername.Text = u.Username;
                 _txtFullName.Text = u.FullName ?? string.Empty;
+                UpdateStatusLabel(u);
                 _accessGrid.DataSource = _auth.GetUserAccess(u.UserId);
                 _accessView.PopulateColumns();
-                HideAccessColumns();
+                ApplyAccessColumns();
             }
             else
             {
                 _selectedUserId = null;
+                _grpDetail.Enabled = false;
                 _txtUsername.Text = string.Empty;
                 _txtFullName.Text = string.Empty;
+                _lblStatus.Text = string.Empty;
                 _accessGrid.DataSource = null;
             }
         }
 
-        private void HideAccessColumns()
+        private void UpdateStatusLabel(UserAccount u)
         {
-            foreach (var name in new[] { "UserId", "RoleId" })
+            string active = u.IsActive
+                ? $"<color={Good.R},{Good.G},{Good.B}>● Aktif</color>"
+                : $"<color={Bad.R},{Bad.G},{Bad.B}>● Nonaktif</color>";
+            string locked = u.IsLocked
+                ? $"<color={Bad.R},{Bad.G},{Bad.B}>● Terkunci</color>"
+                : $"<color={Good.R},{Good.G},{Good.B}>● Terbuka</color>";
+            string fail = u.FailedAttempts > 0
+                ? $"<color={Bad.R},{Bad.G},{Bad.B}>Gagal login: {u.FailedAttempts}</color>"
+                : "Gagal login: 0";
+            _lblStatus.Text = $"{active}     {locked}     {fail}";
+        }
+
+        private void ApplyAccessColumns()
+        {
+            SetAccessColumn("UserId", null, false);
+            SetAccessColumn("RoleId", null, false);
+            SetAccessColumn("AppId", "Kode App", true);
+            SetAccessColumn("AppName", "Aplikasi", true);
+            SetAccessColumn("RoleName", "Role", true);
+            SetAccessColumn("IsActive", "Aktif", true);
+            _accessView.BestFitColumns();
+        }
+
+        private void SetAccessColumn(string field, string? caption, bool visible)
+        {
+            var col = _accessView.Columns.ColumnByFieldName(field);
+            if (col is null)
             {
-                var col = _accessView.Columns.ColumnByFieldName(name);
-                if (col is not null)
-                {
-                    col.Visible = false;
-                }
+                return;
+            }
+            col.Visible = visible;
+            if (caption is not null)
+            {
+                col.Caption = caption;
             }
         }
 

@@ -7,10 +7,13 @@ using BackOffice.Model;
 using BackOffice.UC;
 using BackOffice.UC.Persediaan;
 using BackOffice.View;
+using DevExpress.XtraBars;
 using DevExpress.XtraEditors;
+using DevExpress.XtraBars.Navigation;
 using DevExpress.XtraReports.UI;
 using Oracle.ManagedDataAccess.Client;
 using Pos.Shared.Auth;
+using BackOffice.UI;
 
 namespace BackOffice
 {
@@ -19,7 +22,276 @@ namespace BackOffice
         public BackOffice()
         {
             InitializeComponent();
+            ShowLoggedInUser();
             SetupUserManagementMenu();
+            ApplyRoleMenuVisibility();
+            ConfigureSidebar();
+            ConfigureModernShell();
+        }
+
+        private void ShowLoggedInUser()
+        {
+            string username = string.IsNullOrWhiteSpace(LoginInfo.userID)
+                ? "-"
+                : LoginInfo.userID;
+
+            var userItem = new BarStaticItem
+            {
+                Alignment = BarItemLinkAlignment.Right,
+                Caption = $"User: {username}",
+                Name = "barLoggedInUser"
+            };
+
+            fluentDesignFormControl1.Items.Add(userItem);
+            fluentDesignFormControl1.TitleItemLinks.Add(userItem);
+        }
+
+        private void ConfigureSidebar()
+        {
+            accordionControl1.Width = 264;
+            accordionControl1.ResizeMode = AccordionControlResizeMode.None;
+            accordionControl1.ScrollBarMode = ScrollBarMode.Touch;
+            accordionControl1.ShowFilterControl = ShowFilterControl.Auto;
+
+            accordionControlElementDashBoard.Text = "Dashboard";
+            accordionControlElement30.Text = "Pengaturan";
+            accordionControlElement7.Text = "Stok Opname";
+            accordionControlElement15.Text = "Daftar Stok Opname";
+            accordionControlElement16.Text = "Kartu Stok";
+
+            HideUnavailableSidebarItems();
+            ApplySidebarIcons();
+            BackOfficeTheme.StyleSidebar(accordionControl1);
+
+            foreach (AccordionControlElement group in SidebarGroups)
+            {
+                group.Expanded = false;
+            }
+
+            AccordionControlElement? initialGroup = SidebarGroups.FirstOrDefault(group => group.Visible);
+            if (initialGroup is not null)
+            {
+                initialGroup.Expanded = true;
+            }
+
+            accordionControl1.ElementClick += AccordionControl1_ElementClick;
+        }
+
+        private AccordionControlElement[] SidebarGroups =>
+        [
+            Master,
+            accordionControlElement2,
+            Penjualan,
+            Persediaa,
+            accordionControlElement19,
+            accordionControlElement3
+        ];
+
+        private void HideUnavailableSidebarItems()
+        {
+            accordionControlElementDashBoard.Visible = false;
+            accordionControlSeparator1.Visible = false;
+            accordionControlElement9.Visible = false;
+            accordionControlElement33.Visible = false;
+            accordionControlElement23.Visible = false;
+        }
+
+        private void ApplySidebarIcons()
+        {
+            SetSidebarIcon(accordionControlElement10, "▣");
+            SetSidebarIcon(accordionControlElement11, "◆");
+            SetSidebarIcon(accordionControlElement12, "●");
+            SetSidebarIcon(accordionControlElement13, "↔");
+            SetSidebarIcon(accordionControlElement14, "⌂");
+            SetSidebarIcon(accordionControlElement5, "▤");
+
+            SetSidebarIcon(accordionControlElement1, "↓");
+            SetSidebarIcon(accordionControlElement8, "≡");
+
+            SetSidebarIcon(accordionControlElementDaftarPenjualan, "≡");
+            SetSidebarIcon(accordionControlElementTansaksiPending, "∿");
+            SetSidebarIcon(accordionControlElement34, "↗");
+
+            SetSidebarIcon(accordionControlElement24, "!");
+            SetSidebarIcon(accordionControlElement7, "✓");
+            SetSidebarIcon(accordionControlElement15, "≡");
+            SetSidebarIcon(accordionControlElement4, "□");
+            SetSidebarIcon(accordionControlElement16, "#");
+
+            SetSidebarIcon(accordionControlElement32, "$");
+            SetSidebarIcon(accordionControlElement21, "→");
+            SetSidebarIcon(accordionControlElement20, "¤");
+            SetSidebarIcon(accordionControlElement22, "+");
+            SetSidebarIcon(accordionControlElement30, "⚙");
+            SetSidebarIcon(accordionControlElement17, "▤");
+            SetSidebarIcon(accordionControlElement27, "≡");
+            SetSidebarIcon(accordionControlElement29, "↙");
+            SetSidebarIcon(accordionControlElement28, "↙");
+            SetSidebarIcon(accordionControlElement25, "◫");
+
+            SetSidebarIcon(accordionControlElement18, "◷");
+            SetSidebarIcon(acctutupbuku, "✓");
+            SetSidebarIcon(accordionControlElement6, "✓");
+        }
+
+        private static void SetSidebarIcon(
+            AccordionControlElement element,
+            string glyph)
+        {
+            element.ImageOptions.Image = BackOfficeTheme.CreateSidebarIcon(glyph);
+        }
+
+        private void AccordionControl1_ElementClick(object sender, ElementClickEventArgs e)
+        {
+            AccordionControlElement? selectedGroup = FindContainingSidebarGroup(e.Element);
+            if (selectedGroup is null)
+            {
+                return;
+            }
+
+            bool clickedTopLevelGroup = ReferenceEquals(e.Element, selectedGroup);
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed)
+                {
+                    return;
+                }
+
+                if (!clickedTopLevelGroup)
+                {
+                    selectedGroup.Expanded = true;
+                }
+
+                if (!selectedGroup.Expanded)
+                {
+                    return;
+                }
+
+                foreach (AccordionControlElement group in SidebarGroups)
+                {
+                    if (!ReferenceEquals(group, selectedGroup))
+                    {
+                        group.Expanded = false;
+                    }
+                }
+            }));
+        }
+
+        private AccordionControlElement? FindContainingSidebarGroup(AccordionControlElement element)
+        {
+            return SidebarGroups.FirstOrDefault(group =>
+                ReferenceEquals(group, element) || ContainsElement(group, element));
+        }
+
+        private static bool ContainsElement(
+            AccordionControlElement parent,
+            AccordionControlElement target)
+        {
+            foreach (AccordionControlElement child in parent.Elements)
+            {
+                if (ReferenceEquals(child, target) || ContainsElement(child, target))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void ConfigureModernShell()
+        {
+            BackColor = BackOfficeTheme.Canvas;
+            fluentDesignFormContainer.BackColor = BackOfficeTheme.Canvas;
+            fluentDesignFormContainer.Padding = new Padding(16, 16, 16, 0);
+            fluentDesignFormContainer.ControlAdded += ContentContainer_ControlAdded;
+            Resize += (_, _) => UpdateContentBounds();
+            UpdateContentBounds();
+            BackOfficeTheme.Apply(this);
+        }
+
+        private void ContentContainer_ControlAdded(object? sender, ControlEventArgs e)
+        {
+            Control? page = e.Control;
+            if (page == null)
+            {
+                return;
+            }
+
+            page.Margin = Padding.Empty;
+            page.Dock = DockStyle.Fill;
+            page.BringToFront();
+            BackOfficeTheme.Apply(page);
+            BeginInvoke(UpdateContentBounds);
+        }
+
+        private void UpdateContentBounds()
+        {
+            int top = fluentDesignFormControl1.Bottom;
+            int left = accordionControl1.Right;
+
+            fluentDesignFormContainer.Dock = DockStyle.None;
+            fluentDesignFormContainer.Anchor = AnchorStyles.None;
+            fluentDesignFormContainer.SetBounds(
+                left,
+                top,
+                Math.Max(0, ClientSize.Width - left),
+                Math.Max(0, ClientSize.Height - top));
+
+            foreach (Control control in fluentDesignFormContainer.Controls)
+            {
+                control.Margin = Padding.Empty;
+                control.Dock = DockStyle.Fill;
+            }
+        }
+
+        /// <summary>
+        /// Daftar grup menu top-level yang boleh tampil per role.
+        /// Role yang TIDAK terdaftar di sini menampilkan semua menu (mis. ADMIN).
+        /// Nama grup harus cocok dengan label di <see cref="ApplyRoleMenuVisibility"/>.
+        /// </summary>
+        private static readonly Dictionary<string, HashSet<string>> MenuByRole =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PEMBELIAN"] = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    "Master", "Pembelian", "Persediaan"
+                },
+            };
+
+        /// <summary>
+        /// Tampilkan hanya grup menu yang sesuai akses (role) user. Role yang tidak
+        /// terdaftar di <see cref="MenuByRole"/> melihat semua menu.
+        /// </summary>
+        private void ApplyRoleMenuVisibility()
+        {
+            if (LoginInfo.HasFullAccess)
+            {
+                return;
+            }
+
+            if (!MenuByRole.TryGetValue(LoginInfo.role ?? string.Empty, out HashSet<string>? allowed))
+            {
+                return; // role tidak dibatasi -> tampilkan semua menu
+            }
+
+            (string Name, DevExpress.XtraBars.Navigation.AccordionControlElement Element)[] groups =
+            {
+                ("DashBoard",  accordionControlElementDashBoard),
+                ("Master",     Master),
+                ("Pembelian",  accordionControlElement2),
+                ("Penjualan",  Penjualan),
+                ("Persediaan", Persediaa),
+                ("Keuangan",   accordionControlElement19),
+                ("Pengaturan", accordionControlElement3),
+            };
+
+            foreach ((string name, var element) in groups)
+            {
+                element.Visible = allowed.Contains(name);
+            }
+
+            // Separator hanya relevan saat DashBoard tampil.
+            accordionControlSeparator1.Visible = allowed.Contains("DashBoard");
         }
 
         /// <summary>
@@ -27,7 +299,7 @@ namespace BackOffice
         /// </summary>
         private void SetupUserManagementMenu()
         {
-            if (!string.Equals(LoginInfo.role, "ADMIN", StringComparison.OrdinalIgnoreCase))
+            if (!LoginInfo.HasFullAccess)
             {
                 return;
             }
@@ -38,12 +310,13 @@ namespace BackOffice
                 Style = DevExpress.XtraBars.Navigation.ElementStyle.Item,
                 Text = "Manajemen User"
             };
+            SetSidebarIcon(element, "♙");
             element.Click += (_, _) =>
             {
                 using var frm = new View.frmUserManagement();
                 frm.ShowDialog(this);
             };
-            accordionControl1.Elements.Add(element);
+            accordionControlElement3.Elements.Add(element);
         }
         DateTime MAXBULANTAGIHAN;
 
@@ -53,7 +326,9 @@ namespace BackOffice
         /// </summary>
         private static bool HasPembelianAccess()
         {
-            if (LoginInfo.AccessibleApps.Contains(AppIds.Pembelian))
+            if (LoginInfo.HasFullAccess
+                || string.Equals(LoginInfo.role, "PEMBELIAN", StringComparison.OrdinalIgnoreCase)
+                || LoginInfo.AccessibleApps.Contains(AppIds.Pembelian))
             {
                 return true;
             }
@@ -69,6 +344,11 @@ namespace BackOffice
         /// <summary>True jika role user yang login termasuk salah satu <paramref name="roles"/>.</summary>
         private static bool HasRole(params string[] roles)
         {
+            if (LoginInfo.HasFullAccess)
+            {
+                return true;
+            }
+
             foreach (string role in roles)
             {
                 if (string.Equals(LoginInfo.role, role, StringComparison.OrdinalIgnoreCase))
@@ -197,20 +477,7 @@ namespace BackOffice
 
         private void accordionControl1_SizeChanged(object sender, EventArgs e)
         {
-
-            if (accordionControl1.Size.Width == 0)
-            {
-                // Set the position and size of the fluentDesignFormContainer when the accordion is collapsed
-                fluentDesignFormContainer.Dock = DockStyle.Fill;
-            }
-            else
-            {
-                // Set the position and size of the fluentDesignFormContainer when the accordion is expanded
-                fluentDesignFormContainer.Dock = DockStyle.None;
-                fluentDesignFormContainer.Left = accordionControl1.Width + 10;
-                fluentDesignFormContainer.Width = this.ClientSize.Width - accordionControl1.Width - 10;
-                fluentDesignFormContainer.Height = this.ClientSize.Height;
-            }
+            UpdateContentBounds();
         }
 
         private void accordionControlElement13_Click(object sender, EventArgs e)
