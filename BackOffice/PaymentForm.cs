@@ -104,10 +104,23 @@ namespace BackOffice
                     XtraMessageBox.Show("Pembayaran harus lebih besar atau sama dengan", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                SimpanFakturPenjualan("T");
+                try
+                {
+                    SimpanFakturPenjualan("T");
+                }
+                catch (CreditLimitExceededException ex)
+                {
+                    XtraMessageBox.Show(
+                        $"Transaksi tidak dapat disimpan karena limit hutang telah terlampaui.\n\n" +
+                        $"Hutang Saat Ini     : Rp. {ex.CurrentDebt:N0}\n" +
+                        $"Jumlah Faktur Baru  : Rp. {ex.InvoiceAmount:N0}\n" +
+                        $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
+                        "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
                 //cetak
                 CetakFaktur();
-                
+
                 this.DialogResult = DialogResult.OK;
             }
         }
@@ -134,17 +147,30 @@ namespace BackOffice
             FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = ispending;
 
+            // Enforce the member's per-period credit limit server-side (non-cash customers).
+            CreditLimitCheck? creditCheck = null;
+            if (NIK != DEFAULT_CUSTOMER_NIK)
+            {
+                creditCheck = new CreditLimitCheck
+                {
+                    NIK = NIK,
+                    STATUS = STATUS,
+                    TransactionDate = FakturPenjualanHeader.TANGGAL,
+                    InvoiceAmount = FakturPenjualanHeader.TOTAL
+                };
+            }
+
             if (tenor == 1)
             {
-                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan);
+                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan, creditCheck);
             }
             else
             {
-               
+
                 List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
 
-                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang);
-                
+                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang, creditCheck);
+
             }
             if (PendingFaktur)
             {

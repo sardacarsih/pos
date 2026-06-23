@@ -238,25 +238,45 @@ namespace Penjualan.DataLayer
             return productInfo;
         }
 
-        public void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header)
+        public void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header, CreditLimitCheck? creditCheck = null)
         {
             using OracleConnection connection = new(Global.connectionString);
+            connection.Open();
+            using OracleTransaction transaction = connection.BeginTransaction();
 
-            connection.Execute(@"UPDATE POS_PENJUALAN
-                        SET NIK = :newNik, ID_PELANGGAN = :newID,
-                            NAMA_PELANGGAN = :newNamaPelanggan,
-                            STATUS = :newStatus,
-                            UNIT_KERJA = :newUnitKerja
-                        WHERE NO_TRANSAKSI = :transactionNumber",
-                new
+            try
+            {
+                // Re-validate the credit limit when reassigning the faktur to a credit
+                // member. The faktur still carries its previous NIK at this point, so the
+                // target member's period spend does not yet include it.
+                if (creditCheck != null)
                 {
-                    newNik = faktur_header.NIK,
-                    newID = faktur_header.ID_PELANGGAN,
-                    newNamaPelanggan = faktur_header.NAMA_PELANGGAN,
-                    newStatus = faktur_header.STATUS,
-                    newUnitKerja = faktur_header.UNIT_KERJA,
-                    transactionNumber = faktur_header.NO_TRANSAKSI
-                });
+                    ValidateCreditLimit(connection, transaction, creditCheck);
+                }
+
+                connection.Execute(@"UPDATE POS_PENJUALAN
+                            SET NIK = :newNik, ID_PELANGGAN = :newID,
+                                NAMA_PELANGGAN = :newNamaPelanggan,
+                                STATUS = :newStatus,
+                                UNIT_KERJA = :newUnitKerja
+                            WHERE NO_TRANSAKSI = :transactionNumber",
+                    new
+                    {
+                        newNik = faktur_header.NIK,
+                        newID = faktur_header.ID_PELANGGAN,
+                        newNamaPelanggan = faktur_header.NAMA_PELANGGAN,
+                        newStatus = faktur_header.STATUS,
+                        newUnitKerja = faktur_header.UNIT_KERJA,
+                        transactionNumber = faktur_header.NO_TRANSAKSI
+                    }, transaction);
+
+                transaction.Commit();
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
         public string GenerateTransactionNumber(DateTime date)
