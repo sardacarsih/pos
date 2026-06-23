@@ -155,6 +155,7 @@ namespace Penjualan.UC
 
         private void ucPenjualan_Load(object sender, EventArgs e)
         {
+            txtkasir.Text = LoginInfo.userID;
             NewTransaction();
             // Assuming gridView1 is your GridView instance
             gridView1.Columns["No"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
@@ -507,7 +508,8 @@ namespace Penjualan.UC
                 NO_TRANSAKSI = txtnotransaksi.Text,
                 TANGGAL = Convert.ToDateTime(detanggal.Text),
                 JAM = txtjam.Text,
-                KASIR = txtkasir.Text,
+                KASIR = LoginInfo.userID,
+                NAMA_KASIR = LoginInfo.FullName,
                 BRUTO = Bruto,
                 POTONGAN = Potongan,
                 TOTAL = Total
@@ -550,7 +552,7 @@ namespace Penjualan.UC
                 NO_TRANSAKSI = txtnotransaksi.Text,
                 TANGGAL = Convert.ToDateTime(detanggal.Text),
                 JAM = txtjam.Text,
-                KASIR = txtkasir.Text
+                KASIR = LoginInfo.userID
             };
             //delete if exist
             controller.DeletePendingFaktur(FakturPenjualanHeader.NO_TRANSAKSI);

@@ -153,10 +153,12 @@ namespace BackOffice.UC
             var SupplierID = gridView1.GetRowCellValue(rowhandle, "SUPPLIER_ID").ToString();
             var Nama = gridView1.GetRowCellValue(rowhandle, "NAMA_SUPPLIER").ToString();           
             var Termin = Convert.ToInt16(gridView1.GetRowCellValue(rowhandle, "TERMIN").ToString());
-            UbahFakturPembelian(Nomor, Tanggal, SupplierID, Nama, Termin);
+            var Userid = gridView1.GetRowCellValue(rowhandle, "USERID")?.ToString();
+            var NamaUser = gridView1.GetRowCellValue(rowhandle, "NAMA_USER")?.ToString();
+            UbahFakturPembelian(Nomor, Tanggal, SupplierID, Nama, Termin, Userid, NamaUser);
         }
 
-        private void UbahFakturPembelian(string? nomor, DateTime tanggal, string? supplierID, string? nama, short termin)
+        private void UbahFakturPembelian(string? nomor, DateTime tanggal, string? supplierID, string? nama, short termin, string? userid, string? namaUser)
         {
             try
             {
@@ -169,6 +171,8 @@ namespace BackOffice.UC
                     BRUTO = 0,
                     POTONGAN = 0,
                     TOTAL = 0,
+                    USERID = userid,
+                    NAMA_USER = namaUser,
                 };
 
 
@@ -264,6 +268,7 @@ namespace BackOffice.UC
                 ////MASTER
                 gridView1.Columns["PURCHASE_ID"].VisibleIndex = -1;
                 gridView1.Columns["USERID"].VisibleIndex = -1;
+                gridView1.Columns["NAMA_USER"].VisibleIndex = -1;
                 gridView1.Columns["BRUTO"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
                 gridView1.Columns["BRUTO"].DisplayFormat.FormatString = "N0";
                 gridView1.Columns["POTONGAN"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;

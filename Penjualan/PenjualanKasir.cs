@@ -21,6 +21,24 @@ namespace Penjualan
         public PenjualanKasir()
         {
             InitializeComponent();
+            ShowLoggedInUser();
+        }
+
+        private void ShowLoggedInUser()
+        {
+            string username = string.IsNullOrWhiteSpace(LoginInfo.userID)
+                ? "-"
+                : LoginInfo.userID;
+
+            var userItem = new BarStaticItem
+            {
+                Alignment = BarItemLinkAlignment.Right,
+                Caption = $"User: {username}",
+                Name = "barLoggedInUser"
+            };
+
+            fluentDesignFormControl1.Items.Add(userItem);
+            fluentDesignFormControl1.TitleItemLinks.Add(userItem);
         }
 
 
