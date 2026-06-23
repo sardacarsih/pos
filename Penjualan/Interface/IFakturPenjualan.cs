@@ -7,7 +7,7 @@ namespace Penjualan.Interface
         void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null);
         void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null, string? pendingNoTransaksi = null);
         string GenerateTransactionNumber(DateTime date);
-        void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header);
+        void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header, CreditLimitCheck? creditCheck = null);
         DTOProductInfo RetrieveProductInfo(string barcode);
         decimal GetStocItem(string kodeBarang, DateTime startDate, DateTime endDate);
         bool GetSettingKontrol_qty_Saldo();
