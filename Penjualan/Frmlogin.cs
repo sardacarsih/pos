@@ -158,6 +158,12 @@ public partial class Frmlogin : XtraForm
     {
         if (keyData == Keys.Enter)
         {
+            // Username is required first: if it's blank, keep focus there.
+            if (string.IsNullOrWhiteSpace(txtuserid.Text))
+            {
+                txtuserid.Focus();
+                return true;
+            }
             // DevExpress editors host an inner edit control that actually holds focus,
             // so the editor's own .Focused is false while typing; use ContainsFocus.
             if (txtuserid.ContainsFocus)
