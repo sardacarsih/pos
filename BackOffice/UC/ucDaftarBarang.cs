@@ -32,6 +32,9 @@ namespace BackOffice.UC
         public ucDaftarBarang()
         {
             InitializeComponent();
+            // Opt this grid into column-fill; the theme honors this tag and the
+            // global default (fixed widths) stays untouched for other grids.
+            gridControl1.Tag = "ui-fill-columns";
         }
         private void ucDaftarBarang_Load(object sender, EventArgs e)
         {
@@ -43,9 +46,6 @@ namespace BackOffice.UC
             DaftarBarang = controller.GetBarang(isaktif);
             DaftarDiskon = controller.GetDiskon();
             gridControl1.DataSource = DaftarBarang;
-            // Stretch columns to fill the full grid width (no empty gap on the right).
-            // With this on, the explicit widths below act as relative weights.
-            gridView1.OptionsView.ColumnAutoWidth = true;
             gridView1.Columns[0].Visible = false;
             gridView1.Columns["KATEGORI"].Visible = false;
             gridView1.Columns["KATEGORI_ID"].Visible = false;
