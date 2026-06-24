@@ -31,7 +31,6 @@ namespace BackOffice.UC
         public ucDaftarPembelian()
         {
             InitializeComponent();
-            
         }
 
 
