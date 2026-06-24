@@ -146,7 +146,6 @@ namespace Penjualan
             txtuserid.Properties.NullValuePromptShowForEmptyValue = true;
             txtuserid.Size = new Size(268, 50);
             txtuserid.TabIndex = 0;
-            txtuserid.KeyDown += txtuserid_KeyDown;
 
             lblPassword.BackColor = Color.Transparent;
             lblPassword.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
@@ -174,7 +173,6 @@ namespace Penjualan
             txtpwd.Properties.UseSystemPasswordChar = true;
             txtpwd.Size = new Size(268, 50);
             txtpwd.TabIndex = 1;
-            txtpwd.KeyDown += txtpwd_KeyDown;
 
             passwordEyeButton.Dock = DockStyle.Right;
             passwordEyeButton.Location = new Point(316, 2);

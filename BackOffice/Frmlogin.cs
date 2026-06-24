@@ -153,22 +153,24 @@ public partial class Frmlogin : XtraForm
         txtpwd.SelectionStart = txtpwd.Text.Length;
     }
 
-    private void txtuserid_KeyDown(object sender, KeyEventArgs e)
+    // DevExpress editors treat Enter as a dialog key, so the editors' own KeyDown never
+    // fires for it. Intercept Enter at the form level instead: Username -> Password -> Login.
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (e.KeyCode == Keys.Enter)
+        if (keyData == Keys.Enter)
         {
-            txtpwd.Focus();
-            e.SuppressKeyPress = true;
+            if (txtuserid.Focused)
+            {
+                txtpwd.Focus();
+                return true;
+            }
+            if (txtpwd.Focused)
+            {
+                Login.PerformClick();
+                return true;
+            }
         }
-    }
-
-    private void txtpwd_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.KeyCode == Keys.Enter)
-        {
-            Login.PerformClick();
-            e.SuppressKeyPress = true;
-        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void Login_Click(object sender, EventArgs e)
