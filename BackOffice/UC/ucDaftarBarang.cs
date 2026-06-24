@@ -32,9 +32,6 @@ namespace BackOffice.UC
         public ucDaftarBarang()
         {
             InitializeComponent();
-            // Opt this grid into column-fill; the theme honors this tag and the
-            // global default (fixed widths) stays untouched for other grids.
-            gridControl1.Tag = "ui-fill-columns";
         }
         private void ucDaftarBarang_Load(object sender, EventArgs e)
         {

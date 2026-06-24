@@ -23,8 +23,6 @@ namespace BackOffice.UC
         public ucSupplier()
         {
             InitializeComponent();
-            // Stretch columns to fill the grid width (theme honors this tag).
-            gridControl1.Tag = "ui-fill-columns";
         }
 
         private void ucSupplier_Load(object sender, EventArgs e)
