@@ -87,10 +87,23 @@ namespace Penjualan
                 {
                     return;
                 }
-                SimpanFakturPenjualan();
+                try
+                {
+                    SimpanFakturPenjualan();
+                }
+                catch (CreditLimitExceededException ex)
+                {
+                    XtraMessageBox.Show(
+                        $"Faktur tidak dapat dipindahkan karena limit hutang pelanggan telah terlampaui.\n\n" +
+                        $"Hutang Saat Ini     : Rp. {ex.CurrentDebt:N0}\n" +
+                        $"Jumlah Faktur       : Rp. {ex.InvoiceAmount:N0}\n" +
+                        $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
+                        "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
                 //cetak
                 //CetakFaktur();
-                XtraMessageBox.Show("Faktur Penjualan berhaisl diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Faktur Penjualan berhasil diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.DialogResult = DialogResult.OK;
             }
         }
@@ -115,7 +128,21 @@ namespace Penjualan
             FakturPenjualanHeader.UNIT_KERJA = UNIT_KERJA;
             FakturPenjualanHeader.TENOR = tenor;
             FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
-            
+
+            // Re-check the target member's per-period credit limit before reassigning the
+            // faktur. The limit and period window are resolved server-side in the txn.
+            CreditLimitCheck? creditCheck = null;
+            if (NIK != Global.DefaultCustomerNIK)
+            {
+                creditCheck = new CreditLimitCheck
+                {
+                    NIK = NIK,
+                    STATUS = STATUS,
+                    TransactionDate = FakturPenjualanHeader.TANGGAL,
+                    InvoiceAmount = FakturPenjualanHeader.TOTAL
+                };
+            }
+
 
             //if (tenor == 1)
             //{
@@ -130,7 +157,7 @@ namespace Penjualan
                 
             //}
             
-            POS_Services.UpdateFakturPenjualan(FakturPenjualanHeader);
+            POS_Services.UpdateFakturPenjualan(FakturPenjualanHeader, creditCheck);
 
         }
         private void CetakFaktur()

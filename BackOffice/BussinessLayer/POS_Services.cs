@@ -31,13 +31,17 @@ namespace BackOffice.BussinessLayer
             return repository.Penjualan_Tunai(p_periode, p_remise);
         }
 
-        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan)
+        public static void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null)
         {
-            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan);
+            repository.InsertFaktur_Penjualan(faktur_header, ListItemsPenjualan, creditCheck);
         }
-        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan)
+        public static void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null)
         {
-            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan);
+            repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan, creditCheck);
+        }
+        public static decimal GetPeriodCreditSpend(string nik, string status, DateTime date, string? excludeNoTransaksi = null)
+        {
+            return repository.GetPeriodCreditSpend(nik, status, date, excludeNoTransaksi);
         }
         public static void UpdateTransactionNumber(string transactionNumber)
         {
