@@ -56,5 +56,10 @@ namespace Penjualan.BusinessLayer
         {
             return repository.GetPeriodCreditSpend(nik, status, date);
         }
+        /// <summary>Null when a transaction on the date is allowed, otherwise the rejection reason.</summary>
+        public static string? CekPeriodeTransaksi(DateTime tanggal, string? status = null)
+        {
+            return repository.CekPeriodeTransaksi(tanggal, status);
+        }
     }
 }

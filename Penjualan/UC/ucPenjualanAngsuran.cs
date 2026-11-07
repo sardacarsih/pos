@@ -556,6 +556,10 @@ namespace Penjualan.UC
                     $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
                     "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            catch (PeriodeTidakValidException ex)
+            {
+                XtraMessageBox.Show(ex.Message, "Periode Tidak Valid", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
 

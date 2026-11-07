@@ -106,6 +106,11 @@ namespace Penjualan
                         $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
                         "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
+                catch (PeriodeTidakValidException ex)
+                {
+                    sbsimpancetak.Enabled = false;
+                    XtraMessageBox.Show(ex.Message, "Periode Tidak Valid", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
@@ -307,13 +312,18 @@ namespace Penjualan
                     }
                 }
             }
+            catch (PeriodeTidakValidException ex)
+            {
+                sbsimpancetak.Enabled = false;
+                XtraMessageBox.Show(ex.Message, "Periode Tidak Valid", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             catch (Exception ex)
             {
                 XtraMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        
+
 
         private void PelangganTextBox_KeyDown(object sender, KeyEventArgs e)
         {

@@ -72,17 +72,21 @@ namespace Penjualan.Tests.Integration
         }
 
         /// <summary>Seeds a POS_PERIODE row. Dates are stored as 'DD-MON-YYYY' strings, as in production.</summary>
-        public void SeedPeriode(int periode, DateTime remiseFrom, DateTime remiseTo, DateTime bulananFrom, DateTime bulananTo)
+        public void SeedPeriode(int periode, DateTime remiseFrom, DateTime remiseTo, DateTime bulananFrom, DateTime bulananTo,
+            bool remise1Tutup = false, bool remise2Tutup = false, bool bulananTutup = false)
         {
             using var conn = Open();
             Exec(conn,
-                @"INSERT INTO POS_PERIODE (PERIODE, R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI)
-                  VALUES (:p, :r1d, :r1s, :r2d, :r2s, :bd, :bs)",
+                @"INSERT INTO POS_PERIODE (PERIODE, R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI, REMISE1, REMISE2, BULANAN)
+                  VALUES (:p, :r1d, :r1s, :r2d, :r2s, :bd, :bs, :f1, :f2, :fb)",
                 ("p", periode),
                 ("r1d", Fmt(remiseFrom)), ("r1s", Fmt(remiseTo)),
                 ("r2d", Fmt(remiseFrom)), ("r2s", Fmt(remiseTo)),
-                ("bd", Fmt(bulananFrom)), ("bs", Fmt(bulananTo)));
+                ("bd", Fmt(bulananFrom)), ("bs", Fmt(bulananTo)),
+                ("f1", Flag(remise1Tutup)), ("f2", Flag(remise2Tutup)), ("fb", Flag(bulananTutup)));
         }
+
+        private static string Flag(bool tutup) => tutup ? "Y" : "T";
 
         public void SeedSale(string nik, DateTime tanggal, decimal total)
         {
@@ -105,7 +109,8 @@ namespace Penjualan.Tests.Integration
                 PERIODE NUMBER PRIMARY KEY,
                 R1DARI VARCHAR2(20), R1SAMPAI VARCHAR2(20),
                 R2DARI VARCHAR2(20), R2SAMPAI VARCHAR2(20),
-                BDARI VARCHAR2(20), BSAMPAI VARCHAR2(20))");
+                BDARI VARCHAR2(20), BSAMPAI VARCHAR2(20),
+                REMISE1 VARCHAR2(1), REMISE2 VARCHAR2(1), BULANAN VARCHAR2(1))");
             Exec(conn, "CREATE TABLE POS_PENJUALAN (NIK VARCHAR2(20), TANGGAL DATE, TOTAL NUMBER)");
         }
 

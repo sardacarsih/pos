@@ -131,12 +131,12 @@ namespace Penjualan.Tests.Integration
 
             // BULANAN -> Dec window -> sale counts -> 800,000 + 300,000 = 1,100,000 > limit.
             Assert.IsType<CreditLimitExceededException>(RunValidation(Check(300_000, status: "BULANAN")));
-            // Sanity: same data under remise status uses the Jan window, so the Dec sale is ignored.
-            Assert.Null(RunValidation(Check(300_000, status: "REMISE")));
+            // Same data under remise status: no remise range covers 10-Dec -> rejected, not skipped.
+            Assert.IsType<PeriodeTidakValidException>(RunValidation(Check(300_000, status: "REMISE")));
         }
 
         [SkippableFact]
-        public void MissingPeriodConfig_SkipsEnforcement()
+        public void MissingPeriodConfig_Rejects()
         {
             Skip.IfNot(_fx.Available, _fx.SkipReason);
             _fx.ClearData();
@@ -144,8 +144,40 @@ namespace Penjualan.Tests.Integration
             // No POS_PERIODE row for the period.
             _fx.SeedSale(Nik, TxnDate, 999_999);
 
-            // Window cannot be resolved -> validation is skipped (documents current behavior).
-            Assert.Null(RunValidation(Check(999_999)));
+            // Window cannot be resolved -> the sale is rejected instead of silently skipping the limit.
+            Assert.IsType<PeriodeTidakValidException>(RunValidation(Check(999_999)));
+        }
+
+        [SkippableFact]
+        public void NonCalendarPeriod_CountsFrom26thOfPreviousMonth()
+        {
+            Skip.IfNot(_fx.Available, _fx.SkipReason);
+            _fx.ClearData();
+            _fx.SeedMember(Nik, 1_000_000);
+            var from = new DateTime(2099, 11, 26);
+            var to = new DateTime(2099, 12, 25);
+            _fx.SeedPeriode(Periode, from, to, from, to);
+            _fx.SeedSale(Nik, new DateTime(2099, 11, 27), 600_000);   // calendar Nov, but inside the Dec period
+            _fx.SeedSale(Nik, new DateTime(2099, 11, 20), 9_999_999); // before the period — ignored
+
+            Assert.Null(RunValidation(Check(400_000, status: "BULANAN")));      // 600k + 400k == limit
+            var ex = Assert.IsType<CreditLimitExceededException>(RunValidation(Check(400_001, status: "BULANAN")));
+            Assert.Equal(600_000m, ex.CurrentDebt);
+        }
+
+        [SkippableFact]
+        public void ClosedPeriod_RejectsTransaction()
+        {
+            Skip.IfNot(_fx.Available, _fx.SkipReason);
+            _fx.ClearData();
+            _fx.SeedPeriode(Periode, DecFrom, DecTo, DecFrom, DecTo, remise1Tutup: true);
+
+            using var conn = _fx.Open();
+            using var tx = conn.BeginTransaction();
+            var ex = Record.Exception(() => FakturPenjualan.ValidatePeriodeTerbuka(conn, tx, TxnDate, "REMISE"));
+            tx.Rollback();
+
+            Assert.IsType<PeriodeTidakValidException>(ex);
         }
 
         [SkippableFact]

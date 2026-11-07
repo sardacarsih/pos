@@ -10,6 +10,12 @@ namespace Penjualan.Model
         public decimal InvoiceAmount { get; set; }
     }
 
+    /// <summary>The transaction date has no configured or open period in POS_PERIODE.</summary>
+    public class PeriodeTidakValidException : Exception
+    {
+        public PeriodeTidakValidException(string message) : base(message) { }
+    }
+
     public class CreditLimitExceededException : Exception
     {
         public decimal CurrentDebt { get; }

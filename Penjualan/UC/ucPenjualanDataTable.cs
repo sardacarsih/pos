@@ -441,32 +441,16 @@ namespace Penjualan.UC
 
         private void blbibayar_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));
-            int remise;
-            if (tgl <= 15)
+            var tanggal = Convert.ToDateTime(detanggal.Text);
+            var periode = tanggal.Year * 100 + tanggal.Month;
+            string? alasanPeriode = POS_Services.CekPeriodeTransaksi(tanggal);
+            if (alasanPeriode != null)
             {
-                remise = 1;
-            }
-            else
-            {
-                remise = 2;
-            }
-            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
-            if (tutup)
-            {
-                XtraMessageBox.Show("Periode telah ditutup,transaksi tidak dapat dilakukan","Info",MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show(alasanPeriode, "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             MaxPeriodeFinder periodemax = new();
             var maxperiode = periodemax.GetMaxPeriode();
-            if(periode> maxperiode)
-            {
-                XtraMessageBox.Show("Input transaksi dibatasi pada periode yang valid", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
             if (maxperiode- periode >= 2)
             {
                 XtraMessageBox.Show("Input transaksi mundur ditolak", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);

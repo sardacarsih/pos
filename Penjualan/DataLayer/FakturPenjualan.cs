@@ -100,6 +100,8 @@ namespace Penjualan.DataLayer
 
             try
             {
+                ValidatePeriodeTerbuka(conn, transaction, faktur_header.TANGGAL, faktur_header.STATUS);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -153,6 +155,8 @@ namespace Penjualan.DataLayer
 
             try
             {
+                ValidatePeriodeTerbuka(conn, transaction, faktur_header.TANGGAL, faktur_header.STATUS);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -314,46 +318,85 @@ namespace Penjualan.DataLayer
             }
         }
 
-        // Resolve the member's accounting-period window from POS_PERIODE for the period
-        // (yyyyMM) of the given date. BULANAN members use the monthly window (BDARI..BSAMPAI);
-        // remise members use the full remise span (R1DARI..R2SAMPAI). Returns null when the
-        // period is not configured.
-        private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
-            OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
+        // Load the POS_PERIODE rows around the date (previous, same and next yyyyMM). The period a
+        // date belongs to is then picked by configured range (PeriodeResolver), not calendar month,
+        // so non-calendar periods (e.g. 26th..25th) resolve to the right row.
+        internal static List<PeriodeRow> LoadPeriodeSekitar(OracleConnection conn, OracleTransaction? transaction, DateTime date)
         {
-            int periode = date.Year * 100 + date.Month;
-            bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
+            static int Ym(DateTime d) => d.Year * 100 + d.Month;
 
-            string sql = bulanan
-                ? @"SELECT TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
-                           TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
-                    FROM POS_PERIODE WHERE PERIODE = :periode"
-                : @"SELECT TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
-                           TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
-                    FROM POS_PERIODE WHERE PERIODE = :periode";
+            const string sql = @"
+                SELECT PERIODE,
+                       TO_DATE(R1DARI,   'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') R1DARI,
+                       TO_DATE(R1SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') R1SAMPAI,
+                       TO_DATE(R2DARI,   'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') R2DARI,
+                       TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') R2SAMPAI,
+                       TO_DATE(BDARI,    'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') BDARI,
+                       TO_DATE(BSAMPAI,  'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') BSAMPAI,
+                       REMISE1, REMISE2, BULANAN
+                FROM POS_PERIODE
+                WHERE PERIODE IN (:p0, :p1, :p2)
+                ORDER BY PERIODE";
 
-            using var cmd = new OracleCommand(sql, conn);
+            using var cmd = new OracleCommand(sql, conn) { BindByName = true };
             if (transaction != null) cmd.Transaction = transaction;
-            cmd.Parameters.Add("periode", OracleDbType.Int32).Value = periode;
+            cmd.Parameters.Add("p0", OracleDbType.Int32).Value = Ym(date.AddMonths(-1));
+            cmd.Parameters.Add("p1", OracleDbType.Int32).Value = Ym(date);
+            cmd.Parameters.Add("p2", OracleDbType.Int32).Value = Ym(date.AddMonths(1));
 
+            static DateTime? D(OracleDataReader r, string col) =>
+                r.IsDBNull(r.GetOrdinal(col)) ? null : r.GetDateTime(r.GetOrdinal(col));
+            static bool Y(OracleDataReader r, string col) =>
+                string.Equals(r[col]?.ToString()?.Trim(), "Y", StringComparison.OrdinalIgnoreCase);
+
+            var rows = new List<PeriodeRow>();
             using var reader = cmd.ExecuteReader();
-            if (reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1))
+            while (reader.Read())
             {
-                return (reader.GetDateTime(0), reader.GetDateTime(1));
+                rows.Add(new PeriodeRow
+                {
+                    Periode = Convert.ToInt32(reader["PERIODE"]),
+                    R1Dari = D(reader, "R1DARI"),
+                    R1Sampai = D(reader, "R1SAMPAI"),
+                    R2Dari = D(reader, "R2DARI"),
+                    R2Sampai = D(reader, "R2SAMPAI"),
+                    BDari = D(reader, "BDARI"),
+                    BSampai = D(reader, "BSAMPAI"),
+                    Remise1Tutup = Y(reader, "REMISE1"),
+                    Remise2Tutup = Y(reader, "REMISE2"),
+                    BulananTutup = Y(reader, "BULANAN")
+                });
             }
-            return null;
+            return rows;
         }
 
-        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window.
+        // Rejects a faktur whose date has no configured period or falls in a closed one.
+        internal static void ValidatePeriodeTerbuka(OracleConnection conn, OracleTransaction transaction, DateTime tanggal, string? status)
+        {
+            var alasan = PeriodeResolver.AlasanTolak(LoadPeriodeSekitar(conn, transaction, tanggal), tanggal, status);
+            if (alasan != null)
+                throw new PeriodeTidakValidException(alasan);
+        }
+
+        // Credit window for the member, or throws when the date is not covered by any period.
+        private static (DateTime Dari, DateTime Sampai) ResolveCreditWindow(
+            OracleConnection conn, OracleTransaction? transaction, DateTime date, string? status)
+        {
+            var window = PeriodeResolver.CreditWindow(LoadPeriodeSekitar(conn, transaction, date), date, status);
+            return window ?? throw new PeriodeTidakValidException(
+                $"Tanggal {date:dd-MM-yyyy} belum masuk periode manapun di Setting Periode. Hubungi admin.");
+        }
+
+        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window (whole days).
         private static decimal SumPeriodSpend(
             OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai)
         {
             using var cmd = new OracleCommand(
-                "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL BETWEEN :Dari AND :Sampai", conn);
+                "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL >= :Dari AND TANGGAL < :SampaiPlus1", conn);
             if (transaction != null) cmd.Transaction = transaction;
             cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
-            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
-            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
+            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari.Date;
+            cmd.Parameters.Add("SampaiPlus1", OracleDbType.Date).Value = sampai.Date.AddDays(1);
             return Convert.ToDecimal(cmd.ExecuteScalar());
         }
 
@@ -364,9 +407,16 @@ namespace Penjualan.DataLayer
             using var connection = new OracleConnection(Global.connectionString);
             connection.Open();
 
-            var window = ResolvePeriodWindow(connection, null, date, status);
-            if (window == null) return 0m;
-            return SumPeriodSpend(connection, null, nik, window.Value.Dari, window.Value.Sampai);
+            var window = ResolveCreditWindow(connection, null, date, status);
+            return SumPeriodSpend(connection, null, nik, window.Dari, window.Sampai);
+        }
+
+        // Non-locking UI check: null when a transaction on the date is allowed, else the reason.
+        public string? CekPeriodeTransaksi(DateTime tanggal, string? status)
+        {
+            using var connection = new OracleConnection(Global.connectionString);
+            connection.Open();
+            return PeriodeResolver.AlasanTolak(LoadPeriodeSekitar(connection, null, tanggal), tanggal, status);
         }
 
         internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck)
@@ -391,12 +441,11 @@ namespace Penjualan.DataLayer
                 return;
 
             // Per-period spending cap: existing credit spend in the period + this invoice
-            // must not exceed the limit. The cap resets each period.
-            var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
-            if (window == null)
-                return; // period not configured — cannot evaluate the window
+            // must not exceed the limit. The cap resets each period. An unconfigured period
+            // rejects the sale instead of silently skipping the check.
+            var window = ResolveCreditWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
 
-            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
+            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Dari, window.Sampai);
 
             if (CreditLimitPolicy.IsExceeded(periodSpend, creditCheck.InvoiceAmount, limit))
             {

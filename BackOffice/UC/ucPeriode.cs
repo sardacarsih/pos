@@ -33,6 +33,7 @@ namespace BackOffice.UC
             ConfigurePageLayout();
             gridView1.CellValueChanged += GridView1_CellValueChanged;
             gridView1.ValidateRow += GridView1_ValidateRow;
+            gridView1.ShowingEditor += GridView1_ShowingEditor;
             setahun.EditValueChanged += Setahun_EditValueChanged;
         }
 
@@ -143,25 +144,41 @@ namespace BackOffice.UC
                 var periode = periodeList[rowHandle];
                 var columnName = e.Column.FieldName;
                 var newValue = e.Value;
+                var oldValue = GetPeriodeValue(periode, columnName);
 
                 // Update the DTO based on the column changed
                 UpdatePeriodeDTO(periode, columnName, newValue);
 
-                // Validate the changes
-                var validationErrors = periode.Validate();
-                if (validationErrors.Any())
-                {
-                    MessageBox.Show(string.Join("\n", validationErrors), "Validation Error",
-                                  MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    view.RefreshData();
-                    return;
-                }
-
-                // Update database
                 using (var dal = new PeriodeDAL())
                 {
+                    var validationErrors = periode.Validate();
+                    if (validationErrors.Any())
+                    {
+                        MessageBox.Show(string.Join("\n", validationErrors), "Validation Error",
+                                      MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        // Discard the invalid in-memory edit
+                        LoadList_Periode();
+                        return;
+                    }
+
+                    // Continuity with Remise I/II and the adjacent months: warn, let the admin decide
+                    var peringatan = PeriodeDTO.PeriksaKesinambungan(
+                        periode, FindPeriode(dal, periode.Periode, -1), FindPeriode(dal, periode.Periode, 1));
+                    if (peringatan.Any() &&
+                        MessageBox.Show(string.Join("\n", peringatan) +
+                                        "\n\nTanggal yang tumpang tindih atau berlubang membuat transaksi kasir ditolak/terhitung ganda." +
+                                        "\nTetap simpan?",
+                                        "Periode Tidak Bersambung", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    {
+                        LoadList_Periode();
+                        return;
+                    }
+
+                    // Update database
                     if (dal.UpdatePeriode(periode))
                     {
+                        Log.Information("Setting Periode {Periode} {Kolom} diubah dari {Lama} ke {Baru} oleh {User}",
+                            periode.Periode, columnName, oldValue, GetPeriodeValue(periode, columnName), LoginInfo.userID);
                         // Success - refresh the specific row
                         view.RefreshRow(rowHandle);
                     }
@@ -179,6 +196,51 @@ namespace BackOffice.UC
 
                 // Refresh data to show original values
                 LoadList_Periode();
+            }
+        }
+
+        // Adjacent month (offset -1/+1) from the loaded year, or from the DB across a year boundary.
+        private PeriodeDTO? FindPeriode(PeriodeDAL dal, int periode, int offset)
+        {
+            var target = new DateTime(periode / 100, periode % 100, 1).AddMonths(offset);
+            int p = target.Year * 100 + target.Month;
+            return periodeList.FirstOrDefault(x => x.Periode == p) ?? dal.GetPeriode(p);
+        }
+
+        private static object? GetPeriodeValue(PeriodeDTO p, string columnName) => columnName.ToUpper() switch
+        {
+            "R1DARI" => p.R1Dari,
+            "R1SAMPAI" => p.R1Sampai,
+            "R2DARI" => p.R2Dari,
+            "R2SAMPAI" => p.R2Sampai,
+            "BDARI" => p.BDari,
+            "BSAMPAI" => p.BSampai,
+            _ => null
+        };
+
+        // Closing flags are set only by Tutup Buku; dates of a closed segment are locked.
+        private void GridView1_ShowingEditor(object? sender, CancelEventArgs e)
+        {
+            if (sender is not GridView view || view.FocusedColumn == null)
+                return;
+
+            var field = view.FocusedColumn.FieldName.ToUpper();
+            if (field is "REMISE1" or "REMISE2" or "BULANAN")
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (view.GetFocusedRow() is not PeriodeDTO p)
+                return;
+
+            static bool Tutup(string flag) => string.Equals(flag?.Trim(), "Y", StringComparison.OrdinalIgnoreCase);
+
+            if ((field.StartsWith("R1") && Tutup(p.Remise1)) ||
+                (field.StartsWith("R2") && Tutup(p.Remise2)) ||
+                (field.StartsWith("B") && Tutup(p.Bulanan)))
+            {
+                e.Cancel = true;
             }
         }
 
@@ -433,19 +495,8 @@ namespace BackOffice.UC
                     }
                 }
 
-                // Make text columns editable
-                string[] textColumns = { "Remise1", "Remise2", "Bulanan" };
-                foreach (var colName in textColumns)
-                {
-                    if (gridView.Columns[colName] != null)
-                    {
-                        gridView.Columns[colName].OptionsColumn.AllowEdit = true;
-                        gridView.Columns[colName].OptionsColumn.ReadOnly = false;
-                    }
-                }
-
-                // Make read-only columns
-                string[] readOnlyColumns = { "Periode", "Bulan" };
+                // Read-only columns. Closing flags (Remise1/Remise2/Bulanan) change only via Tutup Buku.
+                string[] readOnlyColumns = { "Periode", "Bulan", "Remise1", "Remise2", "Bulanan" };
                 foreach (var colName in readOnlyColumns)
                 {
                     if (gridView.Columns[colName] != null)
@@ -506,6 +557,39 @@ namespace BackOffice.UC
 
             return errors;
         }
+
+        /// <summary>
+        /// Continuity warnings: Remise II starts the day after Remise I, and each period starts the
+        /// day after the adjacent one ends (no overlap, no gap). Only pairs where both dates are
+        /// filled are checked. Returned as warnings, not hard errors: shifting boundaries
+        /// (e.g. calendar → 26th..25th) always passes through an intermediate state.
+        /// </summary>
+        public static List<string> PeriksaKesinambungan(PeriodeDTO cur, PeriodeDTO? prev, PeriodeDTO? next)
+        {
+            var errors = new List<string>();
+
+            if (cur.R1Sampai.HasValue && cur.R2Dari.HasValue && cur.R2Dari.Value.Date != cur.R1Sampai.Value.Date.AddDays(1))
+                errors.Add($"Periode {cur.Periode}: R2 Dari seharusnya {cur.R1Sampai.Value.AddDays(1):dd MMM yyyy} (sehari setelah R1 Sampai)");
+
+            void Sambung(DateTime? akhirSebelum, DateTime? awalSesudah, string label, int pSebelum, int pSesudah)
+            {
+                if (akhirSebelum.HasValue && awalSesudah.HasValue && awalSesudah.Value.Date != akhirSebelum.Value.Date.AddDays(1))
+                    errors.Add($"{label}: periode {pSesudah} seharusnya mulai {akhirSebelum.Value.AddDays(1):dd MMM yyyy} " +
+                               $"(sehari setelah akhir periode {pSebelum})");
+            }
+
+            if (prev != null)
+            {
+                Sambung(prev.R2Sampai, cur.R1Dari, "Remise", prev.Periode, cur.Periode);
+                Sambung(prev.BSampai, cur.BDari, "Bulanan", prev.Periode, cur.Periode);
+            }
+            if (next != null)
+            {
+                Sambung(cur.R2Sampai, next.R1Dari, "Remise", cur.Periode, next.Periode);
+                Sambung(cur.BSampai, next.BDari, "Bulanan", cur.Periode, next.Periode);
+            }
+            return errors;
+        }
     }
     // Data Access Layer for Periode
     public class PeriodeDAL : IDisposable
@@ -535,14 +619,7 @@ namespace BackOffice.UC
             }
         }
 
-        public List<PeriodeDTO> GetPeriodeByTahun(int tahun)
-        {
-            var periodeList = new List<PeriodeDTO>();
-
-            // Ensure all 12 months exist
-            EnsurePeriodesExist(tahun);
-
-            string query = @"
+        private const string SelectPeriodeSql = @"
             SELECT 
                 PERIODE,
                 BULAN,
@@ -555,39 +632,49 @@ namespace BackOffice.UC
                 BULANAN,
                 TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BDARI,
                 TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BSAMPAI
-            FROM POS_PERIODE 
-            WHERE TAHUN = :tahun 
-            ORDER BY PERIODE";
+            FROM POS_PERIODE ";
 
+        private static PeriodeDTO MapPeriode(OracleDataReader reader) => new PeriodeDTO
+        {
+            Periode = reader.GetInt32("PERIODE"),
+            Bulan = reader.IsDBNull("BULAN") ? "" : reader.GetString("BULAN"),
+            Remise1 = reader.IsDBNull("REMISE1") ? "" : reader.GetString("REMISE1"),
+            R1Dari = reader.IsDBNull("R1DARI") ? null : reader.GetDateTime("R1DARI"),
+            R1Sampai = reader.IsDBNull("R1SAMPAI") ? null : reader.GetDateTime("R1SAMPAI"),
+            Remise2 = reader.IsDBNull("REMISE2") ? "" : reader.GetString("REMISE2"),
+            R2Dari = reader.IsDBNull("R2DARI") ? null : reader.GetDateTime("R2DARI"),
+            R2Sampai = reader.IsDBNull("R2SAMPAI") ? null : reader.GetDateTime("R2SAMPAI"),
+            Bulanan = reader.IsDBNull("BULANAN") ? "" : reader.GetString("BULANAN"),
+            BDari = reader.IsDBNull("BDARI") ? null : reader.GetDateTime("BDARI"),
+            BSampai = reader.IsDBNull("BSAMPAI") ? null : reader.GetDateTime("BSAMPAI")
+        };
 
-            using (var cmd = new OracleCommand(query, connection))
+        public List<PeriodeDTO> GetPeriodeByTahun(int tahun)
+        {
+            var periodeList = new List<PeriodeDTO>();
+
+            // Ensure all 12 months exist
+            EnsurePeriodesExist(tahun);
+
+            using (var cmd = new OracleCommand(SelectPeriodeSql + "WHERE TAHUN = :tahun ORDER BY PERIODE", connection))
             {
                 cmd.Parameters.Add(":tahun", OracleDbType.Int32).Value = tahun;
 
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        var periode = new PeriodeDTO
-                        {
-                            Periode = reader.GetInt32("PERIODE"),
-                            Bulan = reader.IsDBNull("BULAN") ? "" : reader.GetString("BULAN"),
-                            Remise1 = reader.IsDBNull("REMISE1") ? "" : reader.GetString("REMISE1"),
-                            R1Dari = reader.IsDBNull("R1DARI") ? null : reader.GetDateTime("R1DARI"),
-                            R1Sampai = reader.IsDBNull("R1SAMPAI") ? null : reader.GetDateTime("R1SAMPAI"),
-                            Remise2 = reader.IsDBNull("REMISE2") ? "" : reader.GetString("REMISE2"),
-                            R2Dari = reader.IsDBNull("R2DARI") ? null : reader.GetDateTime("R2DARI"),
-                            R2Sampai = reader.IsDBNull("R2SAMPAI") ? null : reader.GetDateTime("R2SAMPAI"),
-                            Bulanan = reader.IsDBNull("BULANAN") ? "" : reader.GetString("BULANAN"),
-                            BDari = reader.IsDBNull("BDARI") ? null : reader.GetDateTime("BDARI"),
-                            BSampai = reader.IsDBNull("BSAMPAI") ? null : reader.GetDateTime("BSAMPAI")
-                        };
-                        periodeList.Add(periode);
-                    }
-                }
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    periodeList.Add(MapPeriode(reader));
             }
 
             return periodeList;
+        }
+
+        /// <summary>Single period row, or null when it does not exist (no auto-create).</summary>
+        public PeriodeDTO? GetPeriode(int periode)
+        {
+            using var cmd = new OracleCommand(SelectPeriodeSql + "WHERE PERIODE = :periode", connection);
+            cmd.Parameters.Add(":periode", OracleDbType.Int32).Value = periode;
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? MapPeriode(reader) : null;
         }
 
         public bool UpdatePeriode(PeriodeDTO periode)
