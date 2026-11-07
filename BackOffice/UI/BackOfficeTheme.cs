@@ -94,7 +94,10 @@ internal static class BackOfficeTheme
         view.Appearance.GroupRow.Options.UseFont = true;
         view.OptionsView.EnableAppearanceEvenRow = true;
         view.OptionsView.ShowIndicator = false;
-        view.OptionsView.ColumnAutoWidth = false;
+        // Columns stretch to fill the grid width by default. A grid can opt out
+        // (keep fixed widths + horizontal scrollbar) by tagging "ui-fixed-columns".
+        view.OptionsView.ColumnAutoWidth =
+            !Equals(view.GridControl?.Tag, "ui-fixed-columns");
         view.OptionsView.RowAutoHeight = true;
         view.OptionsView.ShowHorizontalLines = DevExpress.Utils.DefaultBoolean.False;
         view.OptionsView.ShowVerticalLines = DevExpress.Utils.DefaultBoolean.False;
