@@ -199,6 +199,9 @@ class DashboardKasir {
       periodeTerbuka = j['periode_terbuka'] == true,
       periodePesan = j['periode_pesan'] as String?,
       periodeKode = j['periode_kode'] as String?,
+      periode = (j['periode'] as num?)?.toInt(),
+      periodeDari = j['periode_dari'] as String?,
+      periodeSampai = j['periode_sampai'] as String?,
       jumlah = _i((j['ringkasan'] as Map)['jumlah']),
       total = _i((j['ringkasan'] as Map)['total']),
       tunai = _i((j['ringkasan'] as Map)['tunai']),
@@ -213,6 +216,10 @@ class DashboardKasir {
 
   /// PERIODE_TUTUP | PERIODE_TIDAK_ADA | PERIODE_TIDAK_VALID; null = terbuka.
   final String? periodeKode;
+
+  /// Periode hari ini dan rentang bulanannya (YYYY-MM-DD); null bila tanggal di luar semua periode.
+  final int? periode;
+  final String? periodeDari, periodeSampai;
   final int jumlah, total, tunai, kredit;
   final List<TransaksiTerakhir> terakhir;
 }
@@ -245,6 +252,9 @@ class DashboardAdmin {
       periodeTerbuka = j['periode_terbuka'] == true,
       periodePesan = j['periode_pesan'] as String?,
       periodeKode = j['periode_kode'] as String?,
+      periode = (j['periode'] as num?)?.toInt(),
+      periodeDari = j['periode_dari'] as String?,
+      periodeSampai = j['periode_sampai'] as String?,
       jumlah = _i((j['ringkasan'] as Map)['jumlah']),
       total = _i((j['ringkasan'] as Map)['total']),
       tunai = _i((j['ringkasan'] as Map)['tunai']),
@@ -265,6 +275,8 @@ class DashboardAdmin {
   final String tanggal;
   final bool periodeTerbuka;
   final String? periodePesan, periodeKode;
+  final int? periode;
+  final String? periodeDari, periodeSampai;
   final int jumlah, total, tunai, kredit;
   final List<PerKasir> perKasir;
   final List<Terlaris> terlaris;

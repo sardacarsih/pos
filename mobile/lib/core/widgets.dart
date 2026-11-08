@@ -429,9 +429,16 @@ class StatusPeriodeCard extends StatelessWidget {
     required this.kode,
     required this.pesan,
     required this.tanggal,
+    this.periode,
+    this.dari,
+    this.sampai,
   });
   final String? kode, pesan;
   final String tanggal;
+
+  /// Periode hari ini + rentang bulanannya (YYYY-MM-DD) dari server; null = tidak diketahui.
+  final int? periode;
+  final String? dari, sampai;
 
   @override
   Widget build(BuildContext context) {
@@ -451,7 +458,11 @@ class StatusPeriodeCard extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
-          kode == null ? tanggal : '${pesan ?? ''}\n$hubungiAdminPeriode',
+          [
+            if (periode != null && dari != null && sampai != null)
+              'Periode ${namaPeriode(periode!)} · ${rentangTanggal(dari!, sampai!)}',
+            kode == null ? tanggal : '${pesan ?? ''}\n$hubungiAdminPeriode',
+          ].join('\n'),
         ),
       ),
     );

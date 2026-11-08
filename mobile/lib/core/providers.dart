@@ -111,13 +111,25 @@ final cartProvider = NotifierProvider<CartNotifier, CartState>(
 /// Status periode penjualan hari ini. null = gagal dimuat -> tidak memblokir di UI (server tetap menolak).
 /// Periode bermasalah (tutup/belum diatur/tidak valid) memblokir transaksi karena limit hutang bergantung pada periode.
 final periodeProvider =
-    FutureProvider<({bool terbuka, String? pesan, String? kode})?>((ref) async {
+    FutureProvider<
+      ({
+        bool terbuka,
+        String? pesan,
+        String? kode,
+        int? periode,
+        String? dari,
+        String? sampai,
+      })?
+    >((ref) async {
       try {
         final j = await ref.read(apiProvider).periodeStatus();
         return (
           terbuka: j['terbuka'] == true,
           pesan: j['pesan'] as String?,
           kode: j['kode'] as String?,
+          periode: (j['periode'] as num?)?.toInt(),
+          dari: j['dari'] as String?,
+          sampai: j['sampai'] as String?,
         );
       } on ApiException {
         return null;

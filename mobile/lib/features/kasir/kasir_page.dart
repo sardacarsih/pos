@@ -530,7 +530,14 @@ class _KasirPageState extends ConsumerState<KasirPage> {
   }
 
   Widget _periodeBlokir(
-    ({bool terbuka, String? pesan, String? kode}) p,
+    ({
+      bool terbuka,
+      String? pesan,
+      String? kode,
+      int? periode,
+      String? dari,
+      String? sampai,
+    }) p,
   ) => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
@@ -548,6 +555,14 @@ class _KasirPageState extends ConsumerState<KasirPage> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
+          if (p.periode != null && p.dari != null && p.sampai != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                'Periode ${namaPeriode(p.periode!)} · ${rentangTanggal(p.dari!, p.sampai!)}',
+                textAlign: TextAlign.center,
+              ),
+            ),
           Text(
             '${p.pesan ?? ''}\nTransaksi tidak dapat dilakukan. $hubungiAdminPeriode',
             textAlign: TextAlign.center,

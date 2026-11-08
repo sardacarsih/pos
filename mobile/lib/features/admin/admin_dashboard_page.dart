@@ -147,6 +147,9 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                 kode: d.periodeKode,
                 pesan: d.periodePesan,
                 tanggal: d.tanggal,
+                periode: d.periode,
+                dari: d.periodeDari,
+                sampai: d.periodeSampai,
               ),
               const SizedBox(height: 12),
               _kartu(
