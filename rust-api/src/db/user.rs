@@ -197,6 +197,12 @@ pub struct UserInfo {
     pub foto_versi: Option<i64>,
 }
 
+/// True bila NIK ini sudah dipakai akun mobile (satu NIK satu akun).
+pub fn nik_sudah_punya_akun(conn: &Connection, nik: &str) -> AppResult<bool> {
+    let n: i64 = conn.query_row_as_named("SELECT COUNT(*) FROM MOB_USER WHERE NIK = :n", &[("n", &nik)])?;
+    Ok(n > 0)
+}
+
 pub fn create_user(
     conn: &Connection,
     username: &str,
