@@ -113,7 +113,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
       final x = await ImagePicker().pickImage(source: sumber);
       if (x == null) return null;
       // Dipotong persegi (tengah) dan diperkecil ke 600 px: pas dengan area gambar katalog tanpa celah.
-      final hasil = await compute(_fotoPersegi, await x.readAsBytes());
+      final hasil = await compute(fotoPersegi, await x.readAsBytes());
       if (hasil.bytes == null) {
         if (mounted) _pesan(hasil.galat ?? 'Berkas bukan gambar yang valid');
         return null;
@@ -511,7 +511,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
 
 /// Validasi + siapkan foto di perangkat (server memvalidasi ulang): harus gambar yang terbaca, sisi minimal 200 px;
 /// dipotong persegi di tengah, diperkecil maks 600 px, JPEG kualitas 85. Top-level agar jalan di isolate (compute).
-({Uint8List? bytes, String? galat}) _fotoPersegi(Uint8List bytes) {
+({Uint8List? bytes, String? galat}) fotoPersegi(Uint8List bytes) {
   final asli = img.decodeImage(bytes);
   if (asli == null)
     return (bytes: null, galat: 'Berkas bukan gambar yang valid');

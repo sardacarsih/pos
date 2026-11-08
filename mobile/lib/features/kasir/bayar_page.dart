@@ -172,15 +172,17 @@ class _BayarPageState extends ConsumerState<BayarPage> {
           children: [
             Card(
               child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Theme.of(context)
-                      .colorScheme
-                      .primaryContainer,
-                  child: Icon(
-                    Icons.person_outline,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
+                leading: pel == null || pel.tunai
+                    ? CircleAvatar(
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer,
+                        child: Icon(
+                          Icons.person_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      )
+                    : FotoAnggotaAvatar(nik: pel.nik, nama: pel.nama),
                 title: Text(pel?.nama ?? 'Pilih pelanggan'),
                 subtitle: pel == null
                     ? null
@@ -509,15 +511,17 @@ class _PelangganPickerState extends ConsumerState<PelangganPicker> {
                         Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer,
-                              child: Icon(
-                                Icons.person_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
+                            leading: p.tunai
+                                ? CircleAvatar(
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    child: Icon(
+                                      Icons.person_outline,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                  )
+                                : FotoAnggotaAvatar(nik: p.nik, nama: p.nama),
                             title: Text(
                               p.nama,
                               style: const TextStyle(

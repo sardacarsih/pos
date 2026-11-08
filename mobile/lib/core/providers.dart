@@ -143,3 +143,27 @@ final fotoProdukProvider =
         return null;
       }
     });
+
+/// Profil akun sendiri (nama, kontak, foto_versi). Di-invalidate setelah simpan/ganti foto; ikut berganti saat user ganti.
+final profilSayaProvider = FutureProvider<Map<String, dynamic>>((ref) {
+  ref.watch(authProvider.select((a) => a.profil?.id));
+  return ref.read(apiProvider).profilSaya();
+});
+
+/// Foto profil sendiri; kunci = versi foto (ganti foto = versi baru = unduh ulang, selain itu dari cache sesi).
+final fotoProfilProvider = FutureProvider.family<Uint8List?, int>((ref, versi) async {
+  try {
+    return await ref.read(apiProvider).fotoProfil();
+  } on ApiException {
+    return null;
+  }
+});
+
+/// Foto anggota untuk verifikasi di kasir (null = tidak ada foto -> inisial).
+final fotoAnggotaProvider = FutureProvider.family<Uint8List?, String>((ref, nik) async {
+  try {
+    return await ref.read(apiProvider).fotoAnggota(nik);
+  } on ApiException {
+    return null;
+  }
+});

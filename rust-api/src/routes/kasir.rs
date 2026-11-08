@@ -265,6 +265,30 @@ pub async fn pelanggan_nik(
     Ok(Json(pel_resp(p, &s.cfg.default_nik)))
 }
 
+/// Foto profil anggota untuk verifikasi identitas di kasir. Hanya KASIR; hanya foto (tanpa kontak).
+pub async fn foto_anggota(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(nik): Path<String>,
+) -> AppResult<axum::response::Response> {
+    use axum::{http::header, response::IntoResponse};
+    a.peran(KASIR)?;
+    if nik.is_empty() || nik.len() > 30 {
+        return Err(AppError::validation("NIK tidak valid"));
+    }
+    let f = db::run(&s.pool, move |c| db::profil::ambil_foto_by_nik(c, nik.trim()))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Foto tidak ada".into()))?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, f.content_type),
+            (header::CACHE_CONTROL, "private, no-cache".to_string()),
+        ],
+        f.data,
+    )
+        .into_response())
+}
+
 pub async fn simpan(
     State(s): State<AppState>,
     a: Auth,
@@ -290,6 +314,7 @@ pub async fn simpan(
             &faktur::Opsi {
                 default_nik: &nik_default,
                 default_max_tenor: max_tenor,
+                demo: false,
             },
             &key,
         )
@@ -314,7 +339,6 @@ pub async fn faktur(
     })
     .await?;
     f.map(Json)
-                demo: false,
         .ok_or_else(|| AppError::NotFound("Faktur tidak ditemukan".into()))
 }
 

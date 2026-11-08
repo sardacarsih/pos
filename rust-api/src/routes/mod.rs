@@ -2,6 +2,7 @@ pub mod admin;
 pub mod anggota;
 pub mod auth;
 pub mod kasir;
+pub mod profil;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -143,6 +144,16 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/ganti-password", post(auth::ganti_password))
         .route("/api/v1/me", get(auth::me))
+        // profil sendiri (semua role)
+        .route("/api/v1/profil", get(profil::lihat).put(profil::ubah))
+        .route(
+            "/api/v1/profil/foto",
+            get(profil::foto_ambil)
+                .put(profil::foto_ubah)
+                .delete(profil::foto_hapus)
+                // Foto maks 1 MB + sedikit ruang (default body 256 KB tidak cukup).
+                .layer(DefaultBodyLimit::max(1_100_000)),
+        )
         // kasir
         .route("/api/v1/periode/status", get(kasir::periode_status))
         .route("/api/v1/kasir/dashboard", get(kasir::dashboard))
@@ -156,6 +167,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/kategori", get(kasir::kategori))
         .route("/api/v1/pelanggan", get(kasir::pelanggan))
         .route("/api/v1/pelanggan/by-nik/{nik}", get(kasir::pelanggan_nik))
+        .route("/api/v1/pelanggan/{nik}/foto", get(kasir::foto_anggota))
         .route("/api/v1/faktur", post(kasir::simpan))
         .route("/api/v1/faktur/{no}", get(kasir::faktur))
         // anggota

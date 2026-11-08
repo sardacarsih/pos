@@ -395,6 +395,8 @@ class KartuAnggotaPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  const ProfilAvatar(radius: 40),
+                  const SizedBox(height: 10),
                   Text(
                     profil?.nama ?? 'Anggota',
                     textAlign: TextAlign.center,

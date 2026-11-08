@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -450,4 +451,68 @@ class StatusPeriodeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lingkaran foto: foto bila ada, selain itu inisial nama (atau ikon bila nama kosong).
+class AvatarFoto extends StatelessWidget {
+  const AvatarFoto({super.key, required this.nama, this.bytes, this.radius = 20});
+  final String nama;
+  final Uint8List? bytes;
+  final double radius;
+
+  String get _inisial {
+    final p = nama.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (p.isEmpty) return '';
+    final a = p.first[0];
+    return (p.length > 1 ? a + p[1][0] : a).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: cs.primaryContainer,
+      foregroundImage: bytes == null ? null : MemoryImage(bytes!),
+      child: _inisial.isEmpty
+          ? Icon(Icons.person, size: radius * 1.1, color: cs.onPrimaryContainer)
+          : Text(
+              _inisial,
+              style: TextStyle(
+                fontSize: radius * 0.8,
+                fontWeight: FontWeight.w700,
+                color: cs.onPrimaryContainer,
+              ),
+            ),
+    );
+  }
+}
+
+/// Foto profil akun sendiri (cache sesi; berganti otomatis saat foto diubah).
+class ProfilAvatar extends ConsumerWidget {
+  const ProfilAvatar({super.key, this.radius = 16});
+  final double radius;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = ref.watch(profilSayaProvider).value;
+    final nama = (p?['nama'] as String?) ?? ref.watch(authProvider).profil?.nama ?? '';
+    final versi = (p?['foto_versi'] as num?)?.toInt();
+    final foto = versi == null ? null : ref.watch(fotoProfilProvider(versi)).value;
+    return AvatarFoto(nama: nama, bytes: foto, radius: radius);
+  }
+}
+
+/// Foto anggota lain untuk kasir (verifikasi identitas); inisial bila tidak ada foto.
+class FotoAnggotaAvatar extends ConsumerWidget {
+  const FotoAnggotaAvatar({super.key, required this.nik, required this.nama, this.radius = 20});
+  final String nik, nama;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => AvatarFoto(
+    nama: nama,
+    bytes: ref.watch(fotoAnggotaProvider(nik)).value,
+    radius: radius,
+  );
 }

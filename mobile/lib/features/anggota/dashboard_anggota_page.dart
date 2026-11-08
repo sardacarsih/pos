@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../profil/profil_page.dart';
 import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
@@ -68,6 +69,13 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
           onPressed: () => context.go('/saya/kartu-anggota'),
         ),
         IconButton(
+          tooltip: 'Profil saya',
+          icon: const ProfilAvatar(radius: 14),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ProfilPage()),
+          ),
+        ),
+        IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),
           onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -97,13 +105,26 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
               ),
             if (d != null) ...[
               if (d.ringkasan != null) ...[
-                Text(
-                  'Halo, ${d.ringkasan!.nama}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(
-                  'Periode ${namaPeriode(d.ringkasan!.periode)} · '
-                  '${rentangTanggal(d.ringkasan!.dari, d.ringkasan!.sampai)}',
+                Row(
+                  children: [
+                    const ProfilAvatar(radius: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Halo, ${d.ringkasan!.nama}',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Text(
+                            'Periode ${namaPeriode(d.ringkasan!.periode)} · '
+                            '${rentangTanggal(d.ringkasan!.dari, d.ringkasan!.sampai)}',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 KartuLimit(r: d.ringkasan!),
