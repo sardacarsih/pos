@@ -28,6 +28,15 @@ namespace BackOffice
 
         private void sbtutupbuku_Click(object sender, EventArgs e)
         {
+            if (!tanggalSettingTersedia)
+            {
+                XtraMessageBox.Show(
+                    "Tanggal periode belum diatur.\n" +
+                    "Silakan atur tanggal pada menu Pengaturan > Periode terlebih dahulu.",
+                    "Periode Belum Diatur", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             int remise = comboBoxEdit_Remise.SelectedIndex + 1;
             bool isclosed = Tools_Services.GetRemiseStatus(p_periode, remise);
             if (isclosed)
@@ -142,6 +151,79 @@ namespace BackOffice
             Update_Periode();
            
         }
+        // Read the from/to dates for the selected period + remise straight from the
+        // periode setting (POS_PERIODE). The R*/B* columns are stored as 'DD-MON-YYYY'
+        // English strings, so convert them with TO_DATE like the periode screen does.
+        bool tanggalSettingTersedia;
+
+        // Returns true only when BOTH the from/to dates for the selected period + remise
+        // are configured in POS_PERIODE. Otherwise the period must be set up first.
+        private bool LoadTanggalFromPeriode()
+        {
+            const string query = @"
+                SELECT
+                    TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1DARI,
+                    TO_DATE(R1SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1SAMPAI,
+                    TO_DATE(R2DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2DARI,
+                    TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2SAMPAI,
+                    TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BDARI,
+                    TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BSAMPAI
+                FROM POS_PERIODE
+                WHERE PERIODE = :periode";
+
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
+
+            using OracleCommand command = new(query, connection);
+            command.BindByName = true;
+            command.Parameters.Add("periode", OracleDbType.Int32).Value = p_periode;
+
+            using OracleDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+            {
+                return false;
+            }
+
+            DateTime? dari, sampai;
+            switch (p_remise)
+            {
+                case 1: // Remise I
+                    dari = ReadNullableDate(reader, "R1DARI");
+                    sampai = ReadNullableDate(reader, "R1SAMPAI");
+                    break;
+                case 2: // Remise II
+                    dari = ReadNullableDate(reader, "R2DARI");
+                    sampai = ReadNullableDate(reader, "R2SAMPAI");
+                    break;
+                default: // Bulanan
+                    dari = ReadNullableDate(reader, "BDARI");
+                    sampai = ReadNullableDate(reader, "BSAMPAI");
+                    break;
+            }
+
+            if (!dari.HasValue || !sampai.HasValue)
+                return false;
+
+            p_daritanggal = dari.Value;
+            p_sampaitanggal = sampai.Value;
+            if (p_remise == 3)
+                p_tglAngsuran = p_sampaitanggal;
+            return true;
+        }
+
+        private static DateTime? ReadNullableDate(OracleDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            if (reader.IsDBNull(ordinal))
+                return null;
+
+            object value = reader.GetValue(ordinal);
+            if (value is DateTime dt)
+                return dt;
+
+            return DateTime.TryParse(value.ToString(), out DateTime parsed) ? parsed : null;
+        }
+
         DateTime  LAST_R1SAMPAI,  LAST_R2SAMPAI,  LAST_BSAMPAI, MIN_R1DARI, MIN_R2DARI, MIN_BDARI;
         private void LoadL_lastDate_closing(int p_bulan,int p_tahun)
         {
@@ -283,8 +365,18 @@ namespace BackOffice
 
                 }
 
-                dedaritgl.Text= p_daritanggal.ToString("dd-MMM-yyyy");
-                desampaitgl.Text= p_sampaitanggal.ToString("dd-MMM-yyyy");
+                // Dates must come from the periode setting (Pengaturan > Periode).
+                tanggalSettingTersedia = LoadTanggalFromPeriode();
+                if (tanggalSettingTersedia)
+                {
+                    dedaritgl.Text = p_daritanggal.ToString("dd-MMM-yyyy");
+                    desampaitgl.Text = p_sampaitanggal.ToString("dd-MMM-yyyy");
+                }
+                else
+                {
+                    dedaritgl.EditValue = null;
+                    desampaitgl.EditValue = null;
+                }
 
                 if (p_bulan == 1)
                 {
@@ -351,6 +443,15 @@ namespace BackOffice
             cmbbulan.Properties.Items.AddRange(arrayBulan);
 
             comboBoxEdit_Remise.Properties.Items.AddRange(new []{ "Remise I", "Remise II", "Bulanan" });
+
+            // Dates are driven by the periode setting; user must not change them here.
+            foreach (var de in new[] { dedaritgl, desampaitgl })
+            {
+                de.Properties.ReadOnly = true;
+                de.Properties.AllowFocused = false;
+                de.Properties.ShowDropDown = DevExpress.XtraEditors.Controls.ShowDropDown.Never;
+                de.Properties.Buttons.Clear();
+            }
 
             cmbbulan.SelectedIndex = DateTime.Today.Month- 1;
             comboBoxEdit_Remise.SelectedIndex = 0;
