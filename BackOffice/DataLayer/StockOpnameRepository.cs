@@ -270,18 +270,16 @@ namespace BackOffice.DataLayer
             using OracleConnection connection = new(global.connectionString);
             connection.Open();
 
-            DTOStockData row = connection.QueryFirstOrDefault<DTOStockData>(
-                BuildStockInfoQuery(singleItem: true),
-                new
-                {
-                    start_date = startDate.Date,
-                    end_date = endDate.Date,
-                    p_kode_barang = kodeBarang
-                });
+            DTOStockData? row = ReadStockInfo(
+                connection,
+                singleItem: true,
+                startDate,
+                endDate,
+                kodeBarang).FirstOrDefault();
 
             if (row is null)
             {
-                return null;
+                return null!;
             }
 
             return new DTOStockDataItem
@@ -298,16 +296,84 @@ namespace BackOffice.DataLayer
 
         public List<DTOStockData> GetProductStockInfo(DateTime startDate, DateTime endDate)
         {
-            using IDbConnection dbConnection = new OracleConnection(global.connectionString);
-            dbConnection.Open();
+            using OracleConnection connection = new(global.connectionString);
+            connection.Open();
 
-            return dbConnection.Query<DTOStockData>(
-                BuildStockInfoQuery(singleItem: false),
-                new
-                {
-                    start_date = startDate.Date,
-                    end_date = endDate.Date
-                }).AsList();
+            return ReadStockInfo(
+                connection,
+                singleItem: false,
+                startDate,
+                endDate,
+                kodeBarang: null);
+        }
+
+        private static List<DTOStockData> ReadStockInfo(
+            OracleConnection connection,
+            bool singleItem,
+            DateTime startDate,
+            DateTime endDate,
+            string? kodeBarang)
+        {
+            using OracleCommand command = connection.CreateCommand();
+            command.BindByName = true;
+            command.CommandText = BuildStockInfoQuery(singleItem);
+            command.Parameters.Add(new OracleParameter("start_date", startDate.Date));
+            command.Parameters.Add(new OracleParameter("end_date", endDate.Date));
+
+            if (singleItem)
+            {
+                command.Parameters.Add(new OracleParameter("p_kode_barang", kodeBarang));
+            }
+
+            using OracleDataReader reader = command.ExecuteReader();
+            var rows = new List<DTOStockData>();
+
+            while (reader.Read())
+            {
+                rows.Add(MapStockData(reader));
+            }
+
+            return rows;
+        }
+
+        private static DTOStockData MapStockData(OracleDataReader reader)
+        {
+            return new DTOStockData
+            {
+                IDX = GetNullableString(reader, "IDX"),
+                KODE_ITEM = GetNullableString(reader, "KODE_ITEM"),
+                PRODUCTNAME = GetNullableString(reader, "PRODUCTNAME"),
+                SATUAN = GetNullableString(reader, "SATUAN"),
+                STOCKAWAL_QTY = GetDecimal(reader, "STOCKAWAL_QTY"),
+                STOCKAWAL_HPP = GetDecimal(reader, "STOCKAWAL_HPP"),
+                BELI_QTY = GetDecimal(reader, "BELI_QTY"),
+                BELI_HARGA_AVG = GetDecimal(reader, "BELI_HARGA_AVG"),
+                JUAL_QTY = GetDecimal(reader, "JUAL_QTY"),
+                RUSAK_QTY = GetDecimal(reader, "RUSAK_QTY"),
+                STOCK_OPNAME = GetDecimal(reader, "STOCK_OPNAME"),
+                STOCK_OPNAME_COUNT = GetInt32(reader, "STOCK_OPNAME_COUNT"),
+                STOCK_AKHIR = GetDecimal(reader, "STOCK_AKHIR"),
+                TOTAL_COST_AVG = GetDecimal(reader, "TOTAL_COST_AVG"),
+                PERSEDIAAN = GetDecimal(reader, "PERSEDIAAN")
+            };
+        }
+
+        private static string GetNullableString(OracleDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? string.Empty : reader.GetString(ordinal);
+        }
+
+        private static decimal GetDecimal(OracleDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? 0m : reader.GetDecimal(ordinal);
+        }
+
+        private static int GetInt32(OracleDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetDecimal(ordinal));
         }
 
         // Single source of truth for the running-stock calculation. Both the
@@ -322,34 +388,41 @@ namespace BackOffice.DataLayer
             string productFilter = singleItem ? "WHERE product.kode_item = :p_kode_barang" : string.Empty;
 
             return $@"
-                SELECT
-                    product.kode_item,
-                    product.productname,
-                    product.satuan,
-                    NVL(opening.quantity, 0) AS stock_qty,
-                    NVL(opening.hpp, 0) AS stock_hpp,
-                    NVL(purchases.quantity, 0) AS beli_qty,
-                    NVL(purchases.harga_beli, 0) AS beli_harga_avg,
-                    CASE
-                        WHEN NVL(opening.quantity, 0) + NVL(purchases.quantity, 0) = 0
-                            THEN NVL(purchases.harga_beli, NVL(opening.hpp, 0))
-                        ELSE ROUND(
-                            (
-                                NVL(opening.quantity, 0) * NVL(opening.hpp, 0)
-                                + NVL(purchases.quantity, 0) * NVL(purchases.harga_beli, 0)
-                            )
-                            / (NVL(opening.quantity, 0) + NVL(purchases.quantity, 0)),
-                            2)
-                    END AS total_cost_avg,
-                    NVL(sales.quantity, 0) AS jual_qty,
-                    NVL(opname.quantity, 0) AS stock_opname,
-                    NVL(opname.item_count, 0) AS stock_opname_count,
-                    NVL(opening.quantity, 0)
-                        + NVL(purchases.quantity, 0)
-                        + NVL(opname.quantity, 0)
-                        - NVL(sales.quantity, 0)
-                        - NVL(damaged.quantity, 0) AS stock_akhir
-                FROM POS_PRODUCT product
+                WITH stock_data AS (
+                    SELECT
+                        CAST(NULL AS VARCHAR2(1)) AS idx,
+                        product.kode_item,
+                        product.productname,
+                        product.satuan,
+                        CAST(NVL(opening.quantity, 0) AS NUMBER(18,2)) AS stockawal_qty,
+                        CAST(NVL(opening.hpp, 0) AS NUMBER(18,2)) AS stockawal_hpp,
+                        CAST(NVL(purchases.quantity, 0) AS NUMBER(18,2)) AS beli_qty,
+                        CAST(NVL(purchases.harga_beli, 0) AS NUMBER(18,2)) AS beli_harga_avg,
+                        CAST(NVL(sales.quantity, 0) AS NUMBER(18,2)) AS jual_qty,
+                        CAST(NVL(damaged.quantity, 0) AS NUMBER(18,2)) AS rusak_qty,
+                        CAST(NVL(opname.quantity, 0) AS NUMBER(18,2)) AS stock_opname,
+                        CAST(NVL(opname.item_count, 0) AS NUMBER(10,0)) AS stock_opname_count,
+                        CAST(
+                            NVL(opening.quantity, 0)
+                            + NVL(purchases.quantity, 0)
+                            + NVL(opname.quantity, 0)
+                            - NVL(sales.quantity, 0)
+                            - NVL(damaged.quantity, 0)
+                            AS NUMBER(18,2)) AS stock_akhir,
+                        CAST(
+                            CASE
+                                WHEN NVL(opening.quantity, 0) + NVL(purchases.quantity, 0) = 0
+                                    THEN NVL(purchases.harga_beli, NVL(opening.hpp, 0))
+                                ELSE ROUND(
+                                    (
+                                        NVL(opening.quantity, 0) * NVL(opening.hpp, 0)
+                                        + NVL(purchases.quantity, 0) * NVL(purchases.harga_beli, 0)
+                                    )
+                                    / (NVL(opening.quantity, 0) + NVL(purchases.quantity, 0)),
+                                    2)
+                            END
+                            AS NUMBER(18,2)) AS total_cost_avg
+                    FROM POS_PRODUCT product
                 LEFT JOIN (
                     SELECT kode_barang, SUM(quantity) AS quantity, MAX(hpp) AS hpp
                     FROM POS_STOCK
@@ -389,7 +462,25 @@ namespace BackOffice.DataLayer
                     GROUP BY kode_barang
                 ) opname ON opname.kode_barang = product.kode_item
                 {productFilter}
-                ORDER BY product.productname";
+                )
+                SELECT
+                    idx,
+                    kode_item,
+                    productname,
+                    satuan,
+                    stockawal_qty,
+                    stockawal_hpp,
+                    beli_qty,
+                    beli_harga_avg,
+                    jual_qty,
+                    rusak_qty,
+                    stock_opname,
+                    stock_opname_count,
+                    stock_akhir,
+                    total_cost_avg,
+                    CAST(stock_akhir * total_cost_avg AS NUMBER(18,2)) AS persediaan
+                FROM stock_data
+                ORDER BY productname";
         }
 
         public List<DTOStoctOpnameMaster> DaftarStockOpname(int tahun)
