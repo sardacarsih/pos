@@ -292,13 +292,20 @@ class ApiClient {
       Kategori.fromJson(k as Map<String, dynamic>),
   ];
 
+  /// [belumAkun]: hanya anggota yang belum punya akun mobile (dialog admin membuat akun anggota).
   Future<({List<Pelanggan> items, bool lagi})> pelanggan({
     String? q,
     int page = 1,
+    bool belumAkun = false,
   }) async {
     final j = await get(
       '/api/v1/pelanggan',
-      q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': 30},
+      q: {
+        if (q != null && q.isNotEmpty) 'q': q,
+        'page': page,
+        'size': 30,
+        if (belumAkun) 'belum_akun': true,
+      },
     ) as Map<String, dynamic>;
     return (
       items: [

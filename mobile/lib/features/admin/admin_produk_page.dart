@@ -501,11 +501,6 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                     padding: EdgeInsets.all(24),
                     child: Center(child: CircularProgressIndicator()),
                   ),
-                if (_lagi && !_loading && _error == null)
-                  TextButton(
-                    onPressed: () => _cari(reset: false),
-                    child: const Text('Muat produk lainnya'),
-                  ),
               ],
             ),
           ),
