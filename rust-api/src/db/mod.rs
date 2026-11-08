@@ -5,6 +5,7 @@ pub mod faktur;
 pub mod foto;
 pub mod katalog;
 pub mod profil;
+pub mod rekap;
 pub mod user;
 
 use std::{sync::Arc, time::Duration};

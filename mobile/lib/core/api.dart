@@ -420,6 +420,44 @@ class ApiClient {
         as Map<String, dynamic>,
   );
 
+  // ---- admin: rekap per anggota ----
+  Future<({List<PeriodeInfo> items, int? sekarang})> periodeAdmin() async {
+    final j = await get('/api/v1/admin/periode') as Map<String, dynamic>;
+    return (
+      items: [
+        for (final p in (j['items'] as List))
+          PeriodeInfo.fromJson(p as Map<String, dynamic>),
+      ],
+      sekarang: (j['sekarang'] as num?)?.toInt(),
+    );
+  }
+
+  Future<RekapAnggota> rekapAnggota(int periode) async => RekapAnggota.fromJson(
+    await get('/api/v1/admin/rekap-anggota', q: {'periode': periode})
+        as Map<String, dynamic>,
+  );
+
+  Future<({Ringkasan ringkasan, List<TransaksiRingkas> items, bool lagi})>
+  transaksiAnggota(String nik, int periode, {int page = 1}) async {
+    final j = await get(
+      '/api/v1/admin/rekap-anggota/${Uri.encodeComponent(nik)}/transaksi',
+      q: {'periode': periode, 'page': page, 'size': 30},
+    ) as Map<String, dynamic>;
+    return (
+      ringkasan: Ringkasan.fromJson(j['ringkasan'] as Map<String, dynamic>),
+      items: [
+        for (final b in (j['items'] as List))
+          TransaksiRingkas.fromJson(b as Map<String, dynamic>),
+      ],
+      lagi: j['ada_lagi'] == true,
+    );
+  }
+
+  Future<Faktur> fakturAdmin(String no) async => Faktur.fromJson(
+    await get('/api/v1/admin/faktur/${Uri.encodeComponent(no)}')
+        as Map<String, dynamic>,
+  );
+
   Future<Faktur> fakturKasir(String no) async => Faktur.fromJson(
     await get('/api/v1/faktur/${Uri.encodeComponent(no)}')
         as Map<String, dynamic>,

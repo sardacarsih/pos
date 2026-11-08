@@ -354,3 +354,86 @@ pub async fn foto_hapus(
     tracing::info!(admin = %admin, produk = id, "foto produk dihapus");
     Ok(StatusCode::NO_CONTENT)
 }
+
+// ------------------------------------------------------------------ rekap transaksi per anggota
+
+/// Daftar periode yang sudah diatur (terbaru dulu) + periode hari ini (null bila di luar semua periode).
+pub async fn periode_list(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let (items, sekarang) = db::run(&s.pool, |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        Ok((
+            db::rekap::daftar_periode(c)?,
+            db::faktur::periode_untuk_tanggal(c, hari)?,
+        ))
+    })
+    .await?;
+    Ok(Json(json!({ "items": items, "sekarang": sekarang })))
+}
+
+#[derive(Deserialize)]
+pub struct RekapQuery {
+    periode: Option<i32>,
+    // Tanpa `#[serde(flatten)]`: angka dari query string (string) gagal di-parse bila di-flatten.
+    page: Option<u32>,
+    size: Option<u32>,
+}
+
+/// Rekap belanja per anggota pada satu periode (default: periode hari ini).
+pub async fn rekap_anggota(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<RekapQuery>,
+) -> AppResult<Json<db::rekap::Rekap>> {
+    a.peran(ADMIN)?;
+    let periode = q.periode.map(super::anggota::periode_valid).transpose()?;
+    let default_nik = s.cfg.default_nik.clone();
+    let r = db::run(&s.pool, move |c| {
+        let p = match periode {
+            Some(p) => p,
+            None => db::anggota::periode_sekarang(c)?,
+        };
+        db::rekap::rekap_anggota(c, p, &default_nik)
+    })
+    .await?;
+    Ok(Json(r))
+}
+
+/// Transaksi satu anggota pada periode + ringkasan limit (sama dengan yang dilihat anggota di dashboardnya).
+pub async fn rekap_transaksi(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(nik): Path<String>,
+    axum::extract::Query(q): axum::extract::Query<RekapQuery>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    if nik.is_empty() || nik.len() > 30 {
+        return Err(AppError::validation("NIK tidak valid"));
+    }
+    let periode = q.periode.map(super::anggota::periode_valid).transpose()?;
+    let page = q.page.unwrap_or(1).max(1);
+    let size = q.size.unwrap_or(30).clamp(1, 100);
+    let (ringkasan, items, lagi) = db::run(&s.pool, move |c| {
+        let p = match periode {
+            Some(p) => p,
+            None => db::anggota::periode_sekarang(c)?,
+        };
+        let ringkasan = db::anggota::ringkasan(c, &nik, p)?;
+        let (items, lagi) = db::anggota::transaksi(c, &nik, p, page, size)?;
+        Ok((ringkasan, items, lagi))
+    })
+    .await?;
+    Ok(Json(json!({ "ringkasan": ringkasan, "items": items, "ada_lagi": lagi, "page": page })))
+}
+
+/// Detail faktur mana pun untuk admin (rekap per anggota).
+pub async fn faktur_admin(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(no): Path<String>,
+) -> AppResult<Json<db::faktur::FakturResp>> {
+    a.peran(ADMIN)?;
+    let f = db::run(&s.pool, move |c| db::faktur::muat(c, &no)).await?;
+    f.map(Json)
+        .ok_or_else(|| AppError::NotFound("Faktur tidak ditemukan".into()))
+}

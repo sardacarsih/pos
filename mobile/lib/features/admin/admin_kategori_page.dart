@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
-import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 import 'admin_urut_page.dart';
 
@@ -77,16 +76,9 @@ class _AdminKategoriPageState extends ConsumerState<AdminKategoriPage> {
     final ringkas = _pilih.isEmpty
         ? 'Semua kategori tampil'
         : '${_pilih.length} dari ${_semua.length} kategori tampil';
-    return TropicalScaffold(
-      title: 'Admin · Kategori',
-      actions: [
-        const ProfilAksi(),
-        IconButton(
-          tooltip: 'Keluar',
-          icon: const Icon(Icons.logout, color: Colors.white),
-          onPressed: () => ref.read(authProvider.notifier).logout(),
-        ),
-      ],
+    // Dipakai sebagai tab di AdminKatalogPage: header, profil, dan keluar ada di halaman induk.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
       bottomNavigationBar: _loading || _error != null
           ? null
           : SafeArea(

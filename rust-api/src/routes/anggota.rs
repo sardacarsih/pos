@@ -31,7 +31,7 @@ pub struct PeriodeQuery {
     size: Option<u32>,
 }
 
-fn periode_valid(p: i32) -> AppResult<i32> {
+pub fn periode_valid(p: i32) -> AppResult<i32> {
     if (200001..=299912).contains(&p) && (1..=12).contains(&(p % 100)) {
         Ok(p)
     } else {
