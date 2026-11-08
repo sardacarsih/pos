@@ -157,8 +157,16 @@ public partial class Frmlogin : XtraForm
     {
         if (e.KeyCode == Keys.Enter)
         {
-            txtpwd.Focus();
             e.SuppressKeyPress = true;
+
+            // Jangan pindah ke password kalau username masih kosong.
+            if (string.IsNullOrWhiteSpace(txtuserid.Text))
+            {
+                txtuserid.Focus();
+                return;
+            }
+
+            txtpwd.Focus();
         }
     }
 
@@ -232,6 +240,7 @@ public partial class Frmlogin : XtraForm
                 {
                     auth.UpdatePassword(res.UserId, passwordCryptography.GetHashPassword(pwd));
                 }
+                auth.ResetFailedAttempts(username);
                 LoginInfo.role = res.RoleName;
                 LoginInfo.userID = res.Username;
                 LoginInfo.UserId = res.UserId;
@@ -243,6 +252,7 @@ public partial class Frmlogin : XtraForm
             else
             {
                 --kesempatan;
+                auth.RegisterFailedAttempt(username); // server-side lockout (3 strikes), survives restart
                 XtraMessageBox.Show(
                     "Password Salah. \nAnda Memiliki " + kesempatan +
                     "X Kesempatan untuk Mencoba",
