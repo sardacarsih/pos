@@ -31,11 +31,19 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
 
   // Satu percobaan checkout = satu kunci + satu nomor; berubah hanya bila keranjang/tenor berubah.
   String? _key, _nomor;
+  bool _demo = false;
 
   @override
   void initState() {
     super.initState();
     _muat();
+    ref
+        .read(apiProvider)
+        .dashboardSaya()
+        .then((d) {
+          if (mounted) setState(() => _demo = d.belanjaDemo);
+        })
+        .catchError((_) {}); // banner saja; gagal tidak mengganggu belanja
   }
 
   @override
@@ -94,6 +102,24 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
         _cart.kosongkan();
         _key = _nomor = null;
       });
+      if (f.no.startsWith('DEMO-')) {
+        await showDialog<void>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text('Mode DEMO'),
+            content: const Text(
+              'Belanja ini hanya simulasi: faktur tidak tersimpan, limit hutang tidak berubah, dan tidak muncul di Riwayat.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Mengerti'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+      }
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => StrukPage(faktur: f, dariRiwayat: true),
@@ -114,6 +140,20 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
       title: 'Belanja Mandiri',
       body: Column(
         children: [
+          if (_demo)
+            Container(
+              width: double.infinity,
+              color: cs.tertiaryContainer,
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                'MODE DEMO · transaksi tidak disimpan',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onTertiaryContainer,
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
@@ -240,7 +280,7 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Belanja dengan Kredit'),
+                  : Text(_demo ? 'Coba Belanja (Demo)' : 'Belanja dengan Kredit'),
             ),
           ),
         ],
