@@ -6,9 +6,16 @@ import 'package:kopkar_pos/core/providers.dart';
 import 'package:kopkar_pos/main.dart';
 
 Barang barang(int id, {int harga = 1000, int? stok}) => Barang.fromJson({
-      'id': id, 'kode': 'K$id', 'barcode': 'B$id', 'nama': 'Barang $id', 'satuan': 'PCS',
-      'harga': harga, 'stok': stok, 'kategori_id': '1', 'kategori': 'Umum',
-    });
+  'id': id,
+  'kode': 'K$id',
+  'barcode': 'B$id',
+  'nama': 'Barang $id',
+  'satuan': 'PCS',
+  'harga': harga,
+  'stok': stok,
+  'kategori_id': '1',
+  'kategori': 'Umum',
+});
 
 void main() {
   group('format', () {
@@ -34,12 +41,18 @@ void main() {
   });
 
   group('keranjang', () {
-    test('tambah barang sama menaikkan qty (jalur daftar dan scan identik)', () {
-      final c = Cart()..tambah(barang(1))..tambah(barang(1))..tambah(barang(2, harga: 500));
-      expect(c.lines.length, 2);
-      expect(c.jumlahItem, 3);
-      expect(c.perkiraan, 2500);
-    });
+    test(
+      'tambah barang sama menaikkan qty (jalur daftar dan scan identik)',
+      () {
+        final c = Cart()
+          ..tambah(barang(1))
+          ..tambah(barang(1))
+          ..tambah(barang(2, harga: 500));
+        expect(c.lines.length, 2);
+        expect(c.jumlahItem, 2);
+        expect(c.perkiraan, 2500);
+      },
+    );
 
     test('atur qty 0 menghapus baris; batas maksimum 1000', () {
       final c = Cart()..tambah(barang(1));
@@ -52,8 +65,24 @@ void main() {
     test('toRequest hanya product_id dan qty (harga dihitung server)', () {
       final c = Cart()..tambah(barang(7), qty: 3);
       expect(c.toRequest(), [
-        {'product_id': 7, 'qty': 3}
+        {'product_id': 7, 'qty': 3},
       ]);
+    });
+
+    test('nominal BBM menjadi liter 2 desimal dan request mengirim qty numerik presisi', () {
+      final qty = nominalKeCenti(50000, 12200);
+      expect(qty, 410); // 4,10 liter
+      final c = Cart()..tambah(barang(9, harga: 12200), qtyCenti: qty);
+      expect(c.perkiraan, 50020);
+      expect(c.toRequest(), [
+        {'product_id': 9, 'qty': 4.1},
+      ]);
+    });
+
+    test('liter parsing menerima koma desimal dengan dua angka', () {
+      expect(parseLiterCenti('4,10'), 410);
+      expect(parseLiterCenti('4.1'), 410);
+      expect(parseLiterCenti('4,123'), isNull);
     });
 
     test('peringatan stok informatif', () {
@@ -64,7 +93,8 @@ void main() {
   });
 
   group('routing per role', () {
-    Profil p(String role, {bool ganti = false}) => Profil(role: role, nama: 'X', gantiPassword: ganti);
+    Profil p(String role, {bool ganti = false}) =>
+        Profil(role: role, nama: 'X', gantiPassword: ganti);
 
     test('belum login -> /login', () {
       expect(redirectUntuk(const AuthState(), '/kasir'), '/login');
@@ -76,7 +106,7 @@ void main() {
       expect(redirectUntuk(a, '/login'), '/saya');
       expect(redirectUntuk(a, '/kasir'), '/saya');
       expect(redirectUntuk(a, '/admin'), '/saya');
-      expect(redirectUntuk(a, '/saya/faktur/W-26-000001'), isNull);
+      expect(redirectUntuk(a, '/saya/faktur/BBM-26-000001'), isNull);
     });
 
     test('KASIR dan ADMIN dibatasi ke bagiannya', () {
@@ -85,7 +115,10 @@ void main() {
     });
 
     test('password sementara memaksa halaman ganti password', () {
-      expect(redirectUntuk(AuthState(profil: p('KASIR', ganti: true)), '/kasir'), '/ganti');
+      expect(
+        redirectUntuk(AuthState(profil: p('KASIR', ganti: true)), '/kasir'),
+        '/ganti',
+      );
     });
   });
 }

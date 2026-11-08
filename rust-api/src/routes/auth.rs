@@ -216,8 +216,7 @@ pub async fn ganti_password(
 }
 
 pub async fn me(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
-    let id = a.0.sub;
-    let kat = db::run(&s.pool, move |c| user::allowed_kategori(c, id)).await?;
+    let kat = db::run(&s.pool, user::allowed_kategori).await?;
     Ok(Json(json!({
         "id": a.0.sub, "username": a.0.usr, "nama": a.0.nama, "role": a.0.role,
         "nik": a.0.nik, "ganti_password": a.0.ganti, "kategori_diizinkan": kat,

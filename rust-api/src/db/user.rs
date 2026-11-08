@@ -231,9 +231,6 @@ pub fn list_users(conn: &Connection) -> AppResult<Vec<UserInfo>> {
             kategori: Vec::new(),
         });
     }
-    for u in &mut out {
-        u.kategori = allowed_kategori(conn, u.id)?;
-    }
     Ok(out)
 }
 
@@ -249,27 +246,24 @@ pub fn set_active(conn: &Connection, id: i64, active: bool) -> AppResult<()> {
     Ok(())
 }
 
-/// Kategori yang diizinkan untuk user. Kosong = tidak dibatasi.
-pub fn allowed_kategori(conn: &Connection, user_id: i64) -> AppResult<Vec<String>> {
+/// Kategori yang tampil di kasir (pengaturan global admin). Kosong = tidak dibatasi.
+pub fn allowed_kategori(conn: &Connection) -> AppResult<Vec<String>> {
     let mut out = Vec::new();
-    for r in conn.query_as_named::<String>(
-        "SELECT KATEGORI_ID FROM MOB_USER_KATEGORI WHERE USER_ID = :u ORDER BY KATEGORI_ID",
-        &[("u", &user_id)],
+    for r in conn.query_as::<String>(
+        "SELECT KATEGORI_ID FROM MOB_KATEGORI_TAMPIL ORDER BY KATEGORI_ID",
+        &[],
     )? {
         out.push(r?);
     }
     Ok(out)
 }
 
-pub fn set_kategori(conn: &Connection, user_id: i64, ids: &[String]) -> AppResult<()> {
-    conn.execute_named(
-        "DELETE FROM MOB_USER_KATEGORI WHERE USER_ID = :u",
-        &[("u", &user_id)],
-    )?;
+pub fn set_kategori(conn: &Connection, ids: &[String]) -> AppResult<()> {
+    conn.execute("DELETE FROM MOB_KATEGORI_TAMPIL", &[])?;
     for id in ids {
-        conn.execute_named(
-            "INSERT INTO MOB_USER_KATEGORI (USER_ID, KATEGORI_ID) VALUES (:u, :k)",
-            &[("u", &user_id), ("k", id)],
+        conn.execute(
+            "INSERT INTO MOB_KATEGORI_TAMPIL (KATEGORI_ID) VALUES (:1)",
+            &[id],
         )?;
     }
     conn.commit()?;

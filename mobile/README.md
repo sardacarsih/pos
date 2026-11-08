@@ -1,6 +1,15 @@
 # kopkar_pos
 
-A new Flutter project.
+## Dev di HP asli (USB)
+
+App memakai `API_URL` dari `--dart-define`; tanpa itu ia memanggil `https://api.example.com` dan selalu gagal terhubung.
+Untuk dev, `adb reverse` meneruskan port 8080 HP ke PC, jadi `http://127.0.0.1:8080` di HP = API di PC (tanpa IP/firewall).
+
+1. Colok HP via USB, aktifkan USB debugging (`adb devices` harus menampilkan HP).
+2. Jalankan API: `cd ../rust-api && cargo run`.
+3. Jalankan app: `./run_dev.ps1 -d <device-id>` (atau F5 konfigurasi "Dev (HP via USB)" di VS Code).
+
+Ulangi langkah 3 setelah kabel dicabut/dicolok (reverse hilang saat koneksi terputus).
 
 ## Getting Started
 

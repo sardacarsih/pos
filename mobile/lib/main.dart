@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/providers.dart';
+import 'core/theme.dart';
+import 'features/admin/admin_dashboard_page.dart';
+import 'features/admin/admin_kategori_page.dart';
 import 'features/admin/admin_page.dart';
+import 'features/admin/admin_produk_page.dart';
+import 'features/anggota/anggota_shell.dart';
 import 'features/anggota/transaksi_saya_page.dart';
 import 'features/auth/login_page.dart';
+import 'features/kasir/dashboard_page.dart';
 import 'features/kasir/kasir_page.dart';
 
 void main() => runApp(const ProviderScope(child: KopkarApp()));
@@ -16,7 +22,11 @@ String? redirectUntuk(AuthState a, String loc) {
   final p = a.profil;
   if (p == null) return loc == '/login' ? null : '/login';
   if (p.gantiPassword) return loc == '/ganti' ? null : '/ganti';
-  final home = switch (p.role) { 'KASIR' => '/kasir', 'ANGGOTA' => '/saya', _ => '/admin' };
+  final home = switch (p.role) {
+    'KASIR' => '/kasir',
+    'ANGGOTA' => '/saya',
+    _ => '/admin',
+  };
   if (loc == '/login' || loc == '/mulai' || loc == '/ganti') return home;
   if (!loc.startsWith(home)) return home;
   return null;
@@ -29,16 +39,43 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/mulai',
     refreshListenable: refresh,
-    redirect: (ctx, st) => redirectUntuk(ref.read(authProvider), st.matchedLocation),
+    redirect: (ctx, st) =>
+        redirectUntuk(ref.read(authProvider), st.matchedLocation),
     routes: [
-      GoRoute(path: '/mulai', builder: (_, _) => const Scaffold(body: Center(child: CircularProgressIndicator()))),
+      GoRoute(
+        path: '/mulai',
+        builder: (_, _) =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+      ),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/ganti', builder: (_, _) => const GantiPasswordPage()),
-      GoRoute(path: '/kasir', builder: (_, _) => const KasirPage()),
-      GoRoute(path: '/saya', builder: (_, _) => const TransaksiSayaPage(), routes: [
-        GoRoute(path: 'faktur/:no', builder: (_, s) => DetailTransaksiPage(no: s.pathParameters['no']!)),
-      ]),
-      GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
+      GoRoute(
+        path: '/kasir',
+        builder: (_, _) => const KasirShell(jual: KasirPage()),
+      ),
+      GoRoute(
+        path: '/saya',
+        builder: (_, _) => const AnggotaShell(),
+        routes: [
+          GoRoute(
+            path: 'faktur/:no',
+            builder: (_, s) => DetailTransaksiPage(no: s.pathParameters['no']!),
+          ),
+          GoRoute(
+            path: 'kartu-anggota',
+            builder: (_, _) => const KartuAnggotaPage(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (_, _) =>
+            const AdminShell(
+              produk: AdminProdukPage(),
+              kategori: AdminKategoriPage(),
+              user: AdminPage(),
+            ),
+      ),
     ],
   );
 });
@@ -58,15 +95,10 @@ class _KopkarAppState extends ConsumerState<KopkarApp> {
 
   @override
   Widget build(BuildContext context) {
-    ThemeData tema(Brightness b) => ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B6B4A), brightness: b),
-          useMaterial3: true,
-          materialTapTargetSize: MaterialTapTargetSize.padded,
-        );
     return MaterialApp.router(
       title: 'Kopkar Kusuma Lestari',
-      theme: tema(Brightness.light),
-      darkTheme: tema(Brightness.dark),
+      theme: kopkarTheme(Brightness.light),
+      darkTheme: kopkarTheme(Brightness.dark),
       themeMode: ThemeMode.system,
       routerConfig: ref.watch(routerProvider),
     );

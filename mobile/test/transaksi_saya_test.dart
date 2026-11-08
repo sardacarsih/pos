@@ -15,7 +15,7 @@ class FakeApi extends ApiClient {
   @override
   Future<({List<TransaksiRingkas> items, bool lagi})> transaksi(int periode, {int page = 1}) async => (
         items: [
-          TransaksiRingkas.fromJson({'no_transaksi': 'W-26-000010', 'tanggal': '2026-11-02', 'jam': '10:00:00', 'jenis_bayar': 'KREDIT', 'tenor': 1, 'total': 250000}),
+          TransaksiRingkas.fromJson({'no_transaksi': 'BBM-26-000010', 'tanggal': '2026-11-02', 'jam': '10:00:00', 'jenis_bayar': 'KREDIT', 'tenor': 1, 'total': 250000}),
         ],
         lagi: false,
       );
@@ -43,7 +43,7 @@ void main() {
     expect(find.text('Transaksi Saya'), findsOneWidget);
     expect(find.text('Rp 250.000'), findsWidgets); // belanja periode + total transaksi
     expect(find.textContaining('Sisa Rp 750.000'), findsOneWidget);
-    expect(find.text('W-26-000010', skipOffstage: false), findsNothing); // nomor tampil di subtitle gabungan
-    expect(find.textContaining('W-26-000010'), findsOneWidget);
+    expect(find.text('BBM-26-000010', skipOffstage: false), findsNothing); // nomor tampil di subtitle gabungan
+    expect(find.textContaining('BBM-26-000010'), findsOneWidget);
   });
 }

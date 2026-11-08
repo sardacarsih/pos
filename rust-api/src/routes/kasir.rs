@@ -1,11 +1,12 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{AppState, Auth, Paging, halaman};
+use super::{AppState, Auth, Paging, halaman, idempotency_key};
 use crate::{
     auth::Role,
     db::{self, faktur, katalog, opt, tampil, user},
@@ -14,6 +15,8 @@ use crate::{
 
 const KASIR: &[Role] = &[Role::Kasir];
 const KASIR_ADMIN: &[Role] = &[Role::Kasir, Role::Admin];
+/// Katalog barang read-only: juga dipakai anggota untuk belanja mandiri.
+const KATALOG: &[Role] = &[Role::Kasir, Role::Anggota];
 
 pub async fn periode_status(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
     a.peran(KASIR)?;
@@ -22,8 +25,8 @@ pub async fn periode_status(State(s): State<AppState>, a: Auth) -> AppResult<Jso
         let tanggal = hari.format("%Y-%m-%d").to_string();
         match faktur::cek_periode(c, hari) {
             Ok(()) => Ok(Json(json!({ "tanggal": tanggal, "terbuka": true }))),
-            Err(AppError::Rule { pesan, .. }) => Ok(Json(
-                json!({ "tanggal": tanggal, "terbuka": false, "pesan": pesan }),
+            Err(AppError::Rule { kode, pesan }) => Ok(Json(
+                json!({ "tanggal": tanggal, "terbuka": false, "pesan": pesan, "kode": kode }),
             )),
             Err(e) => Err(e),
         }
@@ -31,15 +34,55 @@ pub async fn periode_status(State(s): State<AppState>, a: Auth) -> AppResult<Jso
     .await
 }
 
-pub async fn nomor(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
-    let id = a.peran(KASIR)?.sub;
-    let no = db::run(&s.pool, move |c| {
+pub async fn dashboard(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    let usr = a.peran(KASIR)?.usr.clone();
+    let d = db::run(&s.pool, move |c| db::dashboard::dashboard_kasir(c, &usr)).await?;
+    Ok(Json(json!(d)))
+}
+
+#[derive(Deserialize)]
+pub struct RiwayatQuery {
+    tanggal: Option<String>,
+}
+
+/// Riwayat transaksi kasir per tanggal (default hari ini; tidak boleh di masa depan).
+pub async fn riwayat(
+    State(s): State<AppState>,
+    a: Auth,
+    Query(q): Query<RiwayatQuery>,
+) -> AppResult<Json<Value>> {
+    let (id, usr) = {
+        let c = a.peran(KASIR)?;
+        (c.sub, c.usr.clone())
+    };
+    let minta = match q.tanggal.as_deref().filter(|t| !t.is_empty()) {
+        None => None,
+        Some(t) => Some(
+            chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d")
+                .map_err(|_| AppError::validation("Tanggal harus berformat YYYY-MM-DD"))?,
+        ),
+    };
+    let (tgl, items) = db::run(&s.pool, move |c| {
         let (hari, _) = faktur::sekarang(c)?;
-        faktur::cek_periode(c, hari)?;
-        faktur::terbitkan_nomor(c, id)
+        let tgl = minta.unwrap_or(hari);
+        if tgl > hari {
+            return Err(AppError::validation("Tanggal tidak boleh di masa depan"));
+        }
+        Ok((tgl, db::dashboard::riwayat_kasir(c, id, &usr, tgl)?))
     })
     .await?;
-    Ok(Json(json!({ "no_transaksi": no })))
+    Ok(Json(json!({ "tanggal": tgl.format("%Y-%m-%d").to_string(), "items": items })))
+}
+
+pub async fn nomor(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: HeaderMap,
+) -> AppResult<Json<Value>> {
+    let id = a.peran(KASIR)?.sub;
+    let key = idempotency_key(&headers)?;
+    let no =db::run(&s.pool, move |c| faktur::terbitkan_nomor(c, id, &key)).await?;
+    Ok(Json(json!({ "no_transaksi": no.0, "duplikat": no.1 })))
 }
 
 #[derive(Serialize)]
@@ -54,6 +97,8 @@ pub struct BarangResp {
     stok: Option<i64>,
     kategori_id: String,
     kategori: String,
+    /// Versi foto unggahan (epoch detik) atau null; ambil di GET /produk/{id}/foto.
+    foto: Option<i64>,
 }
 
 impl BarangResp {
@@ -68,32 +113,37 @@ impl BarangResp {
             stok,
             kategori_id: p.kategori_id,
             kategori: p.kategori,
+            foto: p.foto_versi,
         }
     }
 }
 
 #[derive(Deserialize)]
 pub struct BarangQuery {
-    #[serde(flatten)]
-    pg: Paging,
+    // Tidak memakai `#[serde(flatten)] Paging`: query string berisi string, dan flatten membuat angka gagal di-parse.
+    q: Option<String>,
+    page: Option<u32>,
+    size: Option<u32>,
     kategori: Option<String>,
 }
 
-async fn kategori_user(s: &AppState, id: i64) -> AppResult<Vec<String>> {
-    db::run(&s.pool, move |c| user::allowed_kategori(c, id)).await
-}
 
 pub async fn barang(
     State(s): State<AppState>,
     a: Auth,
     Query(q): Query<BarangQuery>,
 ) -> AppResult<Json<Value>> {
-    let id = a.peran(KASIR)?.sub;
-    let (page, size) = (q.pg.page(), q.pg.size());
-    let teks = q.pg.q.clone();
-    let chip = q.kategori.clone();
+    a.peran(KATALOG)?;
+    let pg = Paging {
+        q: q.q,
+        page: q.page,
+        size: q.size,
+    };
+    let (page, size) = (pg.page(), pg.size());
+    let teks = pg.q;
+    let chip = q.kategori;
     let (items, lagi) = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c, id)?;
+        let allowed = user::allowed_kategori(c)?;
         // Chip di luar kategori yang diizinkan -> hasil kosong (bukan bocor).
         if let Some(ch) = &chip
             && !allowed.is_empty()
@@ -127,12 +177,12 @@ pub async fn barang_barcode(
     a: Auth,
     Path(kode): Path<String>,
 ) -> AppResult<Json<BarangResp>> {
-    let id = a.peran(KASIR)?.sub;
+    a.peran(KATALOG)?;
     if kode.is_empty() || kode.len() > 64 {
         return Err(AppError::validation("Barcode tidak valid"));
     }
     let r = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c, id)?;
+        let allowed = user::allowed_kategori(c)?;
         let p = katalog::barang_by_barcode(c, &kode, &allowed)?
             .ok_or_else(|| AppError::NotFound("Barang tidak ditemukan".into()))?;
         let (hari, _) = faktur::sekarang(c)?;
@@ -150,9 +200,9 @@ pub async fn kategori(
     State(s): State<AppState>,
     a: Auth,
 ) -> AppResult<Json<Vec<katalog::Kategori>>> {
-    let id = a.peran(KASIR)?.sub;
+    a.peran(KATALOG)?;
     let r = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c, id)?;
+        let allowed = user::allowed_kategori(c)?;
         katalog::kategori_diizinkan(c, &allowed)
     })
     .await?;
@@ -218,16 +268,12 @@ pub async fn pelanggan_nik(
 pub async fn simpan(
     State(s): State<AppState>,
     a: Auth,
+    headers: HeaderMap,
     Json(req): Json<faktur::SimpanReq>,
 ) -> AppResult<Json<faktur::FakturResp>> {
     let cl = a.peran(KASIR)?.clone();
-    if req.baris.len() > 200 {
-        return Err(AppError::validation("Terlalu banyak baris"));
-    }
-    if req.baris.iter().any(|b| b.qty <= 0) {
-        return Err(AppError::validation("Qty harus lebih dari 0"));
-    }
-    let kategori = kategori_user(&s, cl.sub).await?;
+    let key = idempotency_key(&headers)?;
+    let kategori = db::run(&s.pool, user::allowed_kategori).await?;
     let nik_default = s.cfg.default_nik.clone();
     let max_tenor = s.cfg.default_max_tenor;
     let f = db::run(&s.pool, move |c| {
@@ -245,6 +291,7 @@ pub async fn simpan(
                 default_nik: &nik_default,
                 default_max_tenor: max_tenor,
             },
+            &key,
         )
     })
     .await?;
@@ -268,4 +315,40 @@ pub async fn faktur(
     .await?;
     f.map(Json)
         .ok_or_else(|| AppError::NotFound("Faktur tidak ditemukan".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Query string selalu string; `flatten` membuat angka gagal di-parse (400 teks biasa).
+    #[test]
+    fn query_barang_menerima_angka() {
+        let uri: axum::http::Uri = "/api/v1/barang?page=2&size=30&kategori=A&q=x"
+            .parse()
+            .unwrap();
+        let q = Query::<BarangQuery>::try_from_uri(&uri).expect("query barang valid");
+        assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+    }
+}
+
+/// Foto produk unggahan admin; kasir dan admin boleh mengambil. 404 bila tidak ada.
+pub async fn foto_ambil(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<i64>,
+) -> AppResult<axum::response::Response> {
+    use axum::{http::header, response::IntoResponse};
+    a.peran(&[Role::Kasir, Role::Admin, Role::Anggota])?;
+    let f = db::run(&s.pool, move |c| db::foto::ambil(c, id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Foto tidak ada".into()))?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, f.content_type),
+            (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
+        ],
+        f.data,
+    )
+        .into_response())
 }
