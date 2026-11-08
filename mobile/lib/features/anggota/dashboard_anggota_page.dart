@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../profil/profil_page.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
@@ -68,13 +68,7 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
           icon: const Icon(Icons.qr_code_2, color: Colors.white),
           onPressed: () => context.go('/saya/kartu-anggota'),
         ),
-        IconButton(
-          tooltip: 'Profil saya',
-          icon: const ProfilAvatar(radius: 14),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProfilPage()),
-          ),
-        ),
+        const ProfilAksi(),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),

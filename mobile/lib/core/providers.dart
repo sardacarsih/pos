@@ -167,3 +167,12 @@ final fotoAnggotaProvider = FutureProvider.family<Uint8List?, String>((ref, nik)
     return null;
   }
 });
+
+/// Foto akun lain untuk daftar admin; kunci memuat versi (ganti foto = versi baru = unduh ulang).
+final fotoUserProvider = FutureProvider.family<Uint8List?, ({int id, int versi})>((ref, k) async {
+  try {
+    return await ref.read(apiProvider).fotoUser(k.id);
+  } on ApiException {
+    return null;
+  }
+});

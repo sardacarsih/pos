@@ -601,6 +601,19 @@ class ApiClient {
     );
   }
 
+  /// Foto profil akun lain untuk daftar admin. 404 -> ApiException.
+  Future<Uint8List> fotoUser(int id) async {
+    try {
+      final r = await _dio.get<List<int>>(
+        '/api/v1/admin/users/$id/foto',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(r.data ?? const []);
+    } on DioException catch (e) {
+      throw ApiException('Foto tidak ada', status: e.response?.statusCode);
+    }
+  }
+
   /// Foto anggota untuk kasir (verifikasi identitas). 404 -> ApiException.
   Future<Uint8List> fotoAnggota(String nik) async {
     try {

@@ -299,10 +299,12 @@ class UserInfo {
       nik = j['nik'] as String?,
       aktif = j['aktif'] == true,
       terkunci = j['terkunci'] == true,
+      fotoVersi = (j['foto_versi'] as num?)?.toInt(),
       kategori = [for (final k in (j['kategori'] as List? ?? [])) k as String];
   final int id;
   final String username, nama, role;
   final String? nik;
   final bool aktif, terkunci;
+  final int? fotoVersi; // null = tanpa foto profil
   final List<String> kategori;
 }

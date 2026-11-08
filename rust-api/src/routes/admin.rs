@@ -26,6 +26,27 @@ pub async fn list(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user
     Ok(Json(db::run(&s.pool, user::list_users).await?))
 }
 
+/// Foto profil akun lain untuk daftar admin. Hanya ADMIN; hanya foto (tanpa kontak).
+pub async fn foto_user(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<i64>,
+) -> AppResult<axum::response::Response> {
+    use axum::{http::header, response::IntoResponse};
+    a.peran(ADMIN)?;
+    let f = db::run(&s.pool, move |c| db::profil::ambil_foto(c, id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Foto tidak ada".into()))?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, f.content_type),
+            (header::CACHE_CONTROL, "private, no-cache".to_string()),
+        ],
+        f.data,
+    )
+        .into_response())
+}
+
 #[derive(Deserialize)]
 pub struct BuatReq {
     username: String,

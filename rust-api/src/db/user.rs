@@ -193,6 +193,8 @@ pub struct UserInfo {
     pub aktif: bool,
     pub terkunci: bool,
     pub kategori: Vec<String>,
+    /// Versi foto profil (epoch detik); null = tanpa foto. Kunci cache klien untuk daftar admin.
+    pub foto_versi: Option<i64>,
 }
 
 pub fn create_user(
@@ -216,11 +218,17 @@ pub fn create_user(
 }
 
 pub fn list_users(conn: &Connection) -> AppResult<Vec<UserInfo>> {
-    let sql = format!("SELECT {USER_COLS} FROM MOB_USER ORDER BY USERNAME");
+    let sql = format!(
+        "SELECT {USER_COLS}, (SELECT P.FOTO_VERSI FROM MOB_USER_PROFIL P WHERE P.USER_ID = MOB_USER.USER_ID) \
+         FROM MOB_USER ORDER BY USERNAME"
+    );
     let mut out = Vec::new();
     for r in conn.query(&sql, &[])? {
-        let u = map(&r?)?;
+        let r = r?;
+        let u = map(&r)?;
+        let foto_versi: Option<i64> = r.get(9)?;
         out.push(UserInfo {
+            foto_versi,
             id: u.id,
             username: u.username,
             nama: u.full_name,
