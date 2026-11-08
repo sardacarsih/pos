@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 
 class AdminPage extends ConsumerStatefulWidget {
@@ -243,6 +244,7 @@ class _AdminPageState extends ConsumerState<AdminPage>
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      leading: UserAvatar(id: u.id, nama: u.nama, fotoVersi: u.fotoVersi),
       title: Text(
         '${u.nama} (${u.username})',
         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -351,6 +353,7 @@ class _AdminPageState extends ConsumerState<AdminPage>
     return TropicalScaffold(
       title: 'Admin · User Mobile',
       actions: [
+        const ProfilAksi(),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),

@@ -5,6 +5,7 @@ import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 import 'bayar_page.dart';
 
@@ -109,6 +110,7 @@ class _RiwayatPageState extends ConsumerState<RiwayatPage> {
     final hariIni = tgl != null && _hari != null && _fmt(tgl) == _fmt(_hari!);
     return TropicalScaffold(
       title: 'Riwayat',
+      actions: const [ProfilAksi()],
       body: Column(
         children: [
           Padding(

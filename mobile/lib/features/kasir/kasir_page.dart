@@ -11,6 +11,7 @@ import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/cart.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 import 'bayar_page.dart';
 
@@ -498,6 +499,7 @@ class _KasirPageState extends ConsumerState<KasirPage> {
           icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
           onPressed: blokPeriode != null ? null : _scan,
         ),
+        const ProfilAksi(),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),

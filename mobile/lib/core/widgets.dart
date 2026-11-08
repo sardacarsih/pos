@@ -516,3 +516,21 @@ class FotoAnggotaAvatar extends ConsumerWidget {
     radius: radius,
   );
 }
+
+/// Foto akun lain (daftar admin): foto bila ada versi, selain itu inisial nama.
+class UserAvatar extends ConsumerWidget {
+  const UserAvatar({super.key, required this.id, required this.nama, this.fotoVersi, this.radius = 20});
+  final int id;
+  final String nama;
+  final int? fotoVersi;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => AvatarFoto(
+    nama: nama,
+    bytes: fotoVersi == null
+        ? null
+        : ref.watch(fotoUserProvider((id: id, versi: fotoVersi!))).value,
+    radius: radius,
+  );
+}

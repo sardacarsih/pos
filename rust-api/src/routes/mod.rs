@@ -184,6 +184,7 @@ pub fn router(state: AppState) -> Router {
             post(admin::reset_password),
         )
         .route("/api/v1/admin/users/{id}/aktif", put(admin::aktif))
+        .route("/api/v1/admin/users/{id}/foto", get(admin::foto_user))
         .route("/api/v1/admin/produk-urut", put(admin::set_urut_produk))
         .route(
             "/api/v1/admin/kategori-tampil",

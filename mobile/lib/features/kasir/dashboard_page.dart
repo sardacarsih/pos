@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../profil/profil_page.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
@@ -95,17 +95,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final d = _data;
-    final profil = ref.watch(authProvider).profil;
     return TropicalScaffold(
       title: 'Dashboard',
       actions: [
-        IconButton(
-          tooltip: 'Profil saya',
-          icon: const ProfilAvatar(radius: 14),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProfilPage()),
-          ),
-        ),
+        const ProfilAksi(),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),
@@ -118,14 +111,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
           children: [
-            if (profil != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Halo, ${profil.nama}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
+            const SapaanProfil(),
             if (_loading && d == null)
               const Padding(
                 padding: EdgeInsets.all(40),

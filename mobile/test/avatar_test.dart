@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kopkar_pos/core/widgets.dart';
 
@@ -12,6 +13,7 @@ final _png = base64Decode(
 Widget _host(Widget w) => MaterialApp(home: Scaffold(body: Center(child: w)));
 
 void main() {
+  userAvatarTests();
   testWidgets('AvatarFoto tanpa foto menampilkan inisial dua kata', (t) async {
     await t.pumpWidget(_host(const AvatarFoto(nama: 'aan sutisna')));
     expect(find.text('AS'), findsOneWidget);
@@ -31,5 +33,16 @@ void main() {
     await t.pumpWidget(_host(AvatarFoto(nama: 'Aan', bytes: _png)));
     final a = t.widget<CircleAvatar>(find.byType(CircleAvatar));
     expect(a.foregroundImage, isA<MemoryImage>());
+  });
+}
+
+void userAvatarTests() {
+  testWidgets('UserAvatar tanpa versi foto menampilkan inisial', (t) async {
+    await t.pumpWidget(
+      ProviderScope(
+        child: _host(const UserAvatar(id: 7, nama: 'budi santoso')),
+      ),
+    );
+    expect(find.text('BS'), findsOneWidget);
   });
 }

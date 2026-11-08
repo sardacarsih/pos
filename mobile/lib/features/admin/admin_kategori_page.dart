@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 import 'admin_urut_page.dart';
 
@@ -79,6 +80,7 @@ class _AdminKategoriPageState extends ConsumerState<AdminKategoriPage> {
     return TropicalScaffold(
       title: 'Admin · Kategori',
       actions: [
+        const ProfilAksi(),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),
