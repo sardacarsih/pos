@@ -382,7 +382,8 @@ namespace Penjualan.DataLayer
                 limitCmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
                 object? result = limitCmd.ExecuteScalar();
                 if (result == null)
-                    return; // member not found — nothing to enforce
+                    throw new InvalidOperationException(
+                        $"Anggota dengan NIK '{creditCheck.NIK}' tidak ditemukan; limit hutang tidak dapat diperiksa.");
                 limit = Convert.ToDecimal(result);
             }
 
@@ -394,7 +395,8 @@ namespace Penjualan.DataLayer
             // must not exceed the limit. The cap resets each period.
             var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
             if (window == null)
-                return; // period not configured — cannot evaluate the window
+                throw new InvalidOperationException(
+                    $"Periode {creditCheck.TransactionDate:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
 
             decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
 
