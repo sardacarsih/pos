@@ -1,4 +1,4 @@
-﻿using BackOffice.Controller;
+using BackOffice.Controller;
 using BackOffice.Laporan;
 using BackOffice.Model;
 using DevExpress.Export;
@@ -61,6 +61,7 @@ namespace BackOffice.UC.Persediaan
                 var startdate = new DateTime(enddate.Year, 1, 1);
                 persediaan = controller.GetProductStockInfo(startdate, enddate);
                 gridControl1.DataSource = persediaan;
+                gridControl1.ForceInitialize();
 
                 gridView1.Columns["IDX"].GroupIndex = 0;
                 gridView1.ExpandAllGroups();
