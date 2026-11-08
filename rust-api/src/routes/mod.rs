@@ -8,7 +8,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     Json, Router,
     extract::{ConnectInfo, DefaultBodyLimit, FromRequestParts},
-    http::{Request, request::Parts},
+    http::{HeaderMap, Request, request::Parts},
     routing::{get, post, put},
 };
 use serde::Deserialize;
@@ -111,6 +111,30 @@ pub fn halaman<T: serde::Serialize>(items: Vec<T>, ada_lagi: bool, page: u32) ->
     Json(json!({ "items": items, "ada_lagi": ada_lagi, "page": page }))
 }
 
+/// Checkout uses a canonical UUID v4 so a caller can safely persist and replay it.
+pub fn idempotency_key(headers: &HeaderMap) -> AppResult<String> {
+    let raw = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| AppError::validation("Header Idempotency-Key wajib diisi"))?;
+    let key = raw.to_ascii_lowercase();
+    let bytes = key.as_bytes();
+    let valid = bytes.len() == 36
+        && [8, 13, 18, 23].iter().all(|&i| bytes[i] == b'-')
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(i, b)| [8, 13, 18, 23].contains(&i) || b.is_ascii_hexdigit())
+        && bytes[14] == b'4'
+        && matches!(bytes[19], b'8' | b'9' | b'a' | b'b');
+    if !valid {
+        return Err(AppError::validation(
+            "Idempotency-Key harus berupa UUID versi 4",
+        ));
+    }
+    Ok(key)
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
@@ -121,6 +145,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/me", get(auth::me))
         // kasir
         .route("/api/v1/periode/status", get(kasir::periode_status))
+        .route("/api/v1/kasir/dashboard", get(kasir::dashboard))
+        .route("/api/v1/kasir/riwayat", get(kasir::riwayat))
         .route("/api/v1/transaksi/nomor", post(kasir::nomor))
         .route("/api/v1/barang", get(kasir::barang))
         .route(
@@ -134,6 +160,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/faktur/{no}", get(kasir::faktur))
         // anggota
         .route("/api/v1/saya/ringkasan", get(anggota::ringkasan))
+        .route("/api/v1/saya/dashboard", get(anggota::dashboard))
+        .route("/api/v1/saya/belanja/nomor", post(anggota::nomor))
+        .route("/api/v1/saya/belanja", post(anggota::simpan))
         .route("/api/v1/saya/transaksi", get(anggota::transaksi))
         .route("/api/v1/saya/transaksi/{no}", get(anggota::detail))
         // admin
@@ -143,12 +172,52 @@ pub fn router(state: AppState) -> Router {
             post(admin::reset_password),
         )
         .route("/api/v1/admin/users/{id}/aktif", put(admin::aktif))
-        .route("/api/v1/admin/users/{id}/kategori", put(admin::kategori))
+        .route("/api/v1/admin/produk-urut", put(admin::set_urut_produk))
+        .route(
+            "/api/v1/admin/kategori-tampil",
+            get(admin::kategori_tampil).put(admin::set_kategori_tampil),
+        )
         .route("/api/v1/admin/kategori", get(admin::semua_kategori))
+        .route("/api/v1/admin/dashboard", get(admin::dashboard))
+        .route("/api/v1/admin/produk", get(admin::produk_list))
+        .route("/api/v1/admin/produk/{id}", put(admin::produk_ubah))
+        .route(
+            "/api/v1/admin/produk/{id}/foto",
+            put(admin::foto_ubah)
+                .delete(admin::foto_hapus)
+                // Unggah foto: batas body lebih besar dari default 256 KB (foto maks 1 MB + sedikit ruang).
+                .layer(DefaultBodyLimit::max(1_100_000)),
+        )
+        .route("/api/v1/produk/{id}/foto", get(kasir::foto_ambil))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(TraceLayer::new_for_http().make_span_with(|r: &Request<_>| {
             // Hanya method + path: query (nama/NIK) dan header tidak ikut log.
             tracing::info_span!("req", method = %r.method(), path = %r.uri().path())
         }))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod idempotency_key_tests {
+    use axum::http::{HeaderMap, HeaderValue};
+
+    use super::idempotency_key;
+
+    #[test]
+    fn requires_canonical_uuid_v4_header() {
+        let mut headers = HeaderMap::new();
+        assert!(idempotency_key(&headers).is_err());
+
+        headers.insert("Idempotency-Key", HeaderValue::from_static("not-a-uuid"));
+        assert!(idempotency_key(&headers).is_err());
+
+        headers.insert(
+            "Idempotency-Key",
+            HeaderValue::from_static("d9428888-122b-4f8a-8e3c-20d3c7eab5f1"),
+        );
+        assert_eq!(
+            idempotency_key(&headers).unwrap(),
+            "d9428888-122b-4f8a-8e3c-20d3c7eab5f1"
+        );
+    }
 }

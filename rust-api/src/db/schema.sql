@@ -40,10 +40,42 @@ CREATE TABLE MOB_USER_KATEGORI (
   CONSTRAINT PK_MOB_USER_KATEGORI PRIMARY KEY (USER_ID, KATEGORI_ID)
 )
 /
--- Nomor transaksi yang diterbitkan ke kasir; sekaligus kunci idempotensi simpan faktur.
+-- Kategori yang tampil di Pilih Produk kasir (global; kosong = semua).
+CREATE TABLE MOB_KATEGORI_TAMPIL (
+  KATEGORI_ID VARCHAR2(30) PRIMARY KEY
+)
+/
+-- Urutan manual produk di Pilih Produk kasir (kecil = di atas; tanpa baris = abjad di bawah).
+CREATE TABLE MOB_PRODUK_URUT (
+  PRODUCT_ID NUMBER PRIMARY KEY,
+  URUT       NUMBER NOT NULL
+)
+/
+-- Nomor transaksi yang diterbitkan ke kasir dan status faktur mobile.
 CREATE TABLE MOB_NOMOR (
   NO_TRANSAKSI VARCHAR2(30) PRIMARY KEY,
   USER_ID      NUMBER NOT NULL REFERENCES MOB_USER (USER_ID),
   ISSUED_AT    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
   USED_AT      TIMESTAMP
+)
+/
+-- Kunci request checkout dipertahankan bersama nomor/faktur untuk retry dan recovery.
+CREATE TABLE MOB_IDEMPOTENCY (
+  USER_ID         NUMBER NOT NULL REFERENCES MOB_USER (USER_ID),
+  OPERASI         VARCHAR2(20) NOT NULL,
+  IDEMPOTENCY_KEY VARCHAR2(36) NOT NULL,
+  RESOURCE_ID     VARCHAR2(30),
+  PAYLOAD_HASH    VARCHAR2(64),
+  CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+  CONSTRAINT PK_MOB_IDEMPOTENCY PRIMARY KEY (USER_ID, OPERASI, IDEMPOTENCY_KEY)
+)
+/
+-- Foto produk yang diunggah admin (BLOB, maks ~1 MB). Tabel terpisah: POS_PRODUCT (dipakai desktop) tidak diubah.
+-- VERSI = epoch detik saat unggah; klien memakainya sebagai kunci cache dan penanda "ada foto".
+CREATE TABLE MOB_PRODUK_FOTO (
+  PRODUCT_ID   NUMBER NOT NULL,
+  CONTENT_TYPE VARCHAR2(30) NOT NULL,
+  DATA         BLOB NOT NULL,
+  VERSI        NUMBER NOT NULL,
+  CONSTRAINT PK_MOB_PRODUK_FOTO PRIMARY KEY (PRODUCT_ID)
 )

@@ -22,6 +22,13 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     };
     db::migrate(&c).unwrap();
     db::migrate(&c).unwrap(); // kedua kali tidak boleh gagal
+    let table_count: i64 = c
+        .query_row_as(
+            "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = 'MOB_IDEMPOTENCY'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(table_count, 1);
 
     let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
     let h = password::hash("sementara-123").unwrap();
@@ -33,6 +40,20 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     );
     assert!(password::verify("sementara-123", &u.hash));
 
+    let key = uuid::Uuid::new_v4().to_string();
+    c.execute_named(
+        "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY, RESOURCE_ID) VALUES (:u, 'NOMOR', :k, 'BBM-26-000001')",
+        &[("u", &id), ("k", &key)],
+    )
+    .unwrap();
+    c.commit().unwrap();
+    let duplicate = c.execute_named(
+        "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY) VALUES (:u, 'NOMOR', :k)",
+        &[("u", &id), ("k", &key)],
+    );
+    assert_eq!(duplicate.unwrap_err().oci_code(), Some(1));
+    c.rollback().unwrap();
+
     // 5 gagal berturut-turut -> terkunci sementara
     for _ in 0..5 {
         user::register_failure(&c, id).unwrap();
@@ -41,6 +62,8 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     user::reset_failures(&c, id).unwrap();
     assert!(!user::find_by_id(&c, id).unwrap().unwrap().locked);
 
+    c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&id])
+        .unwrap();
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&id])
         .unwrap();
     c.commit().unwrap();

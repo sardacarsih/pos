@@ -1,20 +1,34 @@
+import 'dart:typed_data';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api.dart';
 import 'cart.dart';
+import 'checkout.dart';
 import 'models.dart';
 
 /// Alamat server (HTTPS) diberikan saat build: --dart-define=API_URL=https://...
-const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'https://api.example.com');
+const apiUrl = String.fromEnvironment(
+  'API_URL',
+  defaultValue: 'https://api.example.com',
+);
 
-final tokenStoreProvider = Provider<TokenStore>((_) => const SecureTokenStore());
+final tokenStoreProvider = Provider<TokenStore>(
+  (_) => const SecureTokenStore(),
+);
 
-final apiProvider = Provider<ApiClient>((ref) => ApiClient(
-      baseUrl: apiUrl,
-      store: ref.watch(tokenStoreProvider),
-      onExpired: () => ref.read(authProvider.notifier).sesiBerakhir(),
-    ));
+final checkoutStoreProvider = Provider<CheckoutStore>(
+  (_) => const SecureCheckoutStore(),
+);
+
+final apiProvider = Provider<ApiClient>(
+  (ref) => ApiClient(
+    baseUrl: apiUrl,
+    store: ref.watch(tokenStoreProvider),
+    onExpired: () => ref.read(authProvider.notifier).sesiBerakhir(),
+  ),
+);
 
 class AuthState {
   const AuthState({this.profil, this.memulihkan = false});
@@ -54,7 +68,9 @@ class AuthNotifier extends Notifier<AuthState> {
   void sesiBerakhir() => state = const AuthState();
 }
 
-final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);
 
 class CartState {
   const CartState(this.cart, this.v);
@@ -67,13 +83,18 @@ class CartNotifier extends Notifier<CartState> {
   CartState build() => CartState(Cart(), 0);
 
   void _bump() => state = CartState(state.cart, state.v + 1);
-  void tambah(Barang b) {
-    state.cart.tambah(b);
+  void tambah(Barang b, {int qty = 1, int? qtyCenti}) {
+    state.cart.tambah(b, qty: qty, qtyCenti: qtyCenti);
     _bump();
   }
 
   void atur(int id, int qty) {
     state.cart.atur(id, qty);
+    _bump();
+  }
+
+  void aturCenti(int id, int qtyCenti) {
+    state.cart.aturCenti(id, qtyCenti);
     _bump();
   }
 
@@ -83,12 +104,42 @@ class CartNotifier extends Notifier<CartState> {
   }
 }
 
-final cartProvider = NotifierProvider<CartNotifier, CartState>(CartNotifier.new);
+final cartProvider = NotifierProvider<CartNotifier, CartState>(
+  CartNotifier.new,
+);
+
+/// Status periode penjualan hari ini. null = gagal dimuat -> tidak memblokir di UI (server tetap menolak).
+/// Periode bermasalah (tutup/belum diatur/tidak valid) memblokir transaksi karena limit hutang bergantung pada periode.
+final periodeProvider =
+    FutureProvider<({bool terbuka, String? pesan, String? kode})?>((ref) async {
+      try {
+        final j = await ref.read(apiProvider).periodeStatus();
+        return (
+          terbuka: j['terbuka'] == true,
+          pesan: j['pesan'] as String?,
+          kode: j['kode'] as String?,
+        );
+      } on ApiException {
+        return null;
+      }
+    });
 
 /// True bila ada koneksi jaringan. Fase 1 wajib online: tombol Bayar diblokir saat false.
 final onlineProvider = StreamProvider<bool>((ref) async* {
   final c = Connectivity();
-  bool ok(List<ConnectivityResult> r) => r.isNotEmpty && !r.contains(ConnectivityResult.none);
+  bool ok(List<ConnectivityResult> r) =>
+      r.isNotEmpty && !r.contains(ConnectivityResult.none);
   yield ok(await c.checkConnectivity());
   yield* c.onConnectivityChanged.map(ok);
 });
+
+/// Foto produk unggahan admin, di-cache selama sesi. Kunci memuat versi: ganti foto = kunci baru = muat ulang.
+/// null (gagal/tidak ada) -> tampilan memakai ikon atau foto bawaan.
+final fotoProdukProvider =
+    FutureProvider.family<Uint8List?, ({int id, int versi})>((ref, k) async {
+      try {
+        return await ref.read(apiProvider).fotoProduk(k.id);
+      } on ApiException {
+        return null;
+      }
+    });

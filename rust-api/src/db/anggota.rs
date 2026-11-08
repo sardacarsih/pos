@@ -1,5 +1,5 @@
 //! Data milik anggota sendiri. NIK SELALU dari token, tidak pernah dari parameter klien.
-use chrono::{Datelike, NaiveDateTime};
+use chrono::NaiveDateTime;
 use oracle::Connection;
 use serde::Serialize;
 
@@ -30,9 +30,18 @@ pub struct TransaksiRingkas {
     pub total: i64,
 }
 
+/// Periode hari ini menurut rentang tanggal POS_PERIODE (bukan bulan kalender).
 pub fn periode_sekarang(conn: &Connection) -> AppResult<i32> {
     let (d, _) = faktur::sekarang(conn)?;
-    Ok(d.year() * 100 + d.month() as i32)
+    faktur::periode_untuk_tanggal(conn, d)?.ok_or_else(|| {
+        AppError::rule(
+            "PERIODE_TIDAK_ADA",
+            format!(
+                "Tanggal {} di luar rentang periode yang dikonfigurasi",
+                d.format("%Y-%m-%d")
+            ),
+        )
+    })
 }
 
 pub fn ringkasan(conn: &Connection, nik: &str, periode: i32) -> AppResult<Ringkasan> {

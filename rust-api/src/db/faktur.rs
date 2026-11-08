@@ -2,6 +2,7 @@ use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use oracle::Connection;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::{Binds, dec, katalog, num, opt, rupiah, tampil, tm};
 use crate::{
@@ -20,39 +21,131 @@ pub fn sekarang(conn: &Connection) -> AppResult<(NaiveDate, String)> {
     Ok((d.date(), jam))
 }
 
-/// Periode harus terbuka: remise untuk tanggal itu belum 'Y' dan periode <= MAX(PERIODE). Fail closed.
-pub fn cek_periode(conn: &Connection, tanggal: NaiveDate) -> AppResult<()> {
-    let periode = tanggal.year() * 100 + tanggal.month() as i32;
-    let kolom = if calc::remise_untuk_hari(tanggal.day()) == 1 {
-        "REMISE1"
+const TGL: &str = "'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'";
+
+/// Remise untuk tanggal: dalam R1DARI..R1SAMPAI -> 1, dalam R2DARI..R2SAMPAI -> 2,
+/// selain itu aturan lama berbasis hari (<= 15 -> 1).
+fn pilih_remise(
+    tanggal: NaiveDate,
+    r1: Option<(NaiveDate, NaiveDate)>,
+    r2: Option<(NaiveDate, NaiveDate)>,
+) -> u8 {
+    let dalam =
+        |r: Option<(NaiveDate, NaiveDate)>| r.is_some_and(|(a, b)| (a..=b).contains(&tanggal));
+    if dalam(r1) {
+        1
+    } else if dalam(r2) {
+        2
     } else {
-        "REMISE2"
-    };
-    let row = opt(conn.query_row_named(
-        &format!("SELECT {kolom} FROM POS_PERIODE WHERE PERIODE = :p"),
-        &[("p", &(periode as i64))],
-    ))?;
-    let Some(row) = row else {
-        return Err(AppError::rule(
-            "PERIODE_TIDAK_ADA",
-            format!("Periode {periode} belum dikonfigurasi"),
-        ));
-    };
-    let tutup: Option<String> = row.get(0)?;
+        calc::remise_untuk_hari(tanggal.day())
+    }
+}
+
+/// Aturan tutup/valid yang tidak butuh DB: flag 'Y' = tutup; periode > MAX(PERIODE) = belum valid.
+fn validasi_periode(periode: i64, tutup: Option<&str>, max: Option<i64>) -> AppResult<()> {
     if tutup.is_some_and(|t| t.trim().eq_ignore_ascii_case("Y")) {
         return Err(AppError::rule(
             "PERIODE_TUTUP",
-            "Periode telah ditutup, transaksi tidak dapat dilakukan",
+            format!("Periode {periode} telah ditutup, transaksi tidak dapat dilakukan"),
         ));
     }
-    let max: Option<i64> = conn.query_row_as("SELECT MAX(PERIODE) FROM POS_PERIODE", &[])?;
-    if max.is_some_and(|m| (periode as i64) > m) {
+    if max.is_some_and(|m| periode > m) {
         return Err(AppError::rule(
             "PERIODE_TIDAK_VALID",
             "Input transaksi dibatasi pada periode yang valid",
         ));
     }
     Ok(())
+}
+
+/// Periode harus terbuka: tanggal berada dalam rentang bulanan (BDARI..BSAMPAI) sebuah baris POS_PERIODE,
+/// remise untuk tanggal itu belum 'Y', dan periode <= MAX(PERIODE). Fail closed.
+pub fn cek_periode(conn: &Connection, tanggal: NaiveDate) -> AppResult<()> {
+    let sql = format!(
+        "SELECT PERIODE, REMISE1, REMISE2, \
+                TO_DATE(R1DARI, {TGL}), TO_DATE(R1SAMPAI, {TGL}), \
+                TO_DATE(R2DARI, {TGL}), TO_DATE(R2SAMPAI, {TGL}) \
+         FROM POS_PERIODE \
+         WHERE :tgl BETWEEN TO_DATE(BDARI, {TGL}) AND TO_DATE(BSAMPAI, {TGL}) \
+         ORDER BY PERIODE DESC FETCH FIRST 1 ROWS ONLY"
+    );
+    let Some(r) = opt(conn.query_row_named(&sql, &[("tgl", &tanggal)]))? else {
+        return Err(AppError::rule(
+            "PERIODE_TIDAK_ADA",
+            format!(
+                "Tanggal {} di luar rentang periode yang dikonfigurasi",
+                tanggal.format("%Y-%m-%d")
+            ),
+        ));
+    };
+    let periode: i64 = r.get(0)?;
+    let tgl = |i: usize| -> AppResult<Option<NaiveDate>> {
+        Ok(r.get::<_, Option<NaiveDateTime>>(i)?.map(|d| d.date()))
+    };
+    let rentang = |a: Option<NaiveDate>, b: Option<NaiveDate>| a.zip(b);
+    let remise = pilih_remise(
+        tanggal,
+        rentang(tgl(3)?, tgl(4)?),
+        rentang(tgl(5)?, tgl(6)?),
+    );
+    let tutup: Option<String> = r.get(if remise == 1 { 1 } else { 2 })?;
+    let max: Option<i64> = conn.query_row_as("SELECT MAX(PERIODE) FROM POS_PERIODE", &[])?;
+    validasi_periode(periode, tutup.as_deref(), max)
+}
+
+#[cfg(test)]
+mod periode_tests {
+    use super::*;
+
+    fn d(y: i32, m: u32, dd: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, dd).unwrap()
+    }
+
+    #[test]
+    fn remise_mengikuti_rentang_bukan_hari_kalender() {
+        // R1 digeser: 20 Okt - 4 Nov; R2: 5 Nov - 19 Nov.
+        let r1 = Some((d(2026, 10, 20), d(2026, 11, 4)));
+        let r2 = Some((d(2026, 11, 5), d(2026, 11, 19)));
+        assert_eq!(pilih_remise(d(2026, 11, 3), r1, r2), 1); // hari<=15 dan di R1
+        assert_eq!(pilih_remise(d(2026, 11, 10), r1, r2), 2); // hari<=15 tapi di R2 (aturan lama salah)
+        assert_eq!(pilih_remise(d(2026, 10, 25), r1, r2), 1);
+    }
+
+    #[test]
+    fn remise_fallback_aturan_hari_bila_rentang_kosong() {
+        assert_eq!(pilih_remise(d(2026, 11, 10), None, None), 1);
+        assert_eq!(pilih_remise(d(2026, 11, 20), None, None), 2);
+    }
+
+    #[test]
+    fn validasi_tutup_dan_max() {
+        assert!(validasi_periode(202611, None, Some(202611)).is_ok());
+        assert!(validasi_periode(202611, Some(" n "), Some(202611)).is_ok());
+        assert!(matches!(
+            validasi_periode(202611, Some("y"), Some(202611)),
+            Err(AppError::Rule {
+                kode: "PERIODE_TUTUP",
+                ..
+            })
+        ));
+        assert!(matches!(
+            validasi_periode(202612, None, Some(202611)),
+            Err(AppError::Rule {
+                kode: "PERIODE_TIDAK_VALID",
+                ..
+            })
+        ));
+    }
+}
+
+/// Periode yang rentang bulanannya (BDARI..BSAMPAI) memuat tanggal; terbesar bila tumpang tindih. None bila tidak ada.
+/// Dasar semua pencarian periode (status buka/tutup maupun window limit hutang) — bukan bulan kalender.
+pub fn periode_untuk_tanggal(conn: &Connection, tanggal: NaiveDate) -> AppResult<Option<i32>> {
+    let sql = "SELECT PERIODE FROM POS_PERIODE          WHERE :tgl BETWEEN TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')                         AND TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')          ORDER BY PERIODE DESC FETCH FIRST 1 ROWS ONLY";
+    match opt(conn.query_row_named(sql, &[("tgl", &tanggal)]))? {
+        Some(r) => Ok(Some(r.get::<_, i64>(0)? as i32)),
+        None => Ok(None),
+    }
 }
 
 /// Jendela periode anggota: BULANAN -> BDARI..BSAMPAI, selain itu R1DARI..R2SAMPAI.
@@ -118,14 +211,18 @@ fn validasi_limit(
     if limit.is_zero() {
         return Ok(status);
     }
-    let periode = tanggal.year() * 100 + tanggal.month() as i32;
-    let Some((dari, sampai)) = jendela_periode(conn, periode, &status)? else {
-        return Err(AppError::rule(
+    let tidak_ada = || {
+        AppError::rule(
             "PERIODE_TIDAK_ADA",
             format!(
-                "Periode {periode} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa"
+                "Tanggal {} di luar rentang periode di POS_PERIODE; limit hutang tidak dapat diperiksa",
+                tanggal.format("%Y-%m-%d")
             ),
-        ));
+        )
+    };
+    let periode = periode_untuk_tanggal(conn, tanggal)?.ok_or_else(tidak_ada)?;
+    let Some((dari, sampai)) = jendela_periode(conn, periode, &status)? else {
+        return Err(tidak_ada());
     };
     let spend = belanja_periode(conn, nik, dari, sampai)?;
     if credit_limit::is_exceeded(spend, invoice, limit) {
@@ -141,36 +238,85 @@ fn validasi_limit(
 
 // ------------------------------------------------------------- nomor
 
-pub fn terbitkan_nomor(conn: &Connection, user_id: i64) -> AppResult<String> {
+pub fn terbitkan_nomor(
+    conn: &Connection,
+    user_id: i64,
+    idempotency_key: &str,
+) -> AppResult<(String, bool)> {
+    let result = terbitkan_nomor_inner(conn, user_id, idempotency_key);
+    if result.is_err() {
+        let _ = conn.rollback();
+    }
+    result
+}
+
+fn terbitkan_nomor_inner(
+    conn: &Connection,
+    user_id: i64,
+    idempotency_key: &str,
+) -> AppResult<(String, bool)> {
+    match conn.execute_named(
+        "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY) VALUES (:u, 'NOMOR', :k)",
+        &[("u", &user_id), ("k", &idempotency_key)],
+    ) {
+        Ok(_) => {}
+        Err(e) if e.oci_code() == Some(1) => {
+            // INSERT menunggu transaksi pertama jika kuncinya sedang diproses.
+            // Setelah unique violation, rollback lalu baca hasil yang sudah commit.
+            conn.rollback()?;
+            let row = conn.query_row_named(
+                "SELECT RESOURCE_ID FROM MOB_IDEMPOTENCY WHERE USER_ID = :u AND OPERASI = 'NOMOR' AND IDEMPOTENCY_KEY = :k",
+                &[("u", &user_id), ("k", &idempotency_key)],
+            )?;
+            let no: Option<String> = row.get(0)?;
+            return no
+                .map(|no| (no, true))
+                .ok_or_else(|| AppError::Internal("kunci nomor belum memiliki hasil".into()));
+        }
+        Err(e) => return Err(e.into()),
+    }
+
+    let (hari, _) = sekarang(conn)?;
+    cek_periode(conn, hari)?;
+    let no = terbitkan_nomor_baru(conn, user_id)?;
+    conn.execute_named(
+        "UPDATE MOB_IDEMPOTENCY SET RESOURCE_ID = :n WHERE USER_ID = :u AND OPERASI = 'NOMOR' AND IDEMPOTENCY_KEY = :k",
+        &[("n", &no), ("u", &user_id), ("k", &idempotency_key)],
+    )?;
+    conn.commit()?;
+    Ok((no, false))
+}
+
+fn terbitkan_nomor_baru(conn: &Connection, user_id: i64) -> AppResult<String> {
     let (hari, _) = sekarang(conn)?;
     let terakhir: Option<String> = opt(conn.query_row_as_named::<Option<String>>(
-        "SELECT NOMOR FROM NOMOR_TRANSAKSI WHERE KODE = 'PENJUALAN' FOR UPDATE",
+        "SELECT NOMOR FROM NOMOR_TRANSAKSI WHERE KODE = 'BBM' FOR UPDATE",
         &[],
     ))?
     .flatten();
     let baru = nomor::berikutnya(terakhir.as_deref(), hari.year());
     conn.execute_named(
-        "MERGE INTO NOMOR_TRANSAKSI t USING (SELECT 'PENJUALAN' AS KODE FROM DUAL) s ON (t.KODE = s.KODE) \
-         WHEN MATCHED THEN UPDATE SET NOMOR = :n WHEN NOT MATCHED THEN INSERT (KODE, NOMOR) VALUES ('PENJUALAN', :n)",
+        "MERGE INTO NOMOR_TRANSAKSI t USING (SELECT 'BBM' AS KODE FROM DUAL) s ON (t.KODE = s.KODE) \
+         WHEN MATCHED THEN UPDATE SET NOMOR = :n WHEN NOT MATCHED THEN INSERT (KODE, NOMOR) VALUES ('BBM', :n)",
         &[("n", &baru)],
     )?;
     conn.execute_named(
         "INSERT INTO MOB_NOMOR (NO_TRANSAKSI, USER_ID) VALUES (:n, :u)",
         &[("n", &baru), ("u", &user_id)],
     )?;
-    conn.commit()?;
     Ok(baru)
 }
 
 // ------------------------------------------------------- DTO faktur
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BarisReq {
     pub product_id: i64,
-    pub qty: i64,
+    #[serde(with = "rust_decimal::serde::arbitrary_precision")]
+    pub qty: Decimal,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SimpanReq {
     pub no_transaksi: String,
     pub nik: String,
@@ -187,7 +333,8 @@ pub struct BarisResp {
     pub barcode: String,
     pub nama: String,
     pub satuan: String,
-    pub qty: i64,
+    #[serde(with = "rust_decimal::serde::arbitrary_precision")]
+    pub qty: Decimal,
     pub harga: i64,
     pub potongan: i64,
     pub total: i64,
@@ -247,8 +394,9 @@ pub fn simpan(
     kasir: &Kasir,
     req: &SimpanReq,
     opsi: &Opsi,
+    idempotency_key: &str,
 ) -> AppResult<FakturResp> {
-    let r = simpan_inner(conn, kasir, req, opsi);
+    let r = simpan_inner(conn, kasir, req, opsi, idempotency_key);
     if r.is_err() {
         let _ = conn.rollback();
     }
@@ -260,7 +408,24 @@ fn simpan_inner(
     kasir: &Kasir,
     req: &SimpanReq,
     opsi: &Opsi,
+    idempotency_key: &str,
 ) -> AppResult<FakturResp> {
+    let nomor_key = opt(conn.query_row_named(
+        "SELECT RESOURCE_ID FROM MOB_IDEMPOTENCY WHERE USER_ID = :u AND OPERASI = 'NOMOR' AND IDEMPOTENCY_KEY = :k",
+        &[("u", &kasir.id), ("k", &idempotency_key)],
+    ))?;
+    let Some(nomor_key) = nomor_key else {
+        return Err(AppError::validation(
+            "Kunci idempotensi belum menerbitkan nomor transaksi",
+        ));
+    };
+    let nomor_terkait: Option<String> = nomor_key.get(0)?;
+    if nomor_terkait.as_deref() != Some(req.no_transaksi.as_str()) {
+        return Err(AppError::Conflict(
+            "Kunci idempotensi terikat ke nomor transaksi lain".into(),
+        ));
+    }
+
     // Idempotensi: nomor harus milik kasir ini; baris dikunci sehingga retry paralel antre.
     let claim = opt(conn.query_row_named(
         "SELECT CASE WHEN USED_AT IS NULL THEN 0 ELSE 1 END FROM MOB_NOMOR WHERE NO_TRANSAKSI = :n AND USER_ID = :u FOR UPDATE",
@@ -271,7 +436,25 @@ fn simpan_inner(
             "Nomor transaksi tidak dikenal, ambil nomor baru",
         ));
     };
-    if claim.get::<_, i64>(0)? == 1 {
+    let sudah_dipakai = claim.get::<_, i64>(0)? == 1;
+    let payload_hash = hash_payload(req)?;
+    if let Some(row) = opt(conn.query_row_named(
+        "SELECT RESOURCE_ID, PAYLOAD_HASH FROM MOB_IDEMPOTENCY WHERE USER_ID = :u AND OPERASI = 'FAKTUR' AND IDEMPOTENCY_KEY = :k FOR UPDATE",
+        &[("u", &kasir.id), ("k", &idempotency_key)],
+    ))? {
+        let resource_id: Option<String> = row.get(0)?;
+        let stored_hash: Option<String> = row.get(1)?;
+        cek_payload_idempoten(
+            resource_id.as_deref(),
+            stored_hash.as_deref(),
+            &req.no_transaksi,
+            &payload_hash,
+        )?;
+        if !sudah_dipakai {
+            return Err(AppError::Internal(
+                "kunci faktur tersimpan tetapi nomor belum digunakan".into(),
+            ));
+        }
         conn.rollback()?;
         let mut f = muat(conn, &req.no_transaksi)?.ok_or_else(|| {
             AppError::Internal("nomor terpakai tetapi faktur tidak ditemukan".into())
@@ -279,12 +462,35 @@ fn simpan_inner(
         f.duplikat = true;
         return Ok(f);
     }
+    if sudah_dipakai {
+        return Err(AppError::Conflict(
+            "Nomor transaksi sudah digunakan oleh request lain".into(),
+        ));
+    }
+
+    conn.execute_named(
+        "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY, RESOURCE_ID, PAYLOAD_HASH) VALUES (:u, 'FAKTUR', :k, :n, :h)",
+        &[("u", &kasir.id), ("k", &idempotency_key), ("n", &req.no_transaksi), ("h", &payload_hash)],
+    )?;
+
+    let (hari, jam) = sekarang(conn)?;
+    cek_periode(conn, hari)?;
 
     if req.baris.is_empty() {
         return Err(AppError::validation("Keranjang kosong"));
     }
-    let (hari, jam) = sekarang(conn)?;
-    cek_periode(conn, hari)?;
+    if req.baris.len() > 200 {
+        return Err(AppError::validation("Terlalu banyak baris"));
+    }
+    if req
+        .baris
+        .iter()
+        .any(|b| b.qty <= Decimal::ZERO || b.qty.normalize().scale() > 2)
+    {
+        return Err(AppError::validation(
+            "Qty harus lebih dari 0 dan maksimal 2 angka desimal",
+        ));
+    }
 
     let pel = katalog::pelanggan_by_nik(conn, &req.nik)?.ok_or_else(|| {
         AppError::rule(
@@ -295,7 +501,7 @@ fn simpan_inner(
     let tunai = pel.nik == opsi.default_nik;
 
     // Gabungkan baris dengan produk sama (seperti keranjang desktop).
-    let mut gabung: Vec<(i64, i64)> = Vec::new();
+    let mut gabung: Vec<(i64, Decimal)> = Vec::new();
     for b in &req.baris {
         match gabung.iter_mut().find(|(id, _)| *id == b.product_id) {
             Some((_, q)) => *q += b.qty,
@@ -310,12 +516,12 @@ fn simpan_inner(
     }
     let mut items: Vec<Item> = Vec::new();
     for (pid, q) in gabung {
-        let qty = Decimal::from(q);
-        if !calc::qty_valid(qty) {
+        if !calc::qty_valid(q.normalize()) || q.normalize().scale() > 2 {
             return Err(AppError::validation(
-                "Qty harus lebih dari 0 dan maksimal 1000",
+                "Qty harus lebih dari 0, maksimal 1000, dan paling banyak 2 angka desimal",
             ));
         }
+        let qty = q;
         let p = katalog::barang_by_id(conn, pid, &kasir.kategori)?.ok_or_else(|| {
             AppError::rule(
                 "BARANG_TIDAK_ADA",
@@ -502,6 +708,36 @@ fn simpan_inner(
     Ok(f)
 }
 
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn hash_payload(req: &SimpanReq) -> AppResult<String> {
+    let payload = serde_json::to_vec(req)
+        .map_err(|e| AppError::Internal(format!("gagal menghitung hash faktur: {e}")))?;
+    Ok(hex_digest(&Sha256::digest(payload)))
+}
+
+fn cek_payload_idempoten(
+    stored_resource: Option<&str>,
+    stored_hash: Option<&str>,
+    resource: &str,
+    payload_hash: &str,
+) -> AppResult<()> {
+    if stored_resource != Some(resource) || stored_hash != Some(payload_hash) {
+        return Err(AppError::Conflict(
+            "Kunci idempotensi sudah dipakai dengan payload berbeda".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Baca faktur lengkap dari DB (untuk idempotensi, cetak ulang, dan riwayat anggota).
 pub fn muat(conn: &Connection, no: &str) -> AppResult<Option<FakturResp>> {
     let sql = format!(
@@ -564,7 +800,7 @@ pub fn muat(conn: &Connection, no: &str) -> AppResult<Option<FakturResp>> {
             barcode: t(3)?,
             nama: t(4)?,
             satuan: t(5)?,
-            qty: m(6)?,
+            qty: dec(&r.get::<_, String>(6)?)?,
             harga: m(7)?,
             potongan: m(8)?,
             total: m(9)?,
@@ -593,4 +829,66 @@ pub fn muat(conn: &Connection, no: &str) -> AppResult<Option<FakturResp>> {
         }
     }
     Ok(Some(f))
+}
+
+#[cfg(test)]
+mod quantity_api_tests {
+    use super::{AppError, BarisReq, SimpanReq, cek_payload_idempoten, hash_payload};
+    use rust_decimal::Decimal;
+
+    #[test]
+    fn accepts_legacy_integer_and_fractional_json_quantities() {
+        let integer: BarisReq = serde_json::from_str(r#"{"product_id":7,"qty":3}"#).unwrap();
+        assert_eq!(integer.qty, Decimal::from(3));
+
+        let fractional: BarisReq = serde_json::from_str(r#"{"product_id":9,"qty":4.10}"#).unwrap();
+        assert_eq!(fractional.qty, Decimal::new(410, 2));
+        assert!(fractional.qty.normalize().scale() <= 2);
+        #[derive(serde::Serialize)]
+        struct Echo {
+            #[serde(with = "rust_decimal::serde::arbitrary_precision")]
+            qty: Decimal,
+        }
+        let echoed = serde_json::to_string(&Echo {
+            qty: fractional.qty,
+        })
+        .unwrap();
+        assert_eq!(echoed, r#"{"qty":4.10}"#);
+    }
+
+    #[test]
+    fn hashes_the_complete_invoice_request() {
+        let a: SimpanReq = serde_json::from_str(
+            r#"{"no_transaksi":"BBM-26-1","nik":"123","tenor":1,"uang_bayar":50000,"baris":[{"product_id":7,"qty":4.10}]}"#,
+        )
+        .unwrap();
+        let same: SimpanReq = serde_json::from_str(
+            r#"{"no_transaksi":"BBM-26-1","nik":"123","tenor":1,"uang_bayar":50000,"baris":[{"product_id":7,"qty":4.10}]}"#,
+        )
+        .unwrap();
+        let changed: SimpanReq = serde_json::from_str(
+            r#"{"no_transaksi":"BBM-26-1","nik":"123","tenor":1,"uang_bayar":50001,"baris":[{"product_id":7,"qty":4.10}]}"#,
+        )
+        .unwrap();
+        assert_eq!(hash_payload(&a).unwrap(), hash_payload(&same).unwrap());
+        assert_ne!(hash_payload(&a).unwrap(), hash_payload(&changed).unwrap());
+        assert!(
+            cek_payload_idempoten(
+                Some("BBM-26-1"),
+                Some(&hash_payload(&a).unwrap()),
+                "BBM-26-1",
+                &hash_payload(&a).unwrap(),
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            cek_payload_idempoten(
+                Some("BBM-26-1"),
+                Some(&hash_payload(&a).unwrap()),
+                "BBM-26-1",
+                &hash_payload(&changed).unwrap(),
+            ),
+            Err(AppError::Conflict(_))
+        ));
+    }
 }
