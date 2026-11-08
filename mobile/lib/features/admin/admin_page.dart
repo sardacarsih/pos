@@ -429,6 +429,7 @@ class AnggotaPickerDialog extends ConsumerStatefulWidget {
 
 class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
   final _query = TextEditingController();
+  final _scroll = ScrollController();
   final List<Pelanggan> _items = [];
   bool _loading = false;
   bool _lagi = false;
@@ -439,6 +440,15 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
   @override
   void initState() {
     super.initState();
+    // Sisa anggota dimuat otomatis saat daftar hampir habis; tombol di bawah daftar jadi cadangan.
+    _scroll.addListener(() {
+      if (_lagi &&
+          !_loading &&
+          _error == null &&
+          _scroll.position.pixels > _scroll.position.maxScrollExtent - 200) {
+        _cari(reset: false);
+      }
+    });
     _cari(reset: true);
   }
 
@@ -448,6 +458,7 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
   void dispose() {
     _debounce?.cancel();
     _query.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -563,6 +574,7 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
       return const Center(child: Text('Anggota tidak ditemukan.'));
     }
     return ListView.builder(
+      controller: _scroll,
       itemCount: _items.length,
       itemBuilder: (context, index) {
         final anggota = _items[index];
