@@ -1,4 +1,5 @@
-﻿using Dapper;
+﻿using Kopkar.Shared;
+using Dapper;
 using DevExpress.Utils.About;
 using Oracle.ManagedDataAccess.Client;
 using Penjualan.BusinessLayer;
@@ -100,6 +101,9 @@ namespace Penjualan.DataLayer
 
             try
             {
+                // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -153,6 +157,9 @@ namespace Penjualan.DataLayer
 
             try
             {
+                // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -321,7 +328,10 @@ namespace Penjualan.DataLayer
         private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
             OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
         {
-            int periode = date.Year * 100 + date.Month;
+            // Periode dicari dari rentang tanggal (BDARI..BSAMPAI), bukan bulan kalender.
+            int? ditemukan = PeriodeGuard.PeriodeUntukTanggal(conn, transaction, date);
+            if (ditemukan == null) return null;
+            int periode = ditemukan.Value;
             bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
 
             string sql = bulanan
