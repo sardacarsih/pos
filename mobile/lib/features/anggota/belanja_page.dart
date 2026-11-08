@@ -24,6 +24,7 @@ class BelanjaPage extends ConsumerStatefulWidget {
 class _BelanjaPageState extends ConsumerState<BelanjaPage> {
   final _cart = Cart();
   final _cari = TextEditingController();
+  final _scroll = ScrollController();
   final List<Barang> _items = [];
   bool _loading = true, _lagi = false, _busy = false;
   String? _error;
@@ -32,11 +33,28 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
   // Satu percobaan checkout = satu kunci + satu nomor; berubah hanya bila keranjang/tenor berubah.
   String? _key, _nomor;
   bool _demo = false;
+  List<Kategori> _kategori = const [];
+  String? _chip; // id kategori terpilih; null = semua
 
   @override
   void initState() {
     super.initState();
+    // Semua produk tampil: halaman berikutnya dimuat otomatis saat daftar hampir habis.
+    _scroll.addListener(() {
+      if (_lagi &&
+          !_loading &&
+          _scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
+        _muat(tambah: true);
+      }
+    });
     _muat();
+    ref
+        .read(apiProvider)
+        .kategori()
+        .then((k) {
+          if (mounted) setState(() => _kategori = k);
+        })
+        .catchError((_) {}); // chip saja; tanpa kategori daftar tetap bisa dicari
     ref
         .read(apiProvider)
         .dashboardSaya()
@@ -49,6 +67,7 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
   @override
   void dispose() {
     _cari.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -66,7 +85,11 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
     try {
       final r = await ref
           .read(apiProvider)
-          .barang(q: _cari.text.trim(), page: tambah ? _page + 1 : 1);
+          .barang(
+            q: _cari.text.trim(),
+            kategori: _chip,
+            page: tambah ? _page + 1 : 1,
+          );
       if (!mounted) return;
       setState(() {
         if (!tambah) _items.clear();
@@ -172,6 +195,39 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
               ),
             ),
           ),
+          if (_kategori.isNotEmpty)
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: const Text('Semua'),
+                      selected: _chip == null,
+                      onSelected: (_) {
+                        setState(() => _chip = null);
+                        _muat();
+                      },
+                    ),
+                  ),
+                  for (final k in _kategori)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(k.nama),
+                        selected: _chip == k.id,
+                        onSelected: (_) {
+                          setState(() => _chip = k.id);
+                          _muat();
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -184,6 +240,7 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
             child: _loading && _items.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
+                    controller: _scroll,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
                       if (_items.isEmpty && !_loading)
@@ -195,6 +252,31 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
                         Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
+                            contentPadding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+                            // Foto unggahan admin (di-cache per versi); tanpa foto: gambar/ikon bawaan.
+                            leading: SizedBox(
+                              width: 64,
+                              height: 64,
+                              child: FuelArtwork.adaFoto(b.nama, b.fotoVersi)
+                                  ? FuelArtwork(
+                                      name: b.nama,
+                                      height: 64,
+                                      radius: 12,
+                                      produkId: b.id,
+                                      fotoVersi: b.fotoVersi,
+                                    )
+                                  // Tanpa foto: placeholder netral (ikon tetes BBM tidak cocok untuk ATK, makanan, dll).
+                                  : DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: cs.primaryContainer,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        Icons.inventory_2_outlined,
+                                        color: cs.onPrimaryContainer,
+                                      ),
+                                    ),
+                            ),
                             title: Text(b.nama),
                             subtitle: Text('${rupiah(b.harga)} / ${b.satuan}'),
                             trailing: _qty(b),
