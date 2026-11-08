@@ -101,8 +101,8 @@ dotnet run --project Migrator -- --skip-admin   # schema only, no admin
 dotnet run --project Migrator -- --help
 ```
 
-> The default admin password is `Admin#2026` if `--admin-password` is omitted —
-> change it immediately via **BackOffice → Manajemen User**.
+> If `--admin-password` is omitted, a random admin password is generated and printed
+> once when the admin user is created — note it, then change it via **BackOffice → Manajemen User**.
 
 Logins are validated against these tables (PBKDF2-SHA256 hashes); there is no
 hardcoded account. Each user is granted a role **per app** (Penjualan,

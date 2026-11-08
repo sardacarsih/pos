@@ -8,7 +8,8 @@ namespace Migrator
     /// </summary>
     public static class AdminSeeder
     {
-        public static void Seed(string connectionString, string username, string password)
+        /// <returns>true bila user baru dibuat, false bila sudah ada.</returns>
+        public static bool Seed(string connectionString, string username, string password)
         {
             username = username.Trim().ToLowerInvariant();
             var repo = new AuthRepository(connectionString);
@@ -16,7 +17,7 @@ namespace Migrator
             if (repo.UsernameExists(username))
             {
                 Console.WriteLine($"  [skip ] user '{username}' sudah ada.");
-                return;
+                return false;
             }
 
             RoleInfo adminRole = repo.ListRoles()
@@ -33,6 +34,7 @@ namespace Migrator
             }
 
             Console.WriteLine($"  [done ] user admin '{username}' dibuat, akses ADMIN ke {apps.Count} aplikasi.");
+            return true;
         }
     }
 }
