@@ -848,33 +848,27 @@ namespace BackOffice
 
         private void accordionControlElement7_Click(object sender, EventArgs e)
         {
-            //// Change the form's text
-            //this.Text = "Stock Opname";
-
-            //// Create a new instance of ucDaftarPembelian
-            //ucStockOpname newInstance = new();
-
-            //// Check if the fluentDesignFormContainer already contains a control
-            //if (fluentDesignFormContainer.Controls.Count > 0)
-            //{
-            //    // Remove the existing control from the container
-            //    fluentDesignFormContainer.Controls.RemoveAt(0);
-            //}
-
-            //// Add the new instance to the panel control
-            //fluentDesignFormContainer.Controls.Add(newInstance);
-            //newInstance.Dock = DockStyle.Fill;
-            //newInstance.BringToFront();
-
-            //Add module1 to panel control
-            if (!fluentDesignFormContainer.Controls.Contains(ucStockOpname.Instance))
+            try
             {
-                fluentDesignFormContainer.Controls.Add(ucStockOpname.Instance);
-                ucStockOpname.Instance.Dock = DockStyle.Fill;
-                ucStockOpname.Instance.BringToFront();
+                this.Text = "Stock Opname";
+                ucStockOpname stockOpname = ucStockOpname.Instance;
+
+                if (!fluentDesignFormContainer.Controls.Contains(stockOpname))
+                {
+                    fluentDesignFormContainer.Controls.Add(stockOpname);
+                    stockOpname.Dock = DockStyle.Fill;
+                }
+
+                stockOpname.BringToFront();
             }
-            else
-                ucStockOpname.Instance.BringToFront();
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(
+                    $"Form Stock Opname gagal dibuka.\n{ex.Message}",
+                    "Stock Opname",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         private void accordionControlElement15_Click(object sender, EventArgs e)
