@@ -55,23 +55,30 @@ pub struct BuatReq {
     nik: Option<String>,
 }
 
-pub async fn buat(
-    State(s): State<AppState>,
-    a: Auth,
-    Json(req): Json<BuatReq>,
-) -> AppResult<Json<Value>> {
-    a.peran(ADMIN)?;
+/// Permintaan buat akun yang sudah divalidasi dan dinormalkan.
+pub struct ValidBuat {
+    pub username: String,
+    pub nama: String,
+    pub role: Role,
+    pub nik: Option<String>,
+}
+
+/// Validasi murni (tanpa DB): username 3-50 karakter pola `username_valid`, nama 1-100 karakter,
+/// NIK hanya untuk ANGGOTA (wajib, maks 30 karakter, bukan NIK pelanggan umum).
+pub fn validasi_buat(req: &BuatReq, default_nik: &str) -> AppResult<ValidBuat> {
     let username = req.username.trim().to_lowercase();
     if !username_valid(&username) {
         return Err(AppError::validation(
             "Username 3-50 karakter: huruf kecil, angka, titik, garis bawah, atau strip",
         ));
     }
-    if req.nama.trim().is_empty() || req.nama.len() > 100 {
+    let nama = req.nama.trim().to_string();
+    if nama.is_empty() || nama.chars().count() > 100 {
         return Err(AppError::validation("Nama wajib diisi (maks 100 karakter)"));
     }
     let nik = req
         .nik
+        .as_ref()
         .map(|n| n.trim().to_string())
         .filter(|n| !n.is_empty());
     match (req.role, &nik) {
@@ -83,23 +90,57 @@ pub async fn buat(
         }
         _ => {}
     }
+    if let Some(n) = &nik {
+        if n.chars().count() > 30 {
+            return Err(AppError::validation("NIK maksimal 30 karakter"));
+        }
+        if n == default_nik {
+            return Err(AppError::validation(
+                "NIK pelanggan umum (tunai) tidak dapat dibuatkan akun",
+            ));
+        }
+    }
+    Ok(ValidBuat {
+        username,
+        nama,
+        role: req.role,
+        nik,
+    })
+}
+
+pub async fn buat(
+    State(s): State<AppState>,
+    a: Auth,
+    Json(req): Json<BuatReq>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let v = validasi_buat(&req, &s.cfg.default_nik)?;
     let tmp = password::temp_password();
     let t = tmp.clone();
     let id = db::run(&s.pool, move |c| {
-        if let Some(n) = &nik
-            && katalog::pelanggan_by_nik(c, n)?.is_none()
-        {
-            return Err(AppError::validation(
-                "NIK tidak ditemukan di data anggota aktif",
-            ));
+        // Pesan jelas untuk duplikat (konflik unik Oracle hanya akan menjadi "Data sudah ada").
+        if user::find_by_username(c, &v.username)?.is_some() {
+            return Err(AppError::Conflict("Username sudah dipakai".into()));
+        }
+        if let Some(n) = &v.nik {
+            if katalog::pelanggan_by_nik(c, n)?.is_none() {
+                return Err(AppError::validation(
+                    "NIK tidak ditemukan di data anggota aktif",
+                ));
+            }
+            if user::nik_sudah_punya_akun(c, n)? {
+                return Err(AppError::Conflict(
+                    "Anggota ini sudah punya akun mobile".into(),
+                ));
+            }
         }
         user::create_user(
             c,
-            &username,
-            req.nama.trim(),
+            &v.username,
+            &v.nama,
             &password::hash(&t)?,
-            req.role,
-            nik.as_deref(),
+            v.role,
+            v.nik.as_deref(),
         )
     })
     .await?;
@@ -220,6 +261,57 @@ mod tests {
         assert!(!username_valid("Budi"));
         assert!(!username_valid("ab"));
         assert!(!username_valid("a b c"));
+    }
+
+    use super::{BuatReq, validasi_buat};
+    use crate::auth::Role;
+
+    fn req(username: &str, nama: &str, role: Role, nik: Option<&str>) -> BuatReq {
+        BuatReq {
+            username: username.into(),
+            nama: nama.into(),
+            role,
+            nik: nik.map(Into::into),
+        }
+    }
+
+    fn galat(r: BuatReq) -> String {
+        match validasi_buat(&r, "00.00004") {
+            Err(e) => format!("{e:?}"),
+            Ok(_) => "OK".into(),
+        }
+    }
+
+    #[test]
+    fn validasi_buat_menormalkan_dan_menerima_data_benar() {
+        let v = validasi_buat(&req("  Budi.Santoso ", " Budi Santoso ", Role::Kasir, None), "00.00004").unwrap();
+        assert_eq!((v.username.as_str(), v.nama.as_str(), v.nik), ("budi.santoso", "Budi Santoso", None));
+        let v = validasi_buat(&req("01.00062", "Aan", Role::Anggota, Some(" 01.00062 ")), "00.00004").unwrap();
+        assert_eq!(v.nik.as_deref(), Some("01.00062"));
+    }
+
+    #[test]
+    fn validasi_buat_menolak_username_salah() {
+        assert!(galat(req("ab", "Budi", Role::Kasir, None)).contains("Username"));
+        assert!(galat(req("budi santoso", "Budi", Role::Kasir, None)).contains("Username"));
+        assert!(galat(req(&"a".repeat(51), "Budi", Role::Kasir, None)).contains("Username"));
+    }
+
+    #[test]
+    fn validasi_buat_menolak_nama_salah() {
+        assert!(galat(req("budi", "  ", Role::Kasir, None)).contains("Nama"));
+        assert!(galat(req("budi", &"x".repeat(101), Role::Kasir, None)).contains("Nama"));
+        // 100 karakter multibyte tetap valid (dihitung karakter, bukan byte)
+        assert_eq!(galat(req("budi", &"é".repeat(100), Role::Kasir, None)), "OK");
+    }
+
+    #[test]
+    fn validasi_buat_aturan_role_dan_nik() {
+        assert!(galat(req("budi", "Budi", Role::Anggota, None)).contains("wajib memiliki NIK"));
+        assert!(galat(req("budi", "Budi", Role::Kasir, Some("01.00062"))).contains("NIK hanya untuk akun anggota"));
+        assert!(galat(req("budi", "Budi", Role::Anggota, Some(&"1".repeat(31)))).contains("maksimal 30"));
+        assert!(galat(req("budi", "Budi", Role::Anggota, Some("00.00004"))).contains("pelanggan umum"));
+        assert_eq!(galat(req("budi", "Budi", Role::Anggota, Some("01.00062"))), "OK");
     }
 }
 

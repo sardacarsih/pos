@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../../core/validasi.dart';
 import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 
@@ -102,88 +103,28 @@ class _AdminPageState extends ConsumerState<AdminPage>
     }
   }
 
-  /// Dialog menutup dengan animasi dan masih memakai controller; dispose langsung memicu assertion.
-  void _tundaDispose(List<TextEditingController> cs) =>
-      Future.delayed(const Duration(milliseconds: 500), () {
-        for (final c in cs) {
-          c.dispose();
-        }
-      });
-
-  Future<void> _kirim({
-    required String username,
-    required String nama,
-    required String role,
-    String? nik,
-  }) async {
-    try {
-      final pw = await _jalan(
-        () => ref
-            .read(apiProvider)
-            .buatUser(username: username, nama: nama, role: role, nik: nik),
-      );
-      await _muat();
-      if (mounted) await _tampilPassword('Akun dibuat', pw);
-    } on ApiException {
-      // pesan sudah ditampilkan
-    }
-  }
-
-  Future<void> _buatSistem() async {
-    final u = TextEditingController(), n = TextEditingController();
-    var role = 'KASIR';
-    final ok = await showDialog<bool>(
+  /// Dialog buat akun (validasi inline, tetap terbuka bila server menolak) lalu tampilkan password sementara.
+  Future<void> _tampilDialogBuat(_BuatAkunDialog dialog) async {
+    final pw = await showDialog<String>(
       context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: const Text('User sistem baru'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: u,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    helperText: 'Huruf kecil, tanpa spasi',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: n,
-                  decoration: const InputDecoration(labelText: 'Nama'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  items: [
-                    for (final r in ['KASIR', 'ADMIN'])
-                      DropdownMenuItem(value: r, child: Text(r)),
-                  ],
-                  onChanged: (v) => set(() => role = v ?? 'KASIR'),
-                  decoration: const InputDecoration(labelText: 'Role'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('Buat'),
-            ),
-          ],
-        ),
-      ),
+      barrierDismissible: false,
+      builder: (_) => dialog,
     );
-    final data = (u.text.trim(), n.text.trim());
-    _tundaDispose([u, n]);
-    if (ok != true) return;
-    await _kirim(username: data.$1, nama: data.$2, role: role);
+    if (pw == null || !mounted) return;
+    await _muat();
+    if (mounted) await _tampilPassword('Akun dibuat', pw);
   }
+
+  Future<void> _buatSistem() => _tampilDialogBuat(
+    _BuatAkunDialog(
+      judul: 'User sistem baru',
+      pakaiNama: true,
+      pakaiRole: true,
+      kirim: (u, n, r) => ref
+          .read(apiProvider)
+          .buatUser(username: u, nama: n, role: r),
+    ),
+  );
 
   Future<void> _buatAnggota() async {
     final a = await showDialog<Pelanggan>(
@@ -191,53 +132,27 @@ class _AdminPageState extends ConsumerState<AdminPage>
       builder: (_) => AnggotaPickerDialog(api: ref.read(apiProvider)),
     );
     if (a == null || !mounted) return;
-    final u = TextEditingController(text: a.nik.toLowerCase());
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Akun anggota'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  leading: const Icon(Icons.person),
-                  title: Text(a.nama),
-                  subtitle: Text(
-                    '${a.nik}\n${a.unit.isEmpty ? 'Unit kerja tidak tersedia' : a.unit}',
-                  ),
-                  isThreeLine: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: u,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  helperText: 'Default: NIK anggota',
-                ),
-              ),
-            ],
+    await _tampilDialogBuat(
+      _BuatAkunDialog(
+        judul: 'Akun anggota',
+        atas: Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            leading: AvatarFoto(nama: a.nama),
+            title: Text(a.nama),
+            subtitle: Text(
+              '${a.nik}\n${a.unit.isEmpty ? 'Unit kerja tidak tersedia' : a.unit}',
+            ),
+            isThreeLine: true,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Buat'),
-          ),
-        ],
+        usernameAwal: usernameDariNik(a.nik),
+        usernameBantu: 'Default: NIK anggota',
+        kirim: (u, _, _) => ref
+            .read(apiProvider)
+            .buatUser(username: u, nama: a.nama, role: 'ANGGOTA', nik: a.nik),
       ),
     );
-    final username = u.text.trim();
-    _tundaDispose([u]);
-    if (ok != true) return;
-    await _kirim(username: username, nama: a.nama, role: 'ANGGOTA', nik: a.nik);
   }
 
   Widget _kartu(UserInfo u) => Card(
@@ -599,6 +514,152 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
           onTap: () => Navigator.pop(context, anggota),
         );
       },
+    );
+  }
+}
+
+/// Dialog buat akun mobile: validasi inline (aturan sama dengan server), tombol Buat nonaktif selama data
+/// belum valid atau sedang mengirim, dan dialog tetap terbuka dengan pesan server bila permintaan ditolak
+/// (mis. "Username sudah dipakai"). Menutup dengan password sementara saat sukses.
+class _BuatAkunDialog extends StatefulWidget {
+  const _BuatAkunDialog({
+    required this.judul,
+    required this.kirim,
+    this.atas,
+    this.usernameAwal = '',
+    this.usernameBantu = 'Huruf kecil, angka, titik, garis bawah, atau strip (3-50)',
+    this.pakaiNama = false,
+    this.pakaiRole = false,
+  });
+  final String judul;
+  final Widget? atas;
+  final String usernameAwal, usernameBantu;
+  final bool pakaiNama, pakaiRole;
+  final Future<String> Function(String username, String nama, String role) kirim;
+
+  @override
+  State<_BuatAkunDialog> createState() => _BuatAkunDialogState();
+}
+
+class _BuatAkunDialogState extends State<_BuatAkunDialog> {
+  late final _u = TextEditingController(text: widget.usernameAwal);
+  final _n = TextEditingController();
+  var _role = 'KASIR';
+  var _sentuhU = false, _sentuhN = false, _busy = false;
+  String? _galatServer;
+
+  @override
+  void dispose() {
+    _u.dispose();
+    _n.dispose();
+    super.dispose();
+  }
+
+  String? get _galatU => galatUsername(_u.text);
+  String? get _galatN => widget.pakaiNama ? galatNama(_n.text) : null;
+  bool get _valid => _galatU == null && _galatN == null;
+
+  Future<void> _buat() async {
+    setState(() {
+      _busy = true;
+      _galatServer = null;
+    });
+    try {
+      final pw = await widget.kirim(
+        _u.text.trim().toLowerCase(),
+        _n.text.trim(),
+        _role,
+      );
+      if (mounted) Navigator.pop(context, pw);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _galatServer = e.pesan);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text(widget.judul),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.atas != null) ...[
+              widget.atas!,
+              const SizedBox(height: 12),
+            ],
+            TextField(
+              controller: _u,
+              enabled: !_busy,
+              autocorrect: false,
+              onChanged: (_) => setState(() {
+                _sentuhU = true;
+                _galatServer = null;
+              }),
+              decoration: InputDecoration(
+                labelText: 'Username',
+                helperText: widget.usernameBantu,
+                helperMaxLines: 2,
+                errorText: _sentuhU ? _galatU : null,
+                errorMaxLines: 2,
+              ),
+            ),
+            if (widget.pakaiNama) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _n,
+                enabled: !_busy,
+                onChanged: (_) => setState(() {
+                  _sentuhN = true;
+                  _galatServer = null;
+                }),
+                decoration: InputDecoration(
+                  labelText: 'Nama',
+                  errorText: _sentuhN ? _galatN : null,
+                ),
+              ),
+            ],
+            if (widget.pakaiRole) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _role,
+                items: [
+                  for (final r in ['KASIR', 'ADMIN'])
+                    DropdownMenuItem(value: r, child: Text(r)),
+                ],
+                onChanged: _busy ? null : (v) => setState(() => _role = v ?? 'KASIR'),
+                decoration: const InputDecoration(labelText: 'Role'),
+              ),
+            ],
+            if (_galatServer != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _galatServer!,
+                  style: TextStyle(color: cs.error),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: _valid && !_busy ? _buat : null,
+          child: _busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Buat'),
+        ),
+      ],
     );
   }
 }
