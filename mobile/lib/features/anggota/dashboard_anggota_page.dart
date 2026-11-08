@@ -111,17 +111,16 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
                             'Halo, ${d.ringkasan!.nama}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          Text(
-                            'Periode ${namaPeriode(d.ringkasan!.periode)} · '
-                            '${rentangTanggal(d.ringkasan!.dari, d.ringkasan!.sampai)}',
-                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                KartuLimit(r: d.ringkasan!),
+                KartuLimit(
+                  r: d.ringkasan!,
+                  judul: 'Belanja periode ${namaPeriode(d.ringkasan!.periode)}',
+                ),
               ],
               if (!d.periodeTerbuka)
                 Card(

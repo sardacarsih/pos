@@ -202,8 +202,9 @@ class _PeriodeBar extends StatelessWidget {
 }
 
 class KartuLimit extends StatelessWidget {
-  const KartuLimit({super.key, required this.r});
+  const KartuLimit({super.key, required this.r, this.judul = 'Belanja periode ini'});
   final Ringkasan r;
+  final String judul;
   @override
   Widget build(BuildContext context) {
     final tak = r.limit == 0;
@@ -218,7 +219,7 @@ class KartuLimit extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Belanja periode ini',
+              judul,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             Text(
