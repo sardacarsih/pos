@@ -29,8 +29,21 @@ pub struct Dashboard {
     pub periode_pesan: Option<String>,
     /// PERIODE_TUTUP | PERIODE_TIDAK_ADA | PERIODE_TIDAK_VALID; null bila terbuka.
     pub periode_kode: Option<String>,
+    /// Periode hari ini dan rentang bulanannya (YYYY-MM-DD); null bila tanggal di luar semua periode.
+    pub periode: Option<i32>,
+    pub periode_dari: Option<String>,
+    pub periode_sampai: Option<String>,
     pub ringkasan: Ringkasan,
     pub terakhir: Vec<Terakhir>,
+}
+
+/// Pecah InfoPeriode menjadi field JSON dashboard: (periode, dari, sampai) dengan tanggal YYYY-MM-DD.
+fn ringkas_periode(i: Option<faktur::InfoPeriode>) -> (Option<i32>, Option<String>, Option<String>) {
+    (
+        i.map(|x| x.periode),
+        i.map(|x| x.dari.format("%Y-%m-%d").to_string()),
+        i.map(|x| x.sampai.format("%Y-%m-%d").to_string()),
+    )
 }
 
 pub fn dashboard_kasir(conn: &Connection, username: &str) -> AppResult<Dashboard> {
@@ -40,6 +53,7 @@ pub fn dashboard_kasir(conn: &Connection, username: &str) -> AppResult<Dashboard
         Err(AppError::Rule { kode, pesan }) => (false, Some(pesan), Some(kode.to_string())),
         Err(e) => return Err(e),
     };
+    let (periode, periode_dari, periode_sampai) = ringkas_periode(faktur::info_periode(conn, hari)?);
 
     let sql = format!(
         "SELECT COUNT(*), {}, {}, {} FROM POS_PENJUALAN WHERE KASIR = :u AND TRUNC(TANGGAL) = :hari",
@@ -78,6 +92,9 @@ pub fn dashboard_kasir(conn: &Connection, username: &str) -> AppResult<Dashboard
         periode_terbuka,
         periode_pesan,
         periode_kode,
+        periode,
+        periode_dari,
+        periode_sampai,
         ringkasan,
         terakhir,
     })
@@ -142,6 +159,9 @@ pub struct DashboardAdmin {
     pub periode_terbuka: bool,
     pub periode_pesan: Option<String>,
     pub periode_kode: Option<String>,
+    pub periode: Option<i32>,
+    pub periode_dari: Option<String>,
+    pub periode_sampai: Option<String>,
     pub ringkasan: Ringkasan,
     pub per_kasir: Vec<PerKasir>,
     pub terlaris: Vec<Terlaris>,
@@ -158,6 +178,7 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         Err(AppError::Rule { kode, pesan }) => (false, Some(pesan), Some(kode.to_string())),
         Err(e) => return Err(e),
     };
+    let (periode, periode_dari, periode_sampai) = ringkas_periode(faktur::info_periode(conn, hari)?);
 
     let sql = format!(
         "SELECT COUNT(*), {}, {}, {} FROM POS_PENJUALAN WHERE TRUNC(TANGGAL) = :hari",
@@ -228,6 +249,9 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         periode_terbuka,
         periode_pesan,
         periode_kode,
+        periode,
+        periode_dari,
+        periode_sampai,
         ringkasan,
         per_kasir,
         terlaris,

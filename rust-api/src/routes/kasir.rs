@@ -23,11 +23,20 @@ pub async fn periode_status(State(s): State<AppState>, a: Auth) -> AppResult<Jso
     db::run(&s.pool, |c| {
         let (hari, _) = faktur::sekarang(c)?;
         let tanggal = hari.format("%Y-%m-%d").to_string();
+        // Rentang bulanan periode hari ini; tetap dikirim walau periode tutup (null bila di luar semua periode).
+        let info = faktur::info_periode(c, hari)?;
+        let periode = info.map(|i| i.periode);
+        let dari = info.map(|i| i.dari.format("%Y-%m-%d").to_string());
+        let sampai = info.map(|i| i.sampai.format("%Y-%m-%d").to_string());
         match faktur::cek_periode(c, hari) {
-            Ok(()) => Ok(Json(json!({ "tanggal": tanggal, "terbuka": true }))),
-            Err(AppError::Rule { kode, pesan }) => Ok(Json(
-                json!({ "tanggal": tanggal, "terbuka": false, "pesan": pesan, "kode": kode }),
-            )),
+            Ok(()) => Ok(Json(json!({
+                "tanggal": tanggal, "terbuka": true,
+                "periode": periode, "dari": dari, "sampai": sampai,
+            }))),
+            Err(AppError::Rule { kode, pesan }) => Ok(Json(json!({
+                "tanggal": tanggal, "terbuka": false, "pesan": pesan, "kode": kode,
+                "periode": periode, "dari": dari, "sampai": sampai,
+            }))),
             Err(e) => Err(e),
         }
     })

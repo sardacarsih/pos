@@ -148,6 +148,34 @@ pub fn periode_untuk_tanggal(conn: &Connection, tanggal: NaiveDate) -> AppResult
     }
 }
 
+/// Periode yang memuat tanggal beserta rentang bulanannya (BDARI..BSAMPAI), untuk ditampilkan di dashboard kasir/admin.
+/// Tetap ada walau periode tutup/tidak valid; None bila tanggal di luar semua periode.
+#[derive(Debug, Clone, Copy)]
+pub struct InfoPeriode {
+    pub periode: i32,
+    pub dari: NaiveDate,
+    pub sampai: NaiveDate,
+}
+
+pub fn info_periode(conn: &Connection, tanggal: NaiveDate) -> AppResult<Option<InfoPeriode>> {
+    let sql = format!(
+        "SELECT PERIODE, TO_DATE(BDARI, {TGL}), TO_DATE(BSAMPAI, {TGL}) FROM POS_PERIODE          WHERE :tgl BETWEEN TO_DATE(BDARI, {TGL}) AND TO_DATE(BSAMPAI, {TGL})          ORDER BY PERIODE DESC FETCH FIRST 1 ROWS ONLY"
+    );
+    match opt(conn.query_row_named(&sql, &[("tgl", &tanggal)]))? {
+        Some(r) => {
+            let periode: i64 = r.get(0)?;
+            let dari: NaiveDateTime = r.get(1)?;
+            let sampai: NaiveDateTime = r.get(2)?;
+            Ok(Some(InfoPeriode {
+                periode: periode as i32,
+                dari: dari.date(),
+                sampai: sampai.date(),
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
 /// Jendela periode anggota: BULANAN -> BDARI..BSAMPAI, selain itu R1DARI..R2SAMPAI.
 pub fn jendela_periode(
     conn: &Connection,
