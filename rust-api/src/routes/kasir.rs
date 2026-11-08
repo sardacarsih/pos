@@ -314,6 +314,7 @@ pub async fn faktur(
     })
     .await?;
     f.map(Json)
+                demo: false,
         .ok_or_else(|| AppError::NotFound("Faktur tidak ditemukan".into()))
 }
 

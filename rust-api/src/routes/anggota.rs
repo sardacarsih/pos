@@ -95,6 +95,7 @@ pub async fn detail(
 /// Periode di luar rentang / tutup tidak menggagalkan dashboard; `periode_terbuka=false` + `pesan`.
 pub async fn dashboard(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
     let nik = nik_dari_token(&a)?;
+    let demo = s.cfg.belanja_demo;
     let v = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
         let (terbuka, pesan) = match db::faktur::cek_periode(c, hari) {
@@ -116,6 +117,7 @@ pub async fn dashboard(State(s): State<AppState>, a: Auth) -> AppResult<Json<Val
             "pesan": pesan,
             "ringkasan": ringkasan,
             "terakhir": terakhir,
+            "belanja_demo": demo,
         }))
     })
     .await?;
@@ -131,6 +133,11 @@ pub async fn nomor(
     nik_dari_token(&a)?;
     let id = a.0.sub;
     let key = super::idempotency_key(&headers)?;
+    if s.cfg.belanja_demo {
+        // Demo: nomor semu, tidak menyentuh NOMOR_TRANSAKSI/MOB_NOMOR (tidak menghabiskan nomor faktur).
+        let ms = chrono::Utc::now().timestamp_millis() % 1_000_000;
+        return Ok(Json(serde_json::json!({ "no_transaksi": format!("DEMO-{ms:06}"), "duplikat": false, "demo": true })));
+    }
     let no = db::run(&s.pool, move |c| db::faktur::terbitkan_nomor(c, id, &key)).await?;
     Ok(Json(serde_json::json!({ "no_transaksi": no.0, "duplikat": no.1 })))
 }
@@ -156,6 +163,7 @@ pub async fn simpan(
     let kategori = db::run(&s.pool, db::user::allowed_kategori).await?;
     let nik_default = s.cfg.default_nik.clone();
     let max_tenor = s.cfg.default_max_tenor;
+    let demo = s.cfg.belanja_demo;
     let f = db::run(&s.pool, move |c| {
         let kasir = db::faktur::Kasir {
             id: cl.sub,
@@ -170,6 +178,7 @@ pub async fn simpan(
             &db::faktur::Opsi {
                 default_nik: &nik_default,
                 default_max_tenor: max_tenor,
+                demo,
             },
             &key,
         )

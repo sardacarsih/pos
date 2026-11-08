@@ -386,6 +386,8 @@ pub struct Kasir {
 pub struct Opsi<'a> {
     pub default_nik: &'a str,
     pub default_max_tenor: i32,
+    /// Simulasi: semua validasi berjalan, lalu rollback (tanpa nomor/idempotensi, tidak tersimpan).
+    pub demo: bool,
 }
 
 /// Simpan faktur dalam SATU transaksi. Harga, potongan, total, limit, stok, kategori dihitung ulang server.
@@ -410,6 +412,7 @@ fn simpan_inner(
     opsi: &Opsi,
     idempotency_key: &str,
 ) -> AppResult<FakturResp> {
+    if !opsi.demo {
     let nomor_key = opt(conn.query_row_named(
         "SELECT RESOURCE_ID FROM MOB_IDEMPOTENCY WHERE USER_ID = :u AND OPERASI = 'NOMOR' AND IDEMPOTENCY_KEY = :k",
         &[("u", &kasir.id), ("k", &idempotency_key)],
@@ -472,6 +475,7 @@ fn simpan_inner(
         "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY, RESOURCE_ID, PAYLOAD_HASH) VALUES (:u, 'FAKTUR', :k, :n, :h)",
         &[("u", &kasir.id), ("k", &idempotency_key), ("n", &req.no_transaksi), ("h", &payload_hash)],
     )?;
+    }
 
     let (hari, jam) = sekarang(conn)?;
     cek_periode(conn, hari)?;
@@ -695,16 +699,22 @@ fn simpan_inner(
         }
     }
 
-    conn.execute_named(
-        "UPDATE MOB_NOMOR SET USED_AT = SYSTIMESTAMP WHERE NO_TRANSAKSI = :n",
-        &[("n", &req.no_transaksi)],
-    )?;
-    conn.commit()?;
+    if !opsi.demo {
+        conn.execute_named(
+            "UPDATE MOB_NOMOR SET USED_AT = SYSTIMESTAMP WHERE NO_TRANSAKSI = :n",
+            &[("n", &req.no_transaksi)],
+        )?;
+        conn.commit()?;
+    }
 
     let mut f = muat(conn, &req.no_transaksi)?
         .ok_or_else(|| AppError::Internal("faktur tidak terbaca setelah simpan".into()))?;
     f.uang_bayar = bayar.map(rupiah).transpose()?;
     f.kembalian = kembali.map(rupiah).transpose()?;
+    if opsi.demo {
+        // Baris dibaca di dalam transaksi yang sama, lalu dibuang: tidak ada yang tersimpan.
+        conn.rollback()?;
+    }
     Ok(f)
 }
 

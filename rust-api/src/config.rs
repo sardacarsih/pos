@@ -11,6 +11,8 @@ pub struct Config {
     pub default_nik: String,
     pub trust_proxy: bool,
     pub default_max_tenor: i32,
+    /// Belanja mandiri anggota hanya simulasi (divalidasi penuh, tidak disimpan). Default true.
+    pub belanja_demo: bool,
 }
 
 /// Muat `.env` sederhana (KEY=VALUE) tanpa menimpa environment yang sudah ada.
@@ -62,6 +64,7 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(12),
+            belanja_demo: env::var("POS_BELANJA_MANDIRI_DEMO").map(|v| v != "false").unwrap_or(true),
         })
     }
 }

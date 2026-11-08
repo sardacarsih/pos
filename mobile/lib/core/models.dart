@@ -164,7 +164,8 @@ class TransaksiRingkas {
 
 class DashboardAnggota {
   DashboardAnggota.fromJson(Map<String, dynamic> j)
-    : periodeTerbuka = j['periode_terbuka'] == true,
+    : belanjaDemo = j['belanja_demo'] == true,
+      periodeTerbuka = j['periode_terbuka'] == true,
       pesan = j['pesan'] as String?,
       ringkasan = j['ringkasan'] == null
           ? null
@@ -174,6 +175,7 @@ class DashboardAnggota {
           TransaksiRingkas.fromJson(t as Map<String, dynamic>),
       ];
   final bool periodeTerbuka;
+  final bool belanjaDemo; // true = belanja mandiri hanya simulasi (tidak disimpan)
   final String? pesan;
   final Ringkasan? ringkasan; // null = tanggal di luar semua periode
   final List<TransaksiRingkas> terakhir;
