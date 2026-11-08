@@ -1,4 +1,4 @@
-﻿using BackOffice.BussinessLayer;
+using BackOffice.BussinessLayer;
 using BackOffice.DataLayer;
 using BackOffice.Laporan;
 using BackOffice.Model;
@@ -141,7 +141,8 @@ namespace BackOffice.UC
 
                 // Panggil metode DaftarPinjaman dengan bulan dan tahun yang diinginkan
                daftarPinjaman = Finance_Services.DaftarPinjaman(p_bulan, p_tahun);
-               gridControl1.DataSource= daftarPinjaman;
+                gridControl1.DataSource= daftarPinjaman;
+                gridControl1.ForceInitialize();
 
                 RepositoryItemCheckEdit edit = new()
                 {
