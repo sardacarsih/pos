@@ -560,4 +560,61 @@ class ApiClient {
   Future<void> hapusFoto(int id) async {
     await _call(() => _dio.delete<dynamic>('/api/v1/admin/produk/$id/foto'));
   }
+
+  // ---- profil sendiri ----
+  Future<Map<String, dynamic>> profilSaya() async =>
+      await get('/api/v1/profil') as Map<String, dynamic>;
+
+  Future<void> ubahProfil({
+    required String nama,
+    required String telepon,
+    required String email,
+  }) async {
+    await put(
+      '/api/v1/profil',
+      body: {'nama': nama, 'telepon': telepon, 'email': email},
+    );
+  }
+
+  Future<Uint8List> fotoProfil() async {
+    try {
+      final r = await _dio.get<List<int>>(
+        '/api/v1/profil/foto',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(r.data ?? const []);
+    } on DioException catch (e) {
+      throw ApiException('Foto gagal dimuat', status: e.response?.statusCode);
+    }
+  }
+
+  Future<void> unggahFotoProfil(Uint8List bytes) async {
+    await _call(
+      () => _dio.put<dynamic>(
+        '/api/v1/profil/foto',
+        data: Stream<List<int>>.fromIterable([bytes]),
+        options: Options(
+          contentType: 'application/octet-stream',
+          headers: {Headers.contentLengthHeader: bytes.length},
+        ),
+      ),
+    );
+  }
+
+  /// Foto anggota untuk kasir (verifikasi identitas). 404 -> ApiException.
+  Future<Uint8List> fotoAnggota(String nik) async {
+    try {
+      final r = await _dio.get<List<int>>(
+        '/api/v1/pelanggan/${Uri.encodeComponent(nik)}/foto',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(r.data ?? const []);
+    } on DioException catch (e) {
+      throw ApiException('Foto tidak ada', status: e.response?.statusCode);
+    }
+  }
+
+  Future<void> hapusFotoProfil() async {
+    await _call(() => _dio.delete<dynamic>('/api/v1/profil/foto'));
+  }
 }

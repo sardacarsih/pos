@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../profil/profil_page.dart';
 import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
@@ -98,6 +99,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     return TropicalScaffold(
       title: 'Dashboard',
       actions: [
+        IconButton(
+          tooltip: 'Profil saya',
+          icon: const ProfilAvatar(radius: 14),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ProfilPage()),
+          ),
+        ),
         IconButton(
           tooltip: 'Keluar',
           icon: const Icon(Icons.logout, color: Colors.white),

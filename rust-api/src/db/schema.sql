@@ -79,3 +79,14 @@ CREATE TABLE MOB_PRODUK_FOTO (
   VERSI        NUMBER NOT NULL,
   CONSTRAINT PK_MOB_PRODUK_FOTO PRIMARY KEY (PRODUCT_ID)
 )
+/
+-- Profil tambahan akun mobile (kontak + foto). Nama tampilan tetap di MOB_USER.FULL_NAME.
+-- FOTO_VERSI = epoch detik saat unggah (kunci cache klien; null = tidak ada foto).
+CREATE TABLE MOB_USER_PROFIL (
+  USER_ID    NUMBER PRIMARY KEY REFERENCES MOB_USER (USER_ID),
+  TELEPON    VARCHAR2(20),
+  EMAIL      VARCHAR2(100),
+  FOTO_TYPE  VARCHAR2(30),
+  FOTO       BLOB,
+  FOTO_VERSI NUMBER
+)
