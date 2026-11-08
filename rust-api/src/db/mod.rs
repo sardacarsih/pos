@@ -7,11 +7,11 @@ pub mod katalog;
 pub mod profil;
 pub mod user;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use oracle::{
     Connection,
-    pool::{Pool, PoolBuilder},
+    pool::{GetMode, Pool, PoolBuilder},
 };
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
@@ -25,6 +25,10 @@ pub type DbPool = Arc<Pool>;
 pub fn connect(cfg: &Config) -> Result<DbPool, String> {
     let pool = PoolBuilder::new(&cfg.db_user, &cfg.db_password, &cfg.db_connect)
         .max_connections(cfg.pool_max)
+        // Hangatkan beberapa koneksi di awal dan tunggu koneksi bebas (default NoWait langsung gagal ORA-24496 -> 500
+        // saat banyak permintaan paralel, mis. layar admin memuat dashboard/produk/user sekaligus).
+        .min_connections(cfg.pool_max.min(3))
+        .get_mode(GetMode::TimedWait(Duration::from_secs(10)))
         .build()
         .map_err(|e| format!("gagal membuat pool Oracle (Instant Client terpasang?): {e}"))?;
     Ok(Arc::new(pool))
