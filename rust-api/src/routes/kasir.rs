@@ -134,6 +134,8 @@ pub async fn barang(
     Query(q): Query<BarangQuery>,
 ) -> AppResult<Json<Value>> {
     a.peran(KATALOG)?;
+    // Pengaturan kategori tampil (MOB_KATEGORI_TAMPIL) hanya untuk kasir mobile; anggota melihat semua produk.
+    let semua = a.0.role == Role::Anggota;
     let pg = Paging {
         q: q.q,
         page: q.page,
@@ -143,7 +145,7 @@ pub async fn barang(
     let teks = pg.q;
     let chip = q.kategori;
     let (items, lagi) = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c)?;
+        let allowed = if semua { Vec::new() } else { user::allowed_kategori(c)? };
         // Chip di luar kategori yang diizinkan -> hasil kosong (bukan bocor).
         if let Some(ch) = &chip
             && !allowed.is_empty()
@@ -178,11 +180,13 @@ pub async fn barang_barcode(
     Path(kode): Path<String>,
 ) -> AppResult<Json<BarangResp>> {
     a.peran(KATALOG)?;
+    // Pengaturan kategori tampil (MOB_KATEGORI_TAMPIL) hanya untuk kasir mobile; anggota melihat semua produk.
+    let semua = a.0.role == Role::Anggota;
     if kode.is_empty() || kode.len() > 64 {
         return Err(AppError::validation("Barcode tidak valid"));
     }
     let r = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c)?;
+        let allowed = if semua { Vec::new() } else { user::allowed_kategori(c)? };
         let p = katalog::barang_by_barcode(c, &kode, &allowed)?
             .ok_or_else(|| AppError::NotFound("Barang tidak ditemukan".into()))?;
         let (hari, _) = faktur::sekarang(c)?;
@@ -201,8 +205,10 @@ pub async fn kategori(
     a: Auth,
 ) -> AppResult<Json<Vec<katalog::Kategori>>> {
     a.peran(KATALOG)?;
+    // Pengaturan kategori tampil (MOB_KATEGORI_TAMPIL) hanya untuk kasir mobile; anggota melihat semua produk.
+    let semua = a.0.role == Role::Anggota;
     let r = db::run(&s.pool, move |c| {
-        let allowed = user::allowed_kategori(c)?;
+        let allowed = if semua { Vec::new() } else { user::allowed_kategori(c)? };
         katalog::kategori_diizinkan(c, &allowed)
     })
     .await?;

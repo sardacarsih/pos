@@ -160,7 +160,8 @@ pub async fn simpan(
     }
     let cl = a.0.clone();
     let key = super::idempotency_key(&headers)?;
-    let kategori = db::run(&s.pool, db::user::allowed_kategori).await?;
+    // Anggota boleh membeli semua produk: filter kategori tampil (khusus kasir mobile) tidak berlaku.
+    let kategori: Vec<String> = Vec::new();
     let nik_default = s.cfg.default_nik.clone();
     let max_tenor = s.cfg.default_max_tenor;
     let demo = s.cfg.belanja_demo;
