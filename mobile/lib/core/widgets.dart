@@ -7,6 +7,7 @@ import 'package:qr/qr.dart';
 
 import 'format.dart';
 import 'providers.dart';
+import 'qr_kartu.dart';
 
 class TropicalScaffold extends StatelessWidget {
   const TropicalScaffold({
@@ -369,11 +370,15 @@ class MemberQrView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final code = QrCode.fromData(
-      data: data,
-      errorCorrectLevel: QrErrorCorrectLevel.M,
-    );
-    final image = QrImage(code);
+    // Identik dengan QR kartu cetak desktop (rptKTA): versi 6, level H, AlphaNumeric, mask ala DevExpress.
+    QrImage image;
+    try {
+      image = qrKartu(data);
+    } on InputTooLongException {
+      image = QrImage(
+        QrCode.fromData(data: data, errorCorrectLevel: QrErrorCorrectLevel.M),
+      );
+    }
     return Semantics(
       label: 'Kode QR kartu anggota',
       image: true,
