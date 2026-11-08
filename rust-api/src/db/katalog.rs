@@ -340,9 +340,14 @@ pub fn cari_pelanggan(
     q: Option<&str>,
     page: u32,
     size: u32,
+    belum_akun: bool,
 ) -> AppResult<Halaman<Pelanggan>> {
     let mut b = Binds::default();
     let mut sql = format!("SELECT {} {PEL_FROM}", pel_cols());
+    // Hanya anggota yang belum punya akun mobile (untuk admin membuat akun anggota).
+    if belum_akun {
+        sql.push_str(" AND NOT EXISTS (SELECT 1 FROM MOB_USER U WHERE U.NIK = A.NIK)");
+    }
     if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
         b.add("q", like(q));
         sql.push_str(" AND (UPPER(A.NAMA_PELANGGAN) LIKE :q ESCAPE '\\' OR UPPER(A.NIK) LIKE :q ESCAPE '\\')");

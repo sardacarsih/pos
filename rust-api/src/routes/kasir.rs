@@ -249,15 +249,31 @@ fn pel_resp(p: katalog::Pelanggan, default_nik: &str) -> PelangganResp {
     }
 }
 
+/// Field eksplisit (bukan `#[serde(flatten)] Paging`): query string selalu string, flatten membuat angka gagal di-parse.
+#[derive(Deserialize)]
+pub struct PelangganQuery {
+    q: Option<String>,
+    page: Option<u32>,
+    size: Option<u32>,
+    /// true = hanya anggota yang belum punya akun mobile.
+    belum_akun: Option<bool>,
+}
+
 pub async fn pelanggan(
     State(s): State<AppState>,
     a: Auth,
-    Query(q): Query<Paging>,
+    Query(q): Query<PelangganQuery>,
 ) -> AppResult<Json<Value>> {
     a.peran(KASIR_ADMIN)?;
-    let (page, size, teks) = (q.page(), q.size(), q.q.clone());
+    let belum_akun = q.belum_akun.unwrap_or(false);
+    let pg = Paging {
+        q: q.q,
+        page: q.page,
+        size: q.size,
+    };
+    let (page, size, teks) = (pg.page(), pg.size(), pg.q.clone());
     let h = db::run(&s.pool, move |c| {
-        katalog::cari_pelanggan(c, teks.as_deref(), page, size)
+        katalog::cari_pelanggan(c, teks.as_deref(), page, size, belum_akun)
     })
     .await?;
     let nik = s.cfg.default_nik.clone();
@@ -369,6 +385,15 @@ mod tests {
             .unwrap();
         let q = Query::<BarangQuery>::try_from_uri(&uri).expect("query barang valid");
         assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+    }
+
+    #[test]
+    fn query_pelanggan_menerima_angka_dan_bool() {
+        let uri: axum::http::Uri = "/api/v1/pelanggan?page=2&size=30&belum_akun=true&q=aan"
+            .parse()
+            .unwrap();
+        let q = Query::<PelangganQuery>::try_from_uri(&uri).expect("query pelanggan valid");
+        assert_eq!((q.0.page, q.0.size, q.0.belum_akun), (Some(2), Some(30), Some(true)));
     }
 }
 

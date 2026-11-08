@@ -478,6 +478,7 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
       final result = await widget.api.pelanggan(
         q: _query.text.trim(),
         page: page,
+        belumAkun: true, // hanya yang belum ada di daftar user
       );
       if (!mounted || requestId != _requestId) return;
       setState(() {
@@ -531,16 +532,6 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
           ),
           const SizedBox(height: 8),
           Expanded(child: _isiDaftar()),
-          if (_lagi && _error == null)
-            TextButton(
-              onPressed: _loading ? null : () => _cari(reset: false),
-              child: _loading
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Muat anggota lainnya'),
-            ),
         ],
       ),
     ),
@@ -571,15 +562,35 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('Anggota tidak ditemukan.'));
+      return Center(
+        child: Text(
+          _query.text.trim().isEmpty
+              ? 'Semua anggota sudah punya akun.'
+              : 'Anggota tidak ditemukan.',
+          textAlign: TextAlign.center,
+        ),
+      );
     }
     return ListView.builder(
       controller: _scroll,
-      itemCount: _items.length,
+      // Satu baris tambahan berisi indikator saat halaman berikutnya dimuat otomatis (tanpa tombol).
+      itemCount: _items.length + (_lagi ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index >= _items.length) {
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(
+              child: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
         final anggota = _items[index];
         return ListTile(
           contentPadding: EdgeInsets.zero,
+          leading: AvatarFoto(nama: anggota.nama),
           title: Text(anggota.nama),
           subtitle: Text(
             '${anggota.nik}\n${anggota.unit.isEmpty ? 'Unit kerja tidak tersedia' : anggota.unit}',
