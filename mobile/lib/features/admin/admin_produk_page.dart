@@ -25,6 +25,7 @@ class AdminProdukPage extends ConsumerStatefulWidget {
 
 class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   final _q = TextEditingController();
+  final _scroll = ScrollController();
   final List<ProdukAdmin> _items = [];
   List<Kategori> _kategori = [];
   String? _aktif; // null = semua, 'Y', 'N'
@@ -38,6 +39,15 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   @override
   void initState() {
     super.initState();
+    // Halaman berikutnya dimuat otomatis saat daftar hampir habis; tombol di dasar daftar jadi cadangan.
+    _scroll.addListener(() {
+      if (_lagi &&
+          !_loading &&
+          _error == null &&
+          _scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
+        _cari(reset: false);
+      }
+    });
     _cari(reset: true);
     ref
         .read(apiProvider)
@@ -52,6 +62,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   void dispose() {
     _debounce?.cancel();
     _q.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -424,6 +435,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
           child: RefreshIndicator(
             onRefresh: () => _cari(reset: true),
             child: ListView(
+              controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
               children: [
