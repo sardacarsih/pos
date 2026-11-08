@@ -231,16 +231,16 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   }
 }
 
-/// Shell admin: tab Dashboard (awal), Produk, dan User.
+/// Shell admin: tab Dashboard (awal), Produk (tab Produk|Kategori), Rekap anggota, dan User.
 class AdminShell extends StatefulWidget {
   const AdminShell({
     super.key,
     required this.produk,
-    required this.kategori,
+    required this.rekap,
     required this.user,
   });
   final Widget produk;
-  final Widget kategori;
+  final Widget rekap;
   final Widget user;
 
   @override
@@ -263,7 +263,7 @@ class _AdminShellState extends State<AdminShell> {
         children: [
           AdminDashboardPage(aktif: _i == 0),
           widget.produk,
-          widget.kategori,
+          widget.rekap,
           widget.user,
         ],
       ),
@@ -286,9 +286,9 @@ class _AdminShellState extends State<AdminShell> {
                 label: 'Produk',
               ),
               NavigationDestination(
-                icon: Icon(Icons.category_outlined),
-                selectedIcon: Icon(Icons.category),
-                label: 'Kategori',
+                icon: Icon(Icons.summarize_outlined),
+                selectedIcon: Icon(Icons.summarize),
+                label: 'Rekap',
               ),
               NavigationDestination(
                 icon: Icon(Icons.group_outlined),

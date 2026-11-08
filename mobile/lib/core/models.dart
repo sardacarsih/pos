@@ -320,3 +320,49 @@ class UserInfo {
   final int? fotoVersi; // null = tanpa foto profil
   final List<String> kategori;
 }
+
+/// Periode yang sudah diatur (rentang bulanan, YYYY-MM-DD) untuk pemilih periode admin.
+class PeriodeInfo {
+  PeriodeInfo.fromJson(Map<String, dynamic> j)
+    : periode = _i(j['periode']),
+      dari = _s(j['dari']),
+      sampai = _s(j['sampai']);
+  final int periode;
+  final String dari, sampai;
+}
+
+class RekapItem {
+  RekapItem.fromJson(Map<String, dynamic> j)
+    : nik = _s(j['nik']),
+      nama = _s(j['nama']),
+      unit = _s(j['unit']),
+      jumlah = _i(j['jumlah']),
+      total = _i(j['total']),
+      tunai = _i(j['tunai']),
+      kredit = _i(j['kredit']),
+      limit = _i(j['limit']),
+      sisaLimit = (j['sisa_limit'] as num?)?.toInt();
+  final String nik, nama, unit;
+  final int jumlah, total, tunai, kredit, limit;
+  final int? sisaLimit; // null = limit tidak dibatasi
+}
+
+/// Rekap belanja per anggota pada satu periode (admin).
+class RekapAnggota {
+  RekapAnggota.fromJson(Map<String, dynamic> j)
+    : periode = _i(j['periode']),
+      dari = _s(j['dari']),
+      sampai = _s(j['sampai']),
+      jumlahAnggota = _i(j['jumlah_anggota']),
+      jumlahTransaksi = _i(j['jumlah_transaksi']),
+      total = _i(j['total']),
+      tunai = _i(j['tunai']),
+      kredit = _i(j['kredit']),
+      items = [
+        for (final x in (j['items'] as List? ?? []))
+          RekapItem.fromJson(x as Map<String, dynamic>),
+      ];
+  final int periode, jumlahAnggota, jumlahTransaksi, total, tunai, kredit;
+  final String dari, sampai;
+  final List<RekapItem> items;
+}

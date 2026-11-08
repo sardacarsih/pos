@@ -12,7 +12,6 @@ import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
-import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 
 /// Kelola produk (master POS_PRODUCT): cari, filter aktif, ubah, nonaktifkan. Tidak ada tambah/hapus.
@@ -389,16 +388,9 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   );
 
   @override
-  Widget build(BuildContext context) => TropicalScaffold(
-    title: 'Kelola Produk',
-    actions: [
-      const ProfilAksi(),
-      IconButton(
-        tooltip: 'Keluar',
-        icon: const Icon(Icons.logout, color: Colors.white),
-        onPressed: () => ref.read(authProvider.notifier).logout(),
-      ),
-    ],
+  // Dipakai sebagai tab di AdminKatalogPage: header, profil, dan keluar ada di halaman induk.
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.transparent,
     body: Column(
       children: [
         Padding(

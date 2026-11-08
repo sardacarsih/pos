@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'core/providers.dart';
 import 'core/theme.dart';
 import 'features/admin/admin_dashboard_page.dart';
-import 'features/admin/admin_kategori_page.dart';
+import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
-import 'features/admin/admin_produk_page.dart';
+import 'features/admin/admin_rekap_page.dart';
 import 'features/anggota/anggota_shell.dart';
 import 'features/anggota/transaksi_saya_page.dart';
 import 'features/auth/login_page.dart';
@@ -71,8 +71,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin',
         builder: (_, _) =>
             const AdminShell(
-              produk: AdminProdukPage(),
-              kategori: AdminKategoriPage(),
+              produk: AdminKatalogPage(),
+              rekap: AdminRekapPage(),
               user: AdminPage(),
             ),
       ),

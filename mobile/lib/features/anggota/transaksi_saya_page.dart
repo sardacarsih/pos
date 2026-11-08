@@ -273,15 +273,21 @@ class _ErrorBox extends StatelessWidget {
 }
 
 class DetailTransaksiPage extends ConsumerStatefulWidget {
-  const DetailTransaksiPage({super.key, required this.no});
+  const DetailTransaksiPage({super.key, required this.no, this.admin = false});
   final String no;
+
+  /// Mode admin (dari rekap anggota): detail lewat endpoint admin dan kembali dengan Navigator.pop.
+  final bool admin;
   @override
   ConsumerState<DetailTransaksiPage> createState() =>
       _DetailTransaksiPageState();
 }
 
 class _DetailTransaksiPageState extends ConsumerState<DetailTransaksiPage> {
-  late Future<Faktur> _f = ref.read(apiProvider).detail(widget.no);
+  Future<Faktur> _ambil() => widget.admin
+      ? ref.read(apiProvider).fakturAdmin(widget.no)
+      : ref.read(apiProvider).detail(widget.no);
+  late Future<Faktur> _f = _ambil();
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +296,9 @@ class _DetailTransaksiPageState extends ConsumerState<DetailTransaksiPage> {
       leading: IconButton(
         tooltip: 'Kembali',
         icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => context.go('/saya'),
+        onPressed: () => widget.admin
+            ? Navigator.of(context).pop()
+            : context.go('/saya'),
       ),
       body: FutureBuilder<Faktur>(
         future: _f,
@@ -303,9 +311,7 @@ class _DetailTransaksiPageState extends ConsumerState<DetailTransaksiPage> {
                 pesan: s.error is ApiException
                     ? (s.error as ApiException).pesan
                     : 'Gagal memuat',
-                onUlang: () => setState(
-                  () => _f = ref.read(apiProvider).detail(widget.no),
-                ),
+                onUlang: () => setState(() => _f = _ambil()),
               ),
             );
           }
