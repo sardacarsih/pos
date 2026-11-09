@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -68,6 +69,7 @@ Future<InfoRilis?> cekRilis() async {
 
 /// Pengecekan sekali per pemanggilan; dialog ditampilkan di atas navigator [context].
 Future<void> tawarkanUpdate(BuildContext context) async {
+  if (kIsWeb) return; // PWA diperbarui lewat service worker, bukan APK
   final info = await cekRilis();
   if (info == null || !context.mounted) return;
   final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
