@@ -335,6 +335,7 @@ class _KasirPageState extends ConsumerState<KasirPage> {
   void _bukaKeranjang() => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     showDragHandle: true,
     builder: (_) => DraggableScrollableSheet(
       expand: false,
@@ -1077,7 +1078,13 @@ class CartPanel extends ConsumerWidget {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.all(16),
+          // Sheet modal digambar di bawah bar navigasi HP: tambahkan inset agar tombol Bayar tidak tertutup.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            16 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           child: Column(
             children: [
               Row(
