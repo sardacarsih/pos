@@ -24,7 +24,7 @@ struct Assertion<'a> {
 
 /// Tag = nomor transaksi: kirim ulang (retry) mengganti notifikasi yang sama, bukan menumpuk dobel.
 fn message(token: &str, no: &str) -> serde_json::Value {
-    json!({"message": {"token": token, "notification": {"title": "Transaksi tersimpan", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no}}}})
+    json!({"message": {"token": token, "notification": {"title": "Kopkar Kusuma Lestari", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no}}}})
 }
 
 fn token_unregistered(body: &serde_json::Value) -> bool {
@@ -89,7 +89,9 @@ pub fn start(pool: DbPool) -> Result<(), String> {
                                 .bearer_auth(&bearer).json(&message(&token, &event.number))
                                 .send().await;
                             match response {
-                                Ok(r) if r.status().is_success() => {},
+                                Ok(r) if r.status().is_success() => {
+                                    tracing::info!(no = %event.number, "Notifikasi FCM terkirim");
+                                },
                                 Ok(r) => {
                                     let status = r.status();
                                     let body: serde_json::Value = r.json().await.unwrap_or_default();
@@ -99,7 +101,7 @@ pub fn start(pool: DbPool) -> Result<(), String> {
                                         if db::run(&pool, move |c| db::push::invalid_token(c, &t)).await.is_err() { retry = true; }
                                     } else {
                                         if status.as_u16() == 401 { cached = None; }
-                                        tracing::warn!(status = %status, "Pengiriman FCM gagal; akan dicoba lagi");
+                                        tracing::warn!(status = %status, galat = %body["error"]["status"], no = %event.number, "Pengiriman FCM gagal; akan dicoba lagi");
                                         retry = true;
                                     }
                                 }

@@ -36,7 +36,7 @@ class PushService {
           if (no is! String || no.isEmpty) return;
           await _local.show(
             id: no.hashCode & 0x7fffffff,
-            title: 'Transaksi tersimpan',
+            title: 'Kopkar Kusuma Lestari',
             body: 'Ada transaksi baru pada akun Anda.',
             notificationDetails: const NotificationDetails(
               android: AndroidNotificationDetails(
