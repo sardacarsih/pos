@@ -111,6 +111,7 @@ pub struct SessionRow {
     pub used: bool,
     pub revoked: bool,
     pub expired: bool,
+    pub device: Option<String>,
 }
 
 pub fn create_session(
@@ -142,7 +143,7 @@ pub fn find_session(conn: &Connection, token_hash: &str) -> AppResult<Option<Ses
     let r = opt(conn.query_row_named(
         "SELECT SESSION_ID, FAMILY_ID, USER_ID, \
          CASE WHEN USED_AT IS NULL THEN 0 ELSE 1 END, CASE WHEN REVOKED_AT IS NULL THEN 0 ELSE 1 END, \
-         CASE WHEN EXPIRES_AT < SYSTIMESTAMP THEN 1 ELSE 0 END FROM MOB_SESSION WHERE TOKEN_HASH = :h",
+         CASE WHEN EXPIRES_AT < SYSTIMESTAMP THEN 1 ELSE 0 END, DEVICE_ID FROM MOB_SESSION WHERE TOKEN_HASH = :h",
         &[("h", &token_hash)],
     ))?;
     match r {
@@ -153,6 +154,7 @@ pub fn find_session(conn: &Connection, token_hash: &str) -> AppResult<Option<Ses
             used: r.get::<_, i64>(3)? == 1,
             revoked: r.get::<_, i64>(4)? == 1,
             expired: r.get::<_, i64>(5)? == 1,
+            device: r.get(6)?,
         })),
         None => Ok(None),
     }
@@ -176,6 +178,7 @@ pub fn revoke_family(conn: &Connection, family: &str) -> AppResult<()> {
 }
 
 pub fn revoke_user(conn: &Connection, user_id: i64) -> AppResult<()> {
+    conn.execute_named("DELETE FROM MOB_PUSH_DEVICE WHERE USER_ID = :u", &[("u", &user_id)])?;
     conn.execute_named("UPDATE MOB_SESSION SET REVOKED_AT = SYSTIMESTAMP WHERE USER_ID = :u AND REVOKED_AT IS NULL", &[("u", &user_id)])?;
     conn.commit()?;
     Ok(())

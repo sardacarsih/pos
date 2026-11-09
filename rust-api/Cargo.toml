@@ -10,6 +10,7 @@ chrono = { version = "0.4.45", features = ["serde"] }
 imagesize = "0.15.0"
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 oracle = { version = "0.6.3", features = ["chrono"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rust_decimal = { version = "1.43.0", features = ["macros", "serde-arbitrary-precision"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["arbitrary_precision"] }

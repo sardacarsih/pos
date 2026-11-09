@@ -98,6 +98,9 @@ pub async fn login(
         let (plain, hash) = token::new_refresh();
         let family = uuid::Uuid::new_v4().to_string();
         let device = req.device_id.unwrap_or_default();
+        if device.len() == 32 && device.bytes().all(|b| b.is_ascii_hexdigit()) {
+            c.execute_named("DELETE FROM MOB_PUSH_DEVICE WHERE DEVICE_ID=:d", &[("d", &device)])?;
+        }
         user::create_session(
             c,
             u.id,
@@ -176,6 +179,9 @@ pub async fn logout(
 ) -> AppResult<StatusCode> {
     db::run(&s.pool, move |c| {
         if let Some(ses) = user::find_session(c, &token::hash_refresh(&req.refresh_token))? {
+            if !ses.revoked && !ses.used && !ses.expired && let Some(device) = &ses.device {
+                db::push::unregister(c, ses.user_id, device)?;
+            }
             user::revoke_family(c, &ses.family)?;
         }
         Ok(())

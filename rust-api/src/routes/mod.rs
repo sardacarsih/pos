@@ -3,6 +3,7 @@ pub mod anggota;
 pub mod auth;
 pub mod kasir;
 pub mod profil;
+pub mod push;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -145,6 +146,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/ganti-password", post(auth::ganti_password))
         .route("/api/v1/me", get(auth::me))
+        .route("/api/v1/push/device", put(push::register).delete(push::remove))
         // profil sendiri (semua role)
         .route("/api/v1/profil", get(profil::lihat).put(profil::ubah))
         .route(
@@ -195,6 +197,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/admin/dashboard", get(admin::dashboard))
         .route("/api/v1/admin/periode", get(admin::periode_list))
         .route("/api/v1/admin/rekap-anggota", get(admin::rekap_anggota))
+        .route("/api/v1/admin/tagihan-vs-rekap", get(admin::tagihan_vs_rekap))
         .route(
             "/api/v1/admin/rekap-anggota/{nik}/transaksi",
             get(admin::rekap_transaksi),

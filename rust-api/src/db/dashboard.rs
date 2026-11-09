@@ -204,7 +204,8 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         let r = r?;
         per_kasir.push(PerKasir {
             kasir: r.get(0)?,
-            nama: r.get(1)?,
+            // Oracle menganggap '' sebagai NULL: penjualan lama/desktop bisa tanpa NAMA_KASIR.
+            nama: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
             jumlah: r.get(2)?,
             total: tampil(dec(&r.get::<_, String>(3)?)?),
         });
@@ -223,7 +224,7 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         let r = r?;
         terlaris.push(Terlaris {
             kode: r.get(0)?,
-            nama: r.get(1)?,
+            nama: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
             qty: dec(&r.get::<_, String>(2)?)?.to_f64().unwrap_or(0.0),
             total: tampil(dec(&r.get::<_, String>(3)?)?),
         });

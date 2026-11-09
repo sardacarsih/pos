@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
 import '../../core/providers.dart';
+import '../../core/tema_mode.dart';
 import '../../core/widgets.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -219,6 +220,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
             ),
+          ),
+          const Positioned(
+            top: 0,
+            right: 4,
+            child: SafeArea(child: TemaTombol(warna: Colors.white)),
           ),
         ],
       ),

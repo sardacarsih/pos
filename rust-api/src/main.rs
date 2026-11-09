@@ -73,6 +73,9 @@ async fn run() -> Result<(), String> {
             Ok(())
         }
         "serve" => {
+            if let Err(error) = pos_api::push::start(pool.clone()) {
+                tracing::error!(%error, "Worker FCM tidak berjalan; penjualan tetap tersedia");
+            }
             let state = AppState {
                 pool,
                 cfg: Arc::new(cfg.clone()),

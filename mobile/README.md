@@ -1,5 +1,17 @@
 # kopkar_pos
 
+## Firebase Cloud Messaging Android
+
+Daftarkan aplikasi Android `id.kopkar.kopkar_pos` pada proyek Firebase yang digunakan server, aktifkan Cloud Messaging, dan letakkan konfigurasi unduhan `google-services.json` di `android/app/`. File tersebut diabaikan Git; jangan taruh service account di aplikasi. Build ulang APK setelah konfigurasi tersedia. Tanpa file ini aplikasi tetap dapat dibangun, tetapi FCM tidak aktif.
+
+Setelah anggota masuk, aplikasi meminta izin notifikasi dan mendaftarkan perangkat. Ketuk notifikasi untuk membuka detail transaksi setelah login; akses detail tetap diperiksa oleh server. Pada Android 13 atau lebih baru pengguna harus mengizinkan notifikasi; aplikasi yang di-force-stop harus dibuka lagi untuk menerima notifikasi.
+
+## Cetak nota Bluetooth
+
+Di Android, pasangkan printer melalui pengaturan Bluetooth terlebih dahulu. Pada layar nota pilih **Cetak printer Bluetooth**, berikan izin perangkat sekitar jika diminta, lalu pilih printer yang sudah dipasangkan. Cetak ulang juga tersedia dari detail riwayat transaksi.
+
+Fitur ini ditujukan untuk printer thermal 58 mm yang menerima perintah ESC/POS melalui Bluetooth Classic (SPP). Perangkat BLE, iOS, dan protokol khusus produsen belum didukung. Karakter di luar ASCII diganti dengan `?` pada cetakan Bluetooth; pilihan PDF tetap tersedia.
+
 ## Dev di HP asli (USB)
 
 App memakai `API_URL` dari `--dart-define`; tanpa itu ia memanggil `https://api.example.com` dan selalu gagal terhubung.

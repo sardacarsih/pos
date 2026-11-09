@@ -55,6 +55,10 @@ Future<Uint8List> bangunStrukPdf(Faktur f) {
             style: const pw.TextStyle(fontSize: s),
           ),
           pw.Text(
+            'Kasir: ${f.identitasKasir}',
+            style: const pw.TextStyle(fontSize: s),
+          ),
+          pw.Text(
             'Pelanggan: ${f.nik}, ${f.namaPelanggan.toUpperCase()}',
             style: const pw.TextStyle(fontSize: s),
           ),

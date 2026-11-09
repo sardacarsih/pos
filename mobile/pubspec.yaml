@@ -51,6 +51,9 @@ dependencies:
   crop_your_image: ^2.0.1
   package_info_plus: ^10.2.2
   ota_update: ^7.1.0
+  firebase_core: 4.14.0
+  firebase_messaging: 16.7.0
+  flutter_local_notifications: 22.0.1
 
 dev_dependencies:
   flutter_test:

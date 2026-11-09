@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/tema_mode.dart';
 import '../../core/widgets.dart';
 import 'profil_page.dart';
 
@@ -10,12 +11,18 @@ class ProfilAksi extends StatelessWidget {
   const ProfilAksi({super.key});
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: 'Profil saya',
-    icon: const ProfilAvatar(radius: 14),
-    onPressed: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ProfilPage()),
-    ),
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const TemaTombol(warna: Colors.white),
+      IconButton(
+        tooltip: 'Profil saya',
+        icon: const ProfilAvatar(radius: 14),
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfilPage()),
+        ),
+      ),
+    ],
   );
 }
 

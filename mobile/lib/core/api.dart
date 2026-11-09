@@ -195,6 +195,19 @@ class ApiClient {
   Future<dynamic> put(String p, {Object? body}) =>
       _call(() => _dio.put<dynamic>(p, data: body));
 
+  Future<void> daftarPush(String token) async {
+    await put('/api/v1/push/device', body: {
+      'device_id': await store.deviceId(),
+      'token': token,
+    });
+  }
+
+  Future<void> hapusPush() async {
+    final deviceId = await store.deviceId();
+    await _call(() => _dio.delete<dynamic>('/api/v1/push/device',
+        data: {'device_id': deviceId}));
+  }
+
   // ---- auth ----
   Future<Profil> login(String username, String password) async {
     final j = await post(

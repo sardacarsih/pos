@@ -5,7 +5,9 @@ pub mod faktur;
 pub mod foto;
 pub mod katalog;
 pub mod profil;
+pub mod push;
 pub mod rekap;
+pub mod tagihan_rekap;
 pub mod user;
 
 use std::{sync::Arc, time::Duration};
@@ -68,6 +70,13 @@ pub fn migrate(conn: &Connection) -> AppResult<usize> {
             Ok(_) => done += 1,
             Err(e) if matches!(e.oci_code(), Some(955) | Some(1408) | Some(2261)) => {}
             Err(e) => return Err(e.into()),
+        }
+        if stmt.starts_with("CREATE OR REPLACE TRIGGER MOB_PUSH_SALE_INSERT") {
+            let errors: i64 = conn.query_row_as("SELECT COUNT(*) FROM USER_ERRORS WHERE NAME = 'MOB_PUSH_SALE_INSERT' AND TYPE = 'TRIGGER'", &[])?;
+            if errors > 0 {
+                conn.execute("ALTER TRIGGER MOB_PUSH_SALE_INSERT DISABLE", &[])?;
+                return Err(AppError::Internal("Trigger notifikasi tidak valid dan telah dinonaktifkan; periksa USER_ERRORS".into()));
+            }
         }
     }
     conn.commit()?;

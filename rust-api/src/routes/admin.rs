@@ -563,3 +563,43 @@ pub async fn faktur_admin(
     f.map(Json)
         .ok_or_else(|| AppError::NotFound("Faktur tidak ditemukan".into()))
 }
+
+#[derive(Deserialize)]
+pub struct TagihanVsRekapQuery {
+    periode: i32,
+    remise: u8,
+}
+
+pub async fn tagihan_vs_rekap(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<TagihanVsRekapQuery>,
+) -> AppResult<Json<db::tagihan_rekap::Report>> {
+    a.peran(ADMIN)?;
+    super::anggota::periode_valid(q.periode)?;
+    db::tagihan_rekap::range_columns(q.remise)?;
+    Ok(Json(
+        db::run(&s.pool, move |c| {
+            db::tagihan_rekap::report(c, q.periode, q.remise)
+        })
+        .await?,
+    ))
+}
+
+#[cfg(test)]
+mod tagihan_rekap_access_tests {
+    use super::*;
+    use crate::auth::token::Claims;
+    fn auth(role: Role) -> Auth {
+        Auth(Claims {
+            sub: 1, usr: String::new(), nama: String::new(), role,
+            nik: None, ganti: false, iat: 0, exp: 0,
+        })
+    }
+    #[test]
+    fn hanya_admin_yang_bisa_melihat_laporan() {
+        assert!(auth(Role::Admin).peran(ADMIN).is_ok());
+        assert!(auth(Role::Kasir).peran(ADMIN).is_err());
+        assert!(auth(Role::Anggota).peran(ADMIN).is_err());
+    }
+}

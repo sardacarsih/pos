@@ -19,18 +19,25 @@ if ($LASTEXITCODE) { throw 'build gagal' }
 
 $apk = 'build/app/outputs/flutter-apk/app-release.apk'
 $sha = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
-$json = [ordered]@{ versionCode = $code; versionName = $name; apk = 'pos-kasir.apk'; sha256 = $sha; minVersionCode = $MinVersionCode; catatan = $Catatan } | ConvertTo-Json
+$nama = "pos-kasir-$code.apk"   # nama berversi: unduhan berjalan tak rusak saat rilis baru, rollback tinggal ganti version.json
+$json = [ordered]@{ versionCode = $code; versionName = $name; apk = $nama; sha256 = $sha; minVersionCode = $MinVersionCode; catatan = $Catatan } | ConvertTo-Json
 $tmpJson = Join-Path $env:TEMP 'version.json'
 [IO.File]::WriteAllText($tmpJson, $json, (New-Object Text.UTF8Encoding $false))
 
 # Unggah ke nama sementara; APK dipindah lebih dulu, version.json terakhir (aplikasi tidak melihat versi baru sebelum APK siap).
 . "$PSScriptRoot\ssh-kirim.ps1"
-Send-File $apk "$Dir/pos-kasir.apk.tmp"
+try {
+    $lama = (Invoke-RestMethod "$ApiUrl/downloads/version.json").versionCode
+    if ($code -le $lama) { throw "versionCode $code harus lebih besar dari yang di server ($lama); naikkan angka setelah '+' di pubspec.yaml" }
+} catch [System.Net.WebException] { Write-Warning 'version.json lama tidak terbaca; validasi versionCode dilewati' }
+
+Send-File $apk "$Dir/$nama.tmp"
 Send-File $tmpJson "$Dir/version.json.tmp"
-$remote = "Set-Location '$Dir'; Move-Item -Force pos-kasir.apk.tmp pos-kasir.apk; Move-Item -Force version.json.tmp version.json; (Get-FileHash pos-kasir.apk -Algorithm SHA256).Hash.ToLower()"
+# Simpan 2 APK terbaru (rollback); /downloads/pos-kasir.apk lama tetap ada untuk aplikasi lama & halaman unduh nginx.
+$remote = "Set-Location '$Dir'; Move-Item -Force '$nama.tmp' '$nama'; Copy-Item -Force '$nama' pos-kasir.apk; Move-Item -Force version.json.tmp version.json; Get-ChildItem 'pos-kasir-*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 | Remove-Item; (Get-FileHash '$nama' -Algorithm SHA256).Hash.ToLower()"
 $hashServer = ($remote | ssh $Server 'powershell -NoProfile -Command -').Trim()
 if ($hashServer -ne $sha) { throw "Hash di server ($hashServer) berbeda dari lokal ($sha)" }
 
-$ukuran = (Invoke-WebRequest "$ApiUrl/downloads/pos-kasir.apk" -Method Head).Headers.'Content-Length'
+$ukuran = (Invoke-WebRequest "$ApiUrl/downloads/$nama" -Method Head).Headers.'Content-Length'
 "OK v$name+$code, $ukuran byte, sha256 $sha"
-"Unduh: $ApiUrl/downloads/pos-kasir.apk"
+"Unduh: $ApiUrl/downloads/$nama (tautan tetap: $ApiUrl/downloads/pos-kasir.apk)"
