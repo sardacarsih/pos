@@ -561,3 +561,25 @@ class UserAvatar extends ConsumerWidget {
     radius: radius,
   );
 }
+
+/// Animasi "KOPKAR Loading Data..." untuk memuat area/halaman (spinner kecil di tombol tetap bawaan).
+class LoadingKopkar extends StatelessWidget {
+  const LoadingKopkar({super.key, this.ukuran = 120});
+  final double ukuran;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Memuat data',
+    child: Center(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ukuran * 0.2),
+        child: Image.asset(
+          'assets/loading.gif',
+          width: ukuran,
+          height: ukuran,
+          gaplessPlayback: true,
+        ),
+      ),
+    ),
+  );
+}

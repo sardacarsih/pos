@@ -14,6 +14,10 @@ Set-Location (Split-Path $PSScriptRoot)
 if ((Get-Content pubspec.yaml -Raw) -notmatch '(?m)^version:\s*(\S+)\+(\d+)') { throw 'version: tidak ditemukan di pubspec.yaml' }
 $name = $Matches[1]; $code = [int]$Matches[2]
 
+# Riwayat versi (changelog.json) wajib memuat entri versi ini di urutan teratas sebelum build/unggah.
+$changelog = [IO.File]::ReadAllText((Join-Path (Get-Location) 'changelog.json')) | ConvertFrom-Json
+if (@($changelog)[0].versionCode -ne $code) { throw "changelog.json: entri teratas harus versionCode $code; tambahkan catatan rilis ini" }
+
 flutter build apk --release --dart-define=API_URL=$ApiUrl
 if ($LASTEXITCODE) { throw 'build gagal' }
 
@@ -21,8 +25,7 @@ $apk = 'build/app/outputs/flutter-apk/app-release.apk'
 $sha = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
 $nama = "pos-kasir-$code.apk"   # nama berversi: unduhan berjalan tak rusak saat rilis baru, rollback tinggal ganti version.json
 $json = [ordered]@{ versionCode = $code; versionName = $name; apk = $nama; sha256 = $sha; minVersionCode = $MinVersionCode; catatan = $Catatan } | ConvertTo-Json
-$tmpJson = Join-Path $env:TEMP 'version.json'
-[IO.File]::WriteAllText($tmpJson, $json, (New-Object Text.UTF8Encoding $false))
+$tmpJson = Join-Path (Get-Location) 'build/version.json'   # bukan %TEMP%: pembersih Temp bisa menghapusnya selama unggah APK
 
 # Unggah ke nama sementara; APK dipindah lebih dulu, version.json terakhir (aplikasi tidak melihat versi baru sebelum APK siap).
 . "$PSScriptRoot\ssh-kirim.ps1"
@@ -32,9 +35,11 @@ try {
 } catch [System.Net.WebException] { Write-Warning 'version.json lama tidak terbaca; validasi versionCode dilewati' }
 
 Send-File $apk "$Dir/$nama.tmp"
+[IO.File]::WriteAllText($tmpJson, $json, (New-Object Text.UTF8Encoding $false))   # ditulis tepat sebelum dikirim
 Send-File $tmpJson "$Dir/version.json.tmp"
+Send-File 'changelog.json' "$Dir/changelog.json.tmp"
 # Simpan 2 APK terbaru (rollback); /downloads/pos-kasir.apk lama tetap ada untuk aplikasi lama & halaman unduh nginx.
-$remote = "Set-Location '$Dir'; Move-Item -Force '$nama.tmp' '$nama'; Copy-Item -Force '$nama' pos-kasir.apk; Move-Item -Force version.json.tmp version.json; Get-ChildItem 'pos-kasir-*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 | Remove-Item; (Get-FileHash '$nama' -Algorithm SHA256).Hash.ToLower()"
+$remote = "Set-Location '$Dir'; Move-Item -Force '$nama.tmp' '$nama'; Copy-Item -Force '$nama' pos-kasir.apk; Move-Item -Force changelog.json.tmp changelog.json; Move-Item -Force version.json.tmp version.json; Get-ChildItem 'pos-kasir-*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 | Remove-Item; (Get-FileHash '$nama' -Algorithm SHA256).Hash.ToLower()"
 $hashServer = ($remote | ssh $Server 'powershell -NoProfile -Command -').Trim()
 if ($hashServer -ne $sha) { throw "Hash di server ($hashServer) berbeda dari lokal ($sha)" }
 

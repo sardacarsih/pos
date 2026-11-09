@@ -124,7 +124,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
             if (_loading && d == null)
               const Padding(
                 padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingKopkar(),
               ),
             if (_error != null)
               Card(

@@ -151,10 +151,10 @@ class _AdminRekapPageState extends ConsumerState<AdminRekapPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
                 children: [
-                  if (_loading && r == null)
+                  if (_loading)
                     const Padding(
                       padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: LoadingKopkar(),
                     ),
                   if (_error != null)
                     Card(
@@ -167,7 +167,7 @@ class _AdminRekapPageState extends ConsumerState<AdminRekapPage> {
                         ),
                       ),
                     ),
-                  if (r != null) ...[
+                  if (r != null && !_loading) ...[
                     _Ringkasan(r: r),
                     const SizedBox(height: 8),
                     if (items.isEmpty)
@@ -210,7 +210,9 @@ class _AdminRekapPageState extends ConsumerState<AdminRekapPage> {
                               Text(
                                 x.sisaLimit == null
                                     ? 'Limit tak terbatas'
-                                    : 'Sisa ${rupiah(x.sisaLimit!)}',
+                                    : x.sisaLimit! < 0
+                                        ? 'Melebihi limit ${rupiah(-x.sisaLimit!)}'
+                                        : 'Sisa ${rupiah(x.sisaLimit!)}',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: (x.sisaLimit ?? 0) < 0 ? cs.error : null,
@@ -426,7 +428,7 @@ class _RekapAnggotaPageState extends ConsumerState<RekapAnggotaPage> {
             if (_loading && _ringkasan == null)
               const Padding(
                 padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingKopkar(),
               ),
             if (_error != null)
               Card(
@@ -475,7 +477,7 @@ class _RekapAnggotaPageState extends ConsumerState<RekapAnggotaPage> {
             if (_lagi)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingKopkar(),
               ),
           ],
         ),

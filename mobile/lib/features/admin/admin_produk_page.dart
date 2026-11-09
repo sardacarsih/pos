@@ -499,7 +499,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
+                    child: LoadingKopkar(),
                   ),
               ],
             ),

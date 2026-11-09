@@ -127,13 +127,13 @@ class _TransaksiSayaPageState extends ConsumerState<TransaksiSayaPage> {
           children: [
             _PeriodeBar(periode: _periode, onGeser: _geser),
             const SizedBox(height: 12),
-            if (_loading && _ringkasan == null)
+            if (_loading)
               const Padding(
                 padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingKopkar(),
               ),
             if (_error != null) _ErrorBox(pesan: _error!, onUlang: _muat),
-            if (_ringkasan != null) KartuLimit(r: _ringkasan!),
+            if (_ringkasan != null && !_loading) KartuLimit(r: _ringkasan!),
             const SizedBox(height: 16),
             if (_ringkasan != null && _items.isEmpty && !_loading)
               const Padding(
@@ -142,7 +142,8 @@ class _TransaksiSayaPageState extends ConsumerState<TransaksiSayaPage> {
                   child: Text('Belum ada transaksi pada periode ini'),
                 ),
               ),
-            for (final t in _items)
+            if (!_loading)
+              for (final t in _items)
               Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
@@ -160,7 +161,7 @@ class _TransaksiSayaPageState extends ConsumerState<TransaksiSayaPage> {
                       context.go('/saya/faktur/${Uri.encodeComponent(t.no)}'),
                 ),
               ),
-            if (_lagi)
+            if (_lagi && !_loading)
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
@@ -244,7 +245,12 @@ class KartuLimit extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text('Limit ${rupiah(r.limit)} · Sisa ${rupiah(r.sisa ?? 0)}'),
+              Text(
+                lewat
+                    ? 'Limit ${rupiah(r.limit)} · Melebihi limit ${rupiah(r.belanja - r.limit)}'
+                    : 'Limit ${rupiah(r.limit)} · Sisa ${rupiah(r.sisa ?? 0)}',
+                style: lewat ? TextStyle(color: cs.error) : null,
+              ),
             ],
           ],
         ),
@@ -304,7 +310,7 @@ class _DetailTransaksiPageState extends ConsumerState<DetailTransaksiPage> {
         future: _f,
         builder: (c, s) {
           if (s.connectionState != ConnectionState.done)
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingKopkar();
           if (s.hasError) {
             return Center(
               child: _ErrorBox(

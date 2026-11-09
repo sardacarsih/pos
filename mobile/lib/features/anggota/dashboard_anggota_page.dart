@@ -84,7 +84,7 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
             if (_loading && d == null)
               const Padding(
                 padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingKopkar(),
               ),
             if (_error != null)
               Card(

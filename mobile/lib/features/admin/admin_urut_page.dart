@@ -177,7 +177,7 @@ class _AdminUrutPageState extends ConsumerState<AdminUrutPage> {
         ),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const LoadingKopkar()
               : _error != null
               ? Center(
                   child: Column(
