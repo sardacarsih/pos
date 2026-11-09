@@ -147,7 +147,8 @@ class _AdminPageState extends ConsumerState<AdminPage>
           ),
         ),
         usernameAwal: usernameDariNik(a.nik),
-        usernameBantu: 'Default: NIK anggota',
+        usernameBantu: 'Username akun anggota = NIK (tidak dapat diubah)',
+        usernameTerkunci: true,
         kirim: (u, _, _) => ref
             .read(apiProvider)
             .buatUser(username: u, nama: a.nama, role: 'ANGGOTA', nik: a.nik),
@@ -528,9 +529,11 @@ class _BuatAkunDialog extends StatefulWidget {
     this.atas,
     this.usernameAwal = '',
     this.usernameBantu = 'Huruf kecil, angka, titik, garis bawah, atau strip (3-50)',
+    this.usernameTerkunci = false,
     this.pakaiNama = false,
     this.pakaiRole = false,
   });
+  final bool usernameTerkunci;
   final String judul;
   final Widget? atas;
   final String usernameAwal, usernameBantu;
@@ -594,6 +597,7 @@ class _BuatAkunDialogState extends State<_BuatAkunDialog> {
             TextField(
               controller: _u,
               enabled: !_busy,
+              readOnly: widget.usernameTerkunci,
               autocorrect: false,
               onChanged: (_) => setState(() {
                 _sentuhU = true;
