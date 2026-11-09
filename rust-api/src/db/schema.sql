@@ -120,4 +120,7 @@ WHEN (NEW.NIK IS NOT NULL AND NEW.NO_TRANSAKSI IS NOT NULL)
 BEGIN
   INSERT INTO MOB_PUSH_QUEUE (SALE_ID, NO_TRANSAKSI, NIK)
   VALUES (:NEW.ID_PENJUALAN, :NEW.NO_TRANSAKSI, :NEW.NIK);
+EXCEPTION
+  -- Notifikasi bersifat tambahan: kegagalannya tidak boleh menggagalkan penjualan di kasir.
+  WHEN OTHERS THEN NULL;
 END;

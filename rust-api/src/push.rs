@@ -22,6 +22,11 @@ struct Assertion<'a> {
     exp: i64,
 }
 
+/// Tag = nomor transaksi: kirim ulang (retry) mengganti notifikasi yang sama, bukan menumpuk dobel.
+fn message(token: &str, no: &str) -> serde_json::Value {
+    json!({"message": {"token": token, "notification": {"title": "Transaksi tersimpan", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no}}}})
+}
+
 fn token_unregistered(body: &serde_json::Value) -> bool {
     body["error"]["details"]
         .as_array()
@@ -57,6 +62,7 @@ pub fn start(pool: DbPool) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     tokio::spawn(async move {
         let mut cached: Option<(String, i64)> = None;
+        let mut last_purge = std::time::Instant::now();
         loop {
             match db::run(&pool, db::push::claim).await {
                 Ok(Some(event)) => {
@@ -80,7 +86,7 @@ pub fn start(pool: DbPool) -> Result<(), String> {
                         let mut retry = false;
                         for token in devices {
                             let response = client.post(format!("https://fcm.googleapis.com/v1/projects/{project}/messages:send"))
-                                .bearer_auth(&bearer).json(&json!({"message": {"token": token, "notification": {"title": "Transaksi tersimpan", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": event.number}, "android": {"priority": "high", "ttl": "86400s"}}}))
+                                .bearer_auth(&bearer).json(&message(&token, &event.number))
                                 .send().await;
                             match response {
                                 Ok(r) if r.status().is_success() => {},
@@ -111,7 +117,15 @@ pub fn start(pool: DbPool) -> Result<(), String> {
                         tracing::error!(error = %e, "Gagal memperbarui antrean notifikasi");
                     }
                 }
-                Ok(None) => tokio::time::sleep(Duration::from_secs(5)).await,
+                Ok(None) => {
+                    if last_purge.elapsed() >= Duration::from_secs(3600) {
+                        last_purge = std::time::Instant::now();
+                        if let Err(e) = db::run(&pool, db::push::purge).await {
+                            tracing::warn!(error = %e, "Gagal membersihkan antrean notifikasi lama");
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(5)).await
+                }
                 Err(e) => {
                     tracing::error!(error = %e, "Gagal membaca antrean notifikasi");
                     tokio::time::sleep(Duration::from_secs(30)).await;
@@ -125,6 +139,13 @@ pub fn start(pool: DbPool) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pesan_memakai_tag_nomor_transaksi() {
+        let m = message("tok", "TRX-1");
+        assert_eq!(m["message"]["android"]["notification"]["tag"], "TRX-1");
+        assert_eq!(m["message"]["data"]["no"], "TRX-1");
+    }
 
     #[test]
     fn hanya_token_unregistered_dihapus() {

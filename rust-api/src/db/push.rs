@@ -81,11 +81,21 @@ pub fn invalid_token(conn: &Connection, token: &str) -> AppResult<()> {
 
 pub fn finish(conn: &Connection, id: i64, lease: &str, retry: bool) -> AppResult<()> {
     let sql = if retry {
-        "UPDATE MOB_PUSH_QUEUE SET ATTEMPTS=ATTEMPTS+1, NEXT_ATTEMPT=SYSTIMESTAMP + NUMTODSINTERVAL(LEAST(3600, 30 * POWER(2, LEAST(ATTEMPTS, 7))), 'SECOND'), LEASE_ID=NULL, LEASE_UNTIL=NULL WHERE SALE_ID=:id AND LEASE_ID=:l"
+        "UPDATE MOB_PUSH_QUEUE SET SENT_AT=CASE WHEN ATTEMPTS+1 >= 10 THEN SYSTIMESTAMP END, ATTEMPTS=ATTEMPTS+1, NEXT_ATTEMPT=SYSTIMESTAMP + NUMTODSINTERVAL(LEAST(3600, 30 * POWER(2, LEAST(ATTEMPTS, 7))), 'SECOND'), LEASE_ID=NULL, LEASE_UNTIL=NULL WHERE SALE_ID=:id AND LEASE_ID=:l"
     } else {
         "UPDATE MOB_PUSH_QUEUE SET SENT_AT=SYSTIMESTAMP, LEASE_ID=NULL, LEASE_UNTIL=NULL WHERE SALE_ID=:id AND LEASE_ID=:l"
     };
     conn.execute_named(sql, &[("id", &id), ("l", &lease)])?;
+    conn.commit()?;
+    Ok(())
+}
+
+/// Hapus antrean yang sudah selesai/menyerah lebih dari 30 hari (tabel tidak tumbuh tanpa batas).
+pub fn purge(conn: &Connection) -> AppResult<()> {
+    conn.execute(
+        "DELETE FROM MOB_PUSH_QUEUE WHERE SENT_AT IS NOT NULL AND SENT_AT < SYSTIMESTAMP - INTERVAL '30' DAY",
+        &[],
+    )?;
     conn.commit()?;
     Ok(())
 }
