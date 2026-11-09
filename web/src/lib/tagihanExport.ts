@@ -39,23 +39,24 @@ async function saveWorkbook(workbook: { xlsx: { writeBuffer(): Promise<ArrayBuff
 }
 
 /**
- * Format "Potongan Koperasi" (Template_Koperasi_Bulanan.xlsx): NO | NIK | NAMA | KEBUN | PONTIANAK.
- * NIK tetap NIK database (teks). KEBUN = rekap kredit anggota; PONTIANAK = 0. Urut NIK.
+ * Format "Potongan Koperasi". Bulanan (Template_Koperasi_Bulanan.xlsx): NO | NIK | NAMA | KEBUN | PONTIANAK.
+ * Non bulanan / Remise I-II (Template_Koperasi_Harian.xlsx): NO | NIK | NAMA | KEBUN.
+ * NIK tetap NIK database (teks). KEBUN = rekap kredit anggota; PONTIANAK (hanya bulanan) = 0. Urut NIK.
  */
-export async function buildPotonganWorkbook(rows: ComparisonItem[]) {
+export async function buildPotonganWorkbook(rows: ComparisonItem[], bulanan = true) {
   const ExcelJS = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Kopkar Kusuma Lestari';
   const sheet = workbook.addWorksheet('Potongan Koperasi');
-  sheet.columns = [{ width: 9.1 }, { width: 13 }, { width: 35.1 }, { width: 13.3 }, { width: 13.3 }];
-  sheet.getRow(1).values = ['NO', 'NIK', 'NAMA', 'KEBUN', 'PONTIANAK'];
+  sheet.columns = [{ width: 9.1 }, { width: 13 }, { width: 35.1 }, { width: 13.3 }, ...(bulanan ? [{ width: 13.3 }] : [])];
+  sheet.getRow(1).values = bulanan ? ['NO', 'NIK', 'NAMA', 'KEBUN', 'PONTIANAK'] : ['NO', 'NIK', 'NAMA', 'KEBUN'];
   sheet.getRow(1).font = { bold: true };
   sheet.getColumn(2).numFmt = '@';
   [...rows].sort((a, b) => a.nik.localeCompare(b.nik, 'id', { numeric: true })).forEach((item, i) => {
-    sheet.addRow([i + 1, String(item.nik), item.nama, item.rekap, 0]);
+    sheet.addRow([i + 1, String(item.nik), item.nama, item.rekap, ...(bulanan ? [0] : [])]);
   });
   return workbook;
 }
 export async function exportPotongan(report: ComparisonReport, rows: ComparisonItem[]) {
-  await saveWorkbook(await buildPotonganWorkbook(rows), `potongan-koperasi-${report.periode}-${periodName(report.remise)}.xlsx`);
+  await saveWorkbook(await buildPotonganWorkbook(rows, report.remise === 3), `potongan-koperasi-${report.periode}-${periodName(report.remise)}.xlsx`);
 }

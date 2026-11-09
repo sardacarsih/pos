@@ -21,6 +21,16 @@ describe('Excel Potongan Koperasi (format template bulanan)', () => {
     expect(sheet.getCell('B2').numFmt).toBe('@');
     expect(sheet.rowCount).toBe(3);
   });
+
+  it('non bulanan (remise I/II): hanya NO, NIK, NAMA, KEBUN tanpa kolom PONTIANAK', async () => {
+    const rows = [{ nik: '02.00214', nama: 'Ani', unit: 'KSK - NE', tagihan: 0, rekap: 125000, selisih: -125000 }];
+    const loaded = new ExcelJS.Workbook();
+    await loaded.xlsx.load(await (await buildPotonganWorkbook(rows, false)).xlsx.writeBuffer());
+    const sheet = loaded.getWorksheet('Potongan Koperasi')!;
+    expect(sheet.getRow(1).values).toEqual([undefined, 'NO', 'NIK', 'NAMA', 'KEBUN']);
+    expect(sheet.getRow(2).values).toEqual([undefined, 1, '02.00214', 'Ani', 125000]);
+    expect(sheet.columnCount).toBe(4);
+  });
 });
 
 describe('Excel Tagihan vs Rekap', () => {
