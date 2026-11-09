@@ -46,7 +46,8 @@ const _jedaCek = Duration(hours: 6);
 
 /// Null bila tidak ada update (atau server tidak terjangkau: tidak boleh mengganggu aplikasi).
 /// Tanpa update, server tidak ditanya lagi selama [_jedaCek]; ada update = ditanya tiap panggilan.
-/// [manual] (tombol "Cek pembaruan"): abaikan jeda 6 jam dan status "Nanti".
+/// [manual] (tombol "Cek pembaruan"): abaikan jeda 6 jam dan status "Nanti", dan lempar galat
+/// jaringan agar UI bisa membedakan "sudah terbaru" dari "tidak bisa memeriksa".
 Future<InfoRilis?> cekRilis(int terpasang, {bool manual = false}) async {
   try {
     final p = await SharedPreferences.getInstance();
@@ -79,6 +80,7 @@ Future<InfoRilis?> cekRilis(int terpasang, {bool manual = false}) async {
     }
     return info;
   } catch (_) {
+    if (manual) rethrow;
     return null;
   }
 }
@@ -87,22 +89,32 @@ Future<InfoRilis?> cekRilis(int terpasang, {bool manual = false}) async {
 Future<void> tawarkanUpdate(BuildContext context, {bool manual = false}) async {
   if (kIsWeb) return; // PWA diperbarui lewat service worker, bukan APK
   final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
-  final info = await cekRilis(terpasang, manual: manual);
-  if (!context.mounted) return;
-  if (info == null) {
-    if (manual) {
-      // cekRilis tidak membedakan "terbaru" dan "server tak terjangkau": pesan dibuat netral.
+  final InfoRilis? info;
+  try {
+    info = await cekRilis(terpasang, manual: manual);
+  } catch (_) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak ada pembaruan. Aplikasi sudah versi terbaru.')),
+        const SnackBar(content: Text('Tidak bisa memeriksa pembaruan. Periksa koneksi lalu coba lagi.')),
       );
     }
     return;
   }
-  final wajib = info.wajib(terpasang);
+  if (!context.mounted) return;
+  if (info == null) {
+    if (manual) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aplikasi sudah versi terbaru.')),
+      );
+    }
+    return;
+  }
+  final rilis = info;
+  final wajib = rilis.wajib(terpasang);
   await showDialog<void>(
     context: context,
     barrierDismissible: !wajib,
-    builder: (_) => _DialogUpdate(info: info, wajib: wajib),
+    builder: (_) => _DialogUpdate(info: rilis, wajib: wajib),
   );
 }
 

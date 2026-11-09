@@ -29,15 +29,14 @@ void main() {
     expect(await cekRilis(1), isNull);
   });
 
-  test('cekRilis manual tetap menghubungi server walau baru dicek', () async {
+  test('cekRilis manual melewati jeda 6 jam dan melempar galat jaringan', () async {
     SharedPreferences.setMockInitialValues({
       'update_cek_terakhir': DateTime.now().millisecondsSinceEpoch,
     });
-    // Server tak terjangkau di test -> null lewat catch, tapi jeda 6 jam tidak lagi memotong
-    // lebih awal; cukup dipastikan tidak melempar dan jeda tidak diperbarui.
-    expect(await cekRilis(1, manual: true), isNull);
-    final p = await SharedPreferences.getInstance();
-    expect(p.getInt('update_cek_terakhir'), isNotNull);
+    // Otomatis: baru dicek -> null tanpa menghubungi server.
+    expect(await cekRilis(1), isNull);
+    // Manual: tetap menghubungi server (tidak terjangkau di test) dan galatnya sampai ke UI.
+    await expectLater(cekRilis(1, manual: true), throwsA(anything));
   });
 
   test('minVersionCode dan catatan opsional', () {
