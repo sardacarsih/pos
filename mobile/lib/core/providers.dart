@@ -7,6 +7,7 @@ import 'api.dart';
 import 'cart.dart';
 import 'checkout.dart';
 import 'models.dart';
+import 'push.dart';
 
 /// Alamat server (HTTPS) diberikan saat build: --dart-define=API_URL=https://...
 const apiUrl = String.fromEnvironment(
@@ -29,6 +30,12 @@ final apiProvider = Provider<ApiClient>(
     onExpired: () => ref.read(authProvider.notifier).sesiBerakhir(),
   ),
 );
+
+final pushProvider = Provider<PushService>((ref) {
+  final service = PushService(ref.read(apiProvider));
+  ref.onDispose(service.dispose);
+  return service;
+});
 
 class AuthState {
   const AuthState({this.profil, this.memulihkan = false});
@@ -57,6 +64,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> logout() async {
     ref.read(cartProvider.notifier).kosongkan();
+    await ref.read(pushProvider).logout();
     try {
       await ref.read(apiProvider).logout();
     } on ApiException {

@@ -15,6 +15,14 @@ proyek C# tidak diubah. Tabel baru berprefiks `MOB_*` (user, sesi, kategori per 
 Satu akun = satu role: `KASIR` (penjualan), `ANGGOTA` (hanya data NIK-nya sendiri, NIK dari token), `ADMIN` (kelola user/kategori).
 Pembatasan kategori per user kasir (`MOB_USER_KATEGORI`, kosong = semua) ditegakkan server di daftar, scan barcode, dan simpan faktur.
 
+## Notifikasi transaksi anggota
+
+Siapkan Firebase Cloud Messaging HTTP v1 dan service account dengan izin mengirim FCM. Simpan file JSON kredensial hanya di server dengan akses terbatas, lalu set `POS_FCM_PROJECT_ID` dan `GOOGLE_APPLICATION_CREDENTIALS` (path absolut). Tanpa konfigurasi ini API tetap berjalan, tetapi antrean tidak dikirim. Restart API setelah konfigurasi diperbaiki. Jangan menyertakan service account di APK, log, atau repositori.
+
+Jalankan `cargo run -- migrate` sebelum menjalankan API versi ini. Migrasi memerlukan izin membuat tabel, indeks, dan trigger pada `POS_PENJUALAN`. Trigger `MOB_PUSH_SALE_INSERT` menulis antrean dalam transaksi Oracle yang sama untuk penjualan desktop dan mobile; uji migrasi dan penjualan pada database staging lebih dahulu. Karena trigger ikut dalam transaksi penjualan, kegagalan database saat menulis antrean dapat menolak penjualan, sedangkan kegagalan jaringan/FCM tidak. Worker mencoba ulang kegagalan pengiriman dengan backoff; pengiriman mungkin terduplikasi jika respons FCM hilang. Event tanpa perangkat anggota aktif ditandai selesai. Antrean yang terkirim tetap disimpan dan perlu kebijakan retensi operasional.
+
+`PUT /api/v1/push/device` dan `DELETE /api/v1/push/device` hanya untuk akun anggota terautentikasi. Token didaftarkan per perangkat dan dilepas saat logout; logout offline tidak dapat segera mencabut token di server. Isi notifikasi umum dan detail tetap memerlukan autentikasi serta pemeriksaan kepemilikan. FCM memerlukan Google Play services; force-stop Android dapat menunda penerimaan sampai aplikasi dibuka kembali.
+
 ## Endpoint (`/api/v1`)
 auth: `login`, `refresh`, `logout`, `ganti-password`, `GET /me` · kasir: `periode/status`, `transaksi/nomor`, `barang`,
 `barang/by-barcode/{kode}`, `kategori`, `pelanggan`, `pelanggan/by-nik/{nik}`, `POST faktur`, `GET faktur/{no}` ·
@@ -41,3 +49,7 @@ Untuk offline kelak: antrean lokal faktur bernomor yang sudah diterbitkan, kontr
 - Struk: PDF 58 mm lewat dialog cetak/bagikan; printer thermal Bluetooth langsung belum diimplementasikan.
 - Harga rupiah tetap bilangan bulat; qty API menerima angka desimal hingga dua tempat, dengan perhitungan server memakai Decimal.
 - Cache lokal katalog belum ada (pencarian lewat server dengan paging dan debounce).
+
+## Tagihan vs Rekap
+
+`GET /api/v1/admin/tagihan-vs-rekap?periode=202603&remise=1` hanya untuk ADMIN; remise 1 = Remise I, 2 = Remise II, 3 = Bulanan. Tagihan Waserda berasal dari cursor `rekap_NIK` pada `FINANCE.TAGIHAN_ALL`; rekap adalah jumlah penjualan kredit dalam rentang tanggal terpilih. Selisih adalah tagihan dikurangi rekap, dan bukan otomatis kesalahan. Endpoint tidak mengubah data.

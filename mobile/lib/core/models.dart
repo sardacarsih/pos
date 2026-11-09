@@ -109,6 +109,7 @@ class Faktur {
     : no = _s(j['no_transaksi']),
       tanggal = _s(j['tanggal']),
       jam = _s(j['jam']),
+      kasir = _s(j['kasir']),
       namaKasir = _s(j['nama_kasir']),
       nik = _s(j['nik']),
       namaPelanggan = _s(j['nama_pelanggan']),
@@ -128,7 +129,20 @@ class Faktur {
         for (final b in (j['jadwal'] as List? ?? []))
           Jadwal.fromJson(b as Map<String, dynamic>),
       ];
-  final String no, tanggal, jam, namaKasir, nik, namaPelanggan, jenisBayar;
+  final String no,
+      tanggal,
+      jam,
+      kasir,
+      namaKasir,
+      nik,
+      namaPelanggan,
+      jenisBayar;
+  String get identitasKasir {
+    if (namaKasir.trim().isNotEmpty) return namaKasir.trim();
+    if (kasir.trim().isNotEmpty) return kasir.trim();
+    return 'Tidak tersedia';
+  }
+
   final int tenor, bruto, potongan, total;
   final int? uangBayar, kembalian;
   final bool duplikat;

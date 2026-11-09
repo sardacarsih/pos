@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api.dart';
 import '../../core/providers.dart';
+import '../../core/update.dart';
 import '../../core/widgets.dart';
 import '../admin/admin_produk_page.dart' show fotoPersegi;
 import 'foto_crop_page.dart';
@@ -341,6 +343,20 @@ class _ProfilPageState extends ConsumerState<ProfilPage> {
                     ),
                   ],
                 ),
+                if (!kIsWeb)
+                  ListTile(
+                    leading: const Icon(Icons.system_update_outlined),
+                    title: const Text('Cek pembaruan'),
+                    subtitle: FutureBuilder<PackageInfo>(
+                      future: PackageInfo.fromPlatform(),
+                      builder: (_, s) => Text(
+                        s.hasData
+                            ? 'Versi terpasang ${s.data!.version} (build ${s.data!.buildNumber})'
+                            : '',
+                      ),
+                    ),
+                    onTap: () => tawarkanUpdate(context, manual: true),
+                  ),
               ],
             ),
     );

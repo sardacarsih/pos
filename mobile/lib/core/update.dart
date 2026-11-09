@@ -41,10 +41,22 @@ class InfoRilis {
 }
 
 const _kunciDilewati = 'update_dilewati';
+const _kunciCekTerakhir = 'update_cek_terakhir';
+const _jedaCek = Duration(hours: 6);
 
 /// Null bila tidak ada update (atau server tidak terjangkau: tidak boleh mengganggu aplikasi).
-Future<InfoRilis?> cekRilis() async {
+/// Tanpa update, server tidak ditanya lagi selama [_jedaCek]; ada update = ditanya tiap panggilan.
+/// [manual] (tombol "Cek pembaruan"): abaikan jeda 6 jam dan status "Nanti".
+Future<InfoRilis?> cekRilis(int terpasang, {bool manual = false}) async {
   try {
+    final p = await SharedPreferences.getInstance();
+    final terakhir = p.getInt(_kunciCekTerakhir) ?? 0;
+    final sekarang = DateTime.now().millisecondsSinceEpoch;
+    if (!manual &&
+        sekarang - terakhir < _jedaCek.inMilliseconds &&
+        sekarang >= terakhir) {
+      return null;
+    }
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 5),
@@ -55,11 +67,15 @@ Future<InfoRilis?> cekRilis() async {
       '$apiUrl/downloads/version.json',
     );
     final info = InfoRilis.dariJson(res.data!);
-    final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
-    if (!info.lebihBaru(terpasang)) return null;
-    if (!info.wajib(terpasang)) {
-      final p = await SharedPreferences.getInstance();
-      if (p.getInt(_kunciDilewati) == info.versionCode) return null;
+    if (!info.lebihBaru(terpasang)) {
+      await p.setInt(_kunciCekTerakhir, sekarang);
+      return null;
+    }
+    if (!manual &&
+        !info.wajib(terpasang) &&
+        p.getInt(_kunciDilewati) == info.versionCode) {
+      await p.setInt(_kunciCekTerakhir, sekarang);
+      return null;
     }
     return info;
   } catch (_) {
@@ -68,12 +84,20 @@ Future<InfoRilis?> cekRilis() async {
 }
 
 /// Pengecekan sekali per pemanggilan; dialog ditampilkan di atas navigator [context].
-Future<void> tawarkanUpdate(BuildContext context) async {
+Future<void> tawarkanUpdate(BuildContext context, {bool manual = false}) async {
   if (kIsWeb) return; // PWA diperbarui lewat service worker, bukan APK
-  final info = await cekRilis();
-  if (info == null || !context.mounted) return;
   final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
+  final info = await cekRilis(terpasang, manual: manual);
   if (!context.mounted) return;
+  if (info == null) {
+    if (manual) {
+      // cekRilis tidak membedakan "terbaru" dan "server tak terjangkau": pesan dibuat netral.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak ada pembaruan. Aplikasi sudah versi terbaru.')),
+      );
+    }
+    return;
+  }
   final wajib = info.wajib(terpasang);
   await showDialog<void>(
     context: context,
@@ -113,7 +137,8 @@ class _DialogUpdateState extends State<_DialogUpdate> {
               setState(() => _persen = int.tryParse(e.value ?? '') ?? _persen);
             case OtaStatus.INSTALLING:
             case OtaStatus.INSTALLATION_DONE:
-              break; // layar pemasangan Android yang mengambil alih
+              // Layar pemasangan Android mengambil alih; bila dibatalkan, tombol harus aktif lagi.
+              setState(() => _mengunduh = false);
             case OtaStatus.CHECKSUM_ERROR:
               _gagal('File unduhan rusak. Coba lagi.');
             case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
