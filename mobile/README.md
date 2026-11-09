@@ -42,6 +42,14 @@ Tiap rilis: naikkan angka setelah `+` di `version:` pada `pubspec.yaml` (version
 
 Skrip membangun APK, mengunggahnya ke `D:\be-rustapi\downloads` di server lewat `ssh.kopkarksk.com`, menulis `version.json`, dan memverifikasi hash. `-MinVersionCode N` memaksa versi di bawah N untuk update (dialog tidak bisa ditutup).
 
+## Halaman unduh (update.kopkarksk.com)
+
+Halaman HTML/CSS di `site/` disajikan nginx (service `KopkarNginx`, `D:\nginx`, hanya `127.0.0.1:8081`) lewat Cloudflare Tunnel. Halaman membaca `version.json` dan APK dari folder `downloads` yang sama dengan API, jadi `rilis-apk.ps1` tidak perlu diubah.
+
+- Ubah tampilan: edit `site/`, lalu `.\tools\deploy-situs.ps1`.
+- Konfigurasi nginx dan service ada di `tools/nginx/` (salin ke `D:\nginx\conf\nginx.conf` dan `D:\nginx\nginx-service.xml`; `nginx-service.exe` adalah salinan WinSW dari `D:\be-rustapi\pos-api-service.exe`).
+- Hostname publik diatur di Cloudflare Zero Trust > Tunnels > Public hostname: `update.kopkarksk.com` -> `HTTP` `localhost:8081`.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
