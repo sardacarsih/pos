@@ -340,6 +340,37 @@ namespace BackOffice.UC
                 center ? DevExpress.Utils.HorzAlignment.Center : DevExpress.Utils.HorzAlignment.Near;
         }
 
+        // Glyph tegas: kotak hijau + centang putih (aktif) vs kotak abu kosong (nonaktif).
+        private static System.Windows.Forms.ImageList BuildCheckImages()
+        {
+            var list = new System.Windows.Forms.ImageList { ImageSize = new System.Drawing.Size(20, 20), ColorDepth = System.Windows.Forms.ColorDepth.Depth32Bit };
+            for (int i = 0; i < 2; i++)
+            {
+                var bmp = new System.Drawing.Bitmap(20, 20);
+                using (var g = System.Drawing.Graphics.FromImage(bmp))
+                {
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    var box = new System.Drawing.Rectangle(1, 1, 17, 17);
+                    if (i == 1)
+                    {
+                        using var fill = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(34, 139, 34));
+                        g.FillRectangle(fill, box);
+                        using var tick = new System.Drawing.Pen(System.Drawing.Color.White, 2.6f)
+                        { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, LineJoin = System.Drawing.Drawing2D.LineJoin.Round };
+                        g.DrawLines(tick, new[] { new System.Drawing.Point(5, 10), new System.Drawing.Point(8, 13), new System.Drawing.Point(14, 6) });
+                    }
+                    else
+                    {
+                        using var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(150, 150, 150), 1.5f);
+                        g.FillRectangle(System.Drawing.Brushes.White, box);
+                        g.DrawRectangle(pen, box);
+                    }
+                }
+                list.Images.Add(bmp);
+            }
+            return list;
+        }
+
         private void ConfigureDateColumns()
         {
             // Create DateEdit repository
@@ -360,7 +391,12 @@ namespace BackOffice.UC
             toggleSwitchRepo.ValueChecked = "Y";   // Checked value
             toggleSwitchRepo.ValueUnchecked = "T"; // Unchecked value
             toggleSwitchRepo.NullStyle = DevExpress.XtraEditors.Controls.StyleIndeterminate.Unchecked;
-            toggleSwitchRepo.CheckStyle = DevExpress.XtraEditors.Controls.CheckStyles.Style1;
+            toggleSwitchRepo.CheckStyle = DevExpress.XtraEditors.Controls.CheckStyles.UserDefined;
+            toggleSwitchRepo.GlyphAlignment = DevExpress.Utils.HorzAlignment.Center;
+            toggleSwitchRepo.Images = BuildCheckImages();
+            toggleSwitchRepo.ImageIndexUnchecked = 0;
+            toggleSwitchRepo.ImageIndexChecked = 1;
+            toggleSwitchRepo.ImageIndexGrayed = 0;
             toggleSwitchRepo.Caption = ""; // No caption next to checkbox
 
             if (gridControl1.MainView is DevExpress.XtraGrid.Views.Grid.GridView gridView)
