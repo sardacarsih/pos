@@ -24,7 +24,7 @@ struct Assertion<'a> {
 
 /// Tag = nomor transaksi: kirim ulang (retry) mengganti notifikasi yang sama, bukan menumpuk dobel.
 fn message(token: &str, no: &str) -> serde_json::Value {
-    json!({"message": {"token": token, "notification": {"title": "Kopkar Kusuma Lestari", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no}}}})
+    json!({"message": {"token": token, "notification": {"title": "Kopkar Kusuma Lestari", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no, "channel_id": "transaksi_suara2", "sound": "notif_transaksi"}}}})
 }
 
 fn token_unregistered(body: &serde_json::Value) -> bool {

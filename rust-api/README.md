@@ -23,6 +23,10 @@ Jalankan `cargo run -- migrate` sebelum menjalankan API versi ini. Migrasi memer
 
 `PUT /api/v1/push/device` dan `DELETE /api/v1/push/device` hanya untuk akun anggota terautentikasi. Token didaftarkan per perangkat dan dilepas saat logout; logout offline tidak dapat segera mencabut token di server. Isi notifikasi umum dan detail tetap memerlukan autentikasi serta pemeriksaan kepemilikan. FCM memerlukan Google Play services; force-stop Android dapat menunda penerimaan sampai aplikasi dibuka kembali.
 
+## Deploy produksi
+
+`.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema.
+
 ## Endpoint (`/api/v1`)
 auth: `login`, `refresh`, `logout`, `ganti-password`, `GET /me` · kasir: `periode/status`, `transaksi/nomor`, `barang`,
 `barang/by-barcode/{kode}`, `kategori`, `pelanggan`, `pelanggan/by-nik/{nik}`, `POST faktur`, `GET faktur/{no}` ·
