@@ -1,0 +1,13 @@
+<service>
+  <id>KopkarNginx</id>
+  <name>Kopkar nginx (update.kopkarksk.com)</name>
+  <description>Halaman unduh APK Kopkar Kusuma Lestari</description>
+  <executable>D:\nginx\nginx.exe</executable>
+  <workingdirectory>D:\nginx</workingdirectory>
+  <stopexecutable>D:\nginx\nginx.exe</stopexecutable>
+  <stoparguments>-s quit</stoparguments>
+  <startmode>Automatic</startmode>
+  <log mode="roll-by-size"><sizeThreshold>10240</sizeThreshold><keepFiles>3</keepFiles></log>
+  <onfailure action="restart" delay="10 sec" />
+  <resetfailure>1 hour</resetfailure>
+</service>

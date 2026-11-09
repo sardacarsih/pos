@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Unduh Aplikasi Kopkar Kusuma Lestari</title>
+<meta name="description" content="Unduh dan pasang aplikasi POS Kopkar Kusuma Lestari untuk Android.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f7a4a'/%3E%3Cpath d='M18 26h28l-3 20H21zM25 26a7 7 0 0 1 14 0' fill='none' stroke='%23fff' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1.3 11H7.3z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg>
+    </div>
+    <div>
+      <h1>Kopkar Kusuma Lestari</h1>
+      <p>Aplikasi kasir &amp; anggota untuk Android</p>
+    </div>
+  </header>
+
+  <section class="card" aria-live="polite">
+    <div class="versi">
+      <strong id="versi">Versi terbaru</strong>
+      <span class="badge">Terbaru</span>
+    </div>
+    <p class="meta" id="meta">Memuat informasi rilis&hellip;</p>
+    <p class="catatan" id="catatan"></p>
+    <a class="btn" id="unduh" href="pos-kasir.apk" download>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+      Unduh APK
+    </a>
+    <div class="hash-row" id="hash-row" hidden>
+      SHA-256 (ketuk untuk menyalin)
+      <button class="hash" id="hash" type="button"></button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Cara memasang</h2>
+    <ol>
+      <li>Unduh file APK di atas memakai Chrome di HP Android, sebaiknya lewat Wi-Fi.</li>
+      <li>Ketuk file yang sudah diunduh. Jika diminta, izinkan <b>Pasang aplikasi tidak dikenal</b> untuk Chrome.</li>
+      <li>Jika aplikasi lama sudah ada dan pemasangan ditolak, <b>copot dulu</b> aplikasi lama, lalu ulangi.</li>
+      <li>Ketuk <b>Pasang</b>, lalu buka aplikasi dan masuk dengan akun Anda.</li>
+    </ol>
+    <p class="hint">Setelah ini, versi baru akan muncul sebagai pemberitahuan di dalam aplikasi, tidak perlu membuka halaman ini lagi.</p>
+  </section>
+
+  <footer>Kopkar Kusuma Lestari</footer>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function ukuran(b) { return (b / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+
+  fetch('version.json', { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (v) {
+      $('versi').textContent = 'Versi ' + v.versionName;
+      $('catatan').textContent = v.catatan || '';
+      $('unduh').setAttribute('href', v.apk || 'pos-kasir.apk');
+      $('meta').textContent = 'Android · build ' + v.versionCode;
+      if (v.sha256) {
+        $('hash').textContent = v.sha256;
+        $('hash-row').hidden = false;
+      }
+      return fetch(v.apk || 'pos-kasir.apk', { method: 'HEAD' }).then(function (r) {
+        var n = +r.headers.get('content-length');
+        if (n) $('meta').textContent += ' · ' + ukuran(n);
+      });
+    })
+    .catch(function () {
+      if ($('hash-row').hidden === false) return; // version.json terbaca, hanya ukuran file yang gagal
+      $('versi').textContent = 'Aplikasi Kopkar';
+      $('meta').textContent = 'Informasi versi tidak tersedia saat ini, tetapi unduhan tetap bisa dilakukan.';
+    });
+
+  $('hash').addEventListener('click', function () {
+    var t = this.textContent, el = this;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () {
+      el.dataset.s = el.textContent; el.textContent = 'Tersalin';
+      setTimeout(function () { el.textContent = el.dataset.s; }, 1200);
+    });
+  });
+})();
+</script>
+</body>
+</html>
