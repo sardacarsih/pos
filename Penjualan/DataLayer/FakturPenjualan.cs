@@ -1,4 +1,5 @@
-﻿using Dapper;
+﻿using Kopkar.Shared;
+using Dapper;
 using DevExpress.Utils.About;
 using Oracle.ManagedDataAccess.Client;
 using Penjualan.BusinessLayer;
@@ -100,6 +101,9 @@ namespace Penjualan.DataLayer
 
             try
             {
+                // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -153,6 +157,9 @@ namespace Penjualan.DataLayer
 
             try
             {
+                // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
                 {
@@ -321,7 +328,10 @@ namespace Penjualan.DataLayer
         private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
             OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
         {
-            int periode = date.Year * 100 + date.Month;
+            // Periode dicari dari rentang tanggal (BDARI..BSAMPAI), bukan bulan kalender.
+            int? ditemukan = PeriodeGuard.PeriodeUntukTanggal(conn, transaction, date);
+            if (ditemukan == null) return null;
+            int periode = ditemukan.Value;
             bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
 
             string sql = bulanan
@@ -382,7 +392,8 @@ namespace Penjualan.DataLayer
                 limitCmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
                 object? result = limitCmd.ExecuteScalar();
                 if (result == null)
-                    return; // member not found — nothing to enforce
+                    throw new InvalidOperationException(
+                        $"Anggota dengan NIK '{creditCheck.NIK}' tidak ditemukan; limit hutang tidak dapat diperiksa.");
                 limit = Convert.ToDecimal(result);
             }
 
@@ -394,7 +405,8 @@ namespace Penjualan.DataLayer
             // must not exceed the limit. The cap resets each period.
             var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
             if (window == null)
-                return; // period not configured — cannot evaluate the window
+                throw new InvalidOperationException(
+                    $"Periode {creditCheck.TransactionDate:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
 
             decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
 

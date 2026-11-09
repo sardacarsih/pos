@@ -18,6 +18,8 @@ public partial class ucStockOpname : UserControl
     private bool _isSaving;
     private bool _minusStockImported;
     private bool _uncountedStockImported;
+    private bool _gridConfigured;
+    private bool _isUpdatingRowNumbers;
     private int _productId;
 
     private static ucStockOpname? _instance;
@@ -169,12 +171,29 @@ public partial class ucStockOpname : UserControl
 
     private void gridView1_RowCountChanged(object sender, EventArgs e)
     {
-        for (int index = 0; index < _transactionDataList.Count; index++)
+        if (_isUpdatingRowNumbers)
         {
-            _transactionDataList[index].No = index + 1;
+            return;
         }
 
-        gridView1.RefreshData();
+        _isUpdatingRowNumbers = true;
+        try
+        {
+            for (int index = 0; index < _transactionDataList.Count; index++)
+            {
+                int rowNumber = index + 1;
+                if (_transactionDataList[index].No != rowNumber)
+                {
+                    _transactionDataList[index].No = rowNumber;
+                }
+            }
+
+            gridView1.Invalidate();
+        }
+        finally
+        {
+            _isUpdatingRowNumbers = false;
+        }
     }
 
     private void gridView1_CellValueChanged(
@@ -511,12 +530,28 @@ public partial class ucStockOpname : UserControl
 
     private void ucStockOpname_Load(object sender, EventArgs e)
     {
-        ConfigureGrid();
-        NewTransaction();
+        try
+        {
+            ConfigureGrid();
+            NewTransaction();
+        }
+        catch (Exception ex)
+        {
+            Enabled = false;
+            ShowError($"Form Stock Opname gagal disiapkan.\n{ex.Message}");
+        }
     }
 
     private void ConfigureGrid()
     {
+        if (_gridConfigured)
+        {
+            return;
+        }
+
+        gridControl1.ForceInitialize();
+        gridView1.PopulateColumns(typeof(TransactionStockOpname));
+
         string[] hiddenColumns =
         [
             nameof(TransactionStockOpname.Nomor_SO),
@@ -527,17 +562,17 @@ public partial class ucStockOpname : UserControl
 
         foreach (string columnName in hiddenColumns)
         {
-            gridView1.Columns[columnName].Visible = false;
+            GetGridColumn(columnName).Visible = false;
         }
 
-        gridView1.Columns[nameof(TransactionStockOpname.No)].Width = 45;
-        gridView1.Columns[nameof(TransactionStockOpname.ProductName)].Width = 300;
-        gridView1.Columns[nameof(TransactionStockOpname.Hpp)].DisplayFormat.FormatType =
+        GetGridColumn(nameof(TransactionStockOpname.No)).Width = 45;
+        GetGridColumn(nameof(TransactionStockOpname.ProductName)).Width = 300;
+        GetGridColumn(nameof(TransactionStockOpname.Hpp)).DisplayFormat.FormatType =
             DevExpress.Utils.FormatType.Numeric;
-        gridView1.Columns[nameof(TransactionStockOpname.Hpp)].DisplayFormat.FormatString = "n0";
-        gridView1.Columns[nameof(TransactionStockOpname.Total)].DisplayFormat.FormatType =
+        GetGridColumn(nameof(TransactionStockOpname.Hpp)).DisplayFormat.FormatString = "n0";
+        GetGridColumn(nameof(TransactionStockOpname.Total)).DisplayFormat.FormatType =
             DevExpress.Utils.FormatType.Numeric;
-        gridView1.Columns[nameof(TransactionStockOpname.Total)].DisplayFormat.FormatString = "n0";
+        GetGridColumn(nameof(TransactionStockOpname.Total)).DisplayFormat.FormatString = "n0";
 
         foreach (GridColumn column in gridView1.Columns)
         {
@@ -547,13 +582,13 @@ public partial class ucStockOpname : UserControl
         }
 
         gridView1.OptionsView.ShowFooter = true;
-        gridView1.Columns[nameof(TransactionStockOpname.Kode_Item)].SummaryItem.SummaryType =
+        GetGridColumn(nameof(TransactionStockOpname.Kode_Item)).SummaryItem.SummaryType =
             SummaryItemType.Count;
-        gridView1.Columns[nameof(TransactionStockOpname.Kode_Item)].SummaryItem.DisplayFormat =
+        GetGridColumn(nameof(TransactionStockOpname.Kode_Item)).SummaryItem.DisplayFormat =
             "Item: {0:N0}";
-        gridView1.Columns[nameof(TransactionStockOpname.Total)].SummaryItem.SummaryType =
+        GetGridColumn(nameof(TransactionStockOpname.Total)).SummaryItem.SummaryType =
             SummaryItemType.Sum;
-        gridView1.Columns[nameof(TransactionStockOpname.Total)].SummaryItem.DisplayFormat =
+        GetGridColumn(nameof(TransactionStockOpname.Total)).SummaryItem.DisplayFormat =
             "Selisih: {0:N0}";
 
         barLargeButtonItem1.Caption = "Impor Stok Minus";
@@ -562,6 +597,14 @@ public partial class ucStockOpname : UserControl
         barLargeButtonItem4.Caption = "Set Nol Barang Belum Diopname";
         barLargeButtonItem4.Hint =
             "Khusus 31 Desember: tambahkan barang yang belum pernah diopname dengan Qty Fisik 0.";
+        _gridConfigured = true;
+    }
+
+    private GridColumn GetGridColumn(string fieldName)
+    {
+        return gridView1.Columns[fieldName]
+            ?? throw new InvalidOperationException(
+                $"Kolom grid '{fieldName}' tidak ditemukan.");
     }
 
     private void detanggal_EditValueChanging(

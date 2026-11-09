@@ -12,7 +12,7 @@ namespace Penjualan.DataLayer
         {
             List<DTODaftarPenjualan> Master = new();
 
-            string query = @"SELECT U.NAMA UNIT_KERJA,J.NO_TRANSAKSI,J.TANGGAL,J.NIK,J.NAMA_PELANGGAN,J.STATUS,J.BRUTO,J.POTONGAN,J.TOTAL,J.TENOR FROM POS_PENJUALAN J
+            string query = @"SELECT U.NAMA UNIT_KERJA,J.NO_TRANSAKSI,J.TANGGAL,J.KASIR,J.NAMA_KASIR,J.NIK,J.NAMA_PELANGGAN,J.STATUS,J.BRUTO,J.POTONGAN,J.TOTAL,J.TENOR FROM POS_PENJUALAN J
                                 JOIN FIN_UNITKERJA U ON U.KODE=J.UNIT_KERJA
                                 WHERE J.TANGGAL BETWEEN :1 AND:2 AND J.PENDING='T' ORDER BY J.TANGGAL,J.NIK";
 
@@ -32,6 +32,8 @@ namespace Penjualan.DataLayer
                         UNIT_KERJA = reader["UNIT_KERJA"].ToString(),
                         NO_TRANSAKSI = reader["NO_TRANSAKSI"].ToString(),
                         TANGGAL = Convert.ToDateTime(reader["TANGGAL"]),
+                        KASIR = reader["KASIR"].ToString() ?? string.Empty,
+                        NAMA_KASIR = reader["NAMA_KASIR"].ToString() ?? string.Empty,
                         NIK = reader["NIK"].ToString(),
                         NAMA_PELANGGAN = reader["NAMA_PELANGGAN"].ToString(),
                         STATUS = reader["STATUS"].ToString(),

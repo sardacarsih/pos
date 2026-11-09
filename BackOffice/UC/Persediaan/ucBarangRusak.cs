@@ -1,4 +1,4 @@
-﻿using BackOffice.BussinessLayer;
+using BackOffice.BussinessLayer;
 using BackOffice.Controller;
 using BackOffice.Model;
 using DevExpress.XtraEditors;
@@ -396,6 +396,7 @@ namespace BackOffice.UC
 
         private void ucStockOpname_Load(object sender, EventArgs e)
         {
+            gridControl1.ForceInitialize();
             NewTransaction();
             gridView1.Columns["Nomor_SO"].Visible = false;
             gridView1.Columns["Tanggal"].Visible = false;

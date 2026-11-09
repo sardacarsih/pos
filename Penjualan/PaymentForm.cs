@@ -93,7 +93,18 @@ namespace Penjualan
                 try
                 {
                     SimpanFakturPenjualan("T");
-                    CetakFaktur();
+                    // Saved: lock the button so a print failure can never re-insert the same faktur.
+                    sbsimpancetak.Enabled = false;
+                    try
+                    {
+                        CetakFaktur();
+                    }
+                    catch (Exception printEx)
+                    {
+                        XtraMessageBox.Show(
+                            $"Faktur sudah tersimpan, tetapi gagal dicetak:\n{printEx.Message}\n\nCetak ulang dari menu Daftar Penjualan.",
+                            "Gagal Mencetak", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                     this.DialogResult = DialogResult.OK;
                 }
                 catch (CreditLimitExceededException ex)
@@ -105,6 +116,10 @@ namespace Penjualan
                         $"Jumlah Faktur Baru  : Rp. {ex.InvoiceAmount:N0}\n" +
                         $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
                         "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch (Exception ex) when (sbsimpancetak.Enabled)
+                {
+                    XtraMessageBox.Show($"Faktur gagal disimpan:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
@@ -187,7 +202,9 @@ namespace Penjualan
             report.Parameters["Potongan"].Value = FakturPenjualanHeader.POTONGAN;
             report.Parameters["Total"].Value = FakturPenjualanHeader.TOTAL;
 
-            report.Parameters["Kasir"].Value = "";
+            report.Parameters["Kasir"].Value = string.IsNullOrWhiteSpace(FakturPenjualanHeader.NAMA_KASIR)
+                ? FakturPenjualanHeader.KASIR ?? string.Empty
+                : FakturPenjualanHeader.NAMA_KASIR;
             report.Parameters["Bayar"].Value = decimal.TryParse(txtcash.Text, out var bayarVal) ? bayarVal : 0m;
             report.Parameters["Kembalian"].Value = decimal.TryParse(txtkembali.Text, out var kembaliVal) ? kembaliVal : 0m;
             report.ShowPrintMarginsWarning = false;

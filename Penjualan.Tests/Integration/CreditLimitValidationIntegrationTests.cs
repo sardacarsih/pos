@@ -136,7 +136,7 @@ namespace Penjualan.Tests.Integration
         }
 
         [SkippableFact]
-        public void MissingPeriodConfig_SkipsEnforcement()
+        public void MissingPeriodConfig_FailsClosed()
         {
             Skip.IfNot(_fx.Available, _fx.SkipReason);
             _fx.ClearData();
@@ -144,8 +144,8 @@ namespace Penjualan.Tests.Integration
             // No POS_PERIODE row for the period.
             _fx.SeedSale(Nik, TxnDate, 999_999);
 
-            // Window cannot be resolved -> validation is skipped (documents current behavior).
-            Assert.Null(RunValidation(Check(999_999)));
+            // Window cannot be resolved with a non-zero limit -> sale is rejected, not waved through.
+            Assert.IsType<InvalidOperationException>(RunValidation(Check(999_999)));
         }
 
         [SkippableFact]

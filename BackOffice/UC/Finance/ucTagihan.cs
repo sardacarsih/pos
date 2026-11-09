@@ -108,11 +108,12 @@ namespace BackOffice.UC
                     periode = "PERIODE : " + bei_bulan.EditValue.ToString() + " " + bei_tahun.EditValue.ToString() + " ( " + bei_remise.EditValue.ToString() + " )";
 
                     LoadParameterTanggal(p_periode, p_remise);
+                    UpdateRangeTanggalLabel();
 
                     _ds = POS_Services.Tagihan_ALL(p_periode, p_remise);
                     //_ds.WriteXmlSchema("Tagihan_Penjualan.xml");
                     //load detail daftar tagihan pinjaman dan penjualan kredit barang
-                    _ds2 = Finance_Services.Tagihan_Pinjaman_dan_Kredit(p_periode, p_remise);
+                    _ds2 = Finance_Services.Tagihan_Pinjaman_dan_Kredit(p_bulan, p_tahun);
                     //_ds2.WriteXmlSchema("Tagihan_Pinjaman_dan_kredit.xml");
                     //// Sets up a master-detail relationship between data tables.
                     //DataColumn keyColumn = _ds.Tables["rekap_NIK"].Columns["NIK"];
@@ -161,8 +162,16 @@ namespace BackOffice.UC
 
         private void LoadParameterTanggal(int p_periode, int p_remise)
         {
+            // R*DARI / B*DARI columns in POS_PERIODE are stored as 'DD-MON-YYYY' English
+            // strings (see ucPeriode), so convert them with TO_DATE to get real dates.
             const string query = """
-                SELECT R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI
+                SELECT
+                    TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1DARI,
+                    TO_DATE(R1SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R1SAMPAI,
+                    TO_DATE(R2DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2DARI,
+                    TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS R2SAMPAI,
+                    TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BDARI,
+                    TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BSAMPAI
                 FROM POS_PERIODE
                 WHERE PERIODE = :periode
                 """;
@@ -185,23 +194,49 @@ namespace BackOffice.UC
                 return;
             }
 
-            if (p_remise == 1)
-            {
-                remisedari = ReadNullableDate(reader, "R1DARI");
-                remisesampai = ReadNullableDate(reader, "R1SAMPAI");
-                return;
-            }
-
-            remisedari = ReadNullableDate(reader, "R2DARI");
-            remisesampai = ReadNullableDate(reader, "R2SAMPAI");
+            // Bulanan range is always needed (used for BULANAN-status rows when printing).
             bulanandari = ReadNullableDate(reader, "BDARI");
             bulanansampai = ReadNullableDate(reader, "BSAMPAI");
+
+            // remisedari/remisesampai hold the range of the currently selected option.
+            switch (p_remise)
+            {
+                case 1: // Remise I
+                    remisedari = ReadNullableDate(reader, "R1DARI");
+                    remisesampai = ReadNullableDate(reader, "R1SAMPAI");
+                    break;
+                case 3: // Bulanan
+                    remisedari = bulanandari;
+                    remisesampai = bulanansampai;
+                    break;
+                default: // 2 = Remise II
+                    remisedari = ReadNullableDate(reader, "R2DARI");
+                    remisesampai = ReadNullableDate(reader, "R2SAMPAI");
+                    break;
+            }
+        }
+
+        private void UpdateRangeTanggalLabel()
+        {
+            static string Fmt(DateTime? d) => d?.ToString("dd/MM/yyyy") ?? "-";
+
+            string jenis = bei_remise.EditValue?.ToString() ?? (p_remise == 1 ? "Remise I" : "Remise II");
+            biRangeTanggal.Caption = $"{jenis} : {Fmt(remisedari)} s/d {Fmt(remisesampai)}";
         }
 
         private static DateTime? ReadNullableDate(OracleDataReader reader, string columnName)
         {
             int ordinal = reader.GetOrdinal(columnName);
-            return reader.IsDBNull(ordinal) ? null : reader.GetDateTime(ordinal);
+            if (reader.IsDBNull(ordinal))
+                return null;
+
+            // POS_PERIODE date columns are stored as strings (VARCHAR), so read the raw
+            // value and parse it. GetDateTime() throws "Specified cast is not valid." here.
+            object value = reader.GetValue(ordinal);
+            if (value is DateTime dt)
+                return dt;
+
+            return DateTime.TryParse(value.ToString(), out DateTime parsed) ? parsed : null;
         }
 
 

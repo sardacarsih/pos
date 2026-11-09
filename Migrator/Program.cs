@@ -30,6 +30,25 @@ try
         Console.WriteLine($"Terhubung ke: {test.DataSource}");
     }
 
+    if (HasFlag(args, "--reset-admin"))
+    {
+        string resetUser = opts.GetValueOrDefault("--admin-user") ?? "admin";
+        bool acak = !opts.TryGetValue("--admin-password", out string? resetPwd) || string.IsNullOrEmpty(resetPwd);
+        if (acak)
+            resetPwd = System.Security.Cryptography.RandomNumberGenerator.GetString(
+                "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789#@%", 16);
+
+        Console.WriteLine("\nReset password admin (tanpa migrasi):");
+        if (!AdminSeeder.Reset(connectionString, resetUser, resetPwd!))
+            return 1;
+        if (acak)
+        {
+            Console.WriteLine($"  [WARN ] password baru acak (tampil sekali ini saja): {resetPwd}");
+            Console.WriteLine("          Catat sekarang, lalu ganti via menu Manajemen User.");
+        }
+        return 0;
+    }
+
     Console.WriteLine("\nMenerapkan migrasi:");
     var runner = new MigrationRunner(connectionString);
     int newCount = runner.Apply(Migrations.All);
@@ -39,13 +58,16 @@ try
     {
         string adminUser = opts.GetValueOrDefault("--admin-user") ?? "admin";
         bool defaultPwd = !opts.TryGetValue("--admin-password", out string? adminPwd) || string.IsNullOrEmpty(adminPwd);
-        adminPwd ??= "Admin#2026";
+        // No hardcoded default: generate a random password and show it once, only if the user is created.
+        if (defaultPwd)
+            adminPwd = System.Security.Cryptography.RandomNumberGenerator.GetString(
+                "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789#@%", 16);
 
         Console.WriteLine("\nSeeding admin default:");
-        AdminSeeder.Seed(connectionString, adminUser, adminPwd);
-        if (defaultPwd)
+        if (AdminSeeder.Seed(connectionString, adminUser, adminPwd!) && defaultPwd)
         {
-            Console.WriteLine($"  [WARN ] memakai password default \"{adminPwd}\". SEGERA ganti via menu Manajemen User!");
+            Console.WriteLine($"  [WARN ] password admin acak (tampil sekali ini saja): {adminPwd}");
+            Console.WriteLine("          Catat sekarang, lalu ganti via menu Manajemen User.");
         }
     }
 
@@ -115,8 +137,9 @@ static void PrintUsage()
         "Opsi:\n" +
         "  --connection \"<connstr>\"   Connection string Oracle (atau env POS_CONNECTION / appsettings.json)\n" +
         "  --admin-user <nama>         Username admin (default: admin)\n" +
-        "  --admin-password <pwd>      Password admin (default: Admin#2026 - segera ganti)\n" +
+        "  --admin-password <pwd>      Password admin (default: acak, ditampilkan sekali)\n" +
         "  --skip-admin                Hanya migrasi skema, tanpa membuat admin\n" +
+        "  --reset-admin               Reset password user admin yang sudah ada (tanpa migrasi), buka kunci akun\n" +
         "  --help                      Tampilkan bantuan ini\n\n" +
         "Contoh:\n" +
         "  PosMigrator --connection \"Data Source=...;User Id=kopkar;Password=...;\" --admin-password \"Rahasia#1\"\n");

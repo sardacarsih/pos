@@ -13,6 +13,7 @@
   <ItemGroup>
     <Content Include="Icons\back-office-icon-13.ico" />
     <Compile Include="..\Shared\LoginVisuals.cs" Link="Shared\LoginVisuals.cs" />
+    <Compile Include="..\Shared\PeriodeGuard.cs" Link="Shared\PeriodeGuard.cs" />
     <Compile Include="..\Shared\Auth\*.cs" Link="Shared\Auth\%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\LOGIN KOPKAR.png"
                       Link="Resources\LOGIN KOPKAR.png"

@@ -1,0 +1,85 @@
+# kopkar_pos
+
+## Firebase Cloud Messaging Android
+
+Daftarkan aplikasi Android `id.kopkar.kopkar_pos` pada proyek Firebase yang digunakan server, aktifkan Cloud Messaging, dan letakkan konfigurasi unduhan `google-services.json` di `android/app/`. File tersebut diabaikan Git; jangan taruh service account di aplikasi. Build ulang APK setelah konfigurasi tersedia. Tanpa file ini aplikasi tetap dapat dibangun, tetapi FCM tidak aktif.
+
+Setelah anggota masuk, aplikasi meminta izin notifikasi dan mendaftarkan perangkat. Ketuk notifikasi untuk membuka detail transaksi setelah login; akses detail tetap diperiksa oleh server. Pada Android 13 atau lebih baru pengguna harus mengizinkan notifikasi; aplikasi yang di-force-stop harus dibuka lagi untuk menerima notifikasi.
+
+## Cetak nota Bluetooth
+
+Di Android, pasangkan printer melalui pengaturan Bluetooth terlebih dahulu. Pada layar nota pilih **Cetak printer Bluetooth**, berikan izin perangkat sekitar jika diminta, lalu pilih printer yang sudah dipasangkan. Cetak ulang juga tersedia dari detail riwayat transaksi.
+
+Fitur ini ditujukan untuk printer thermal 58 mm yang menerima perintah ESC/POS melalui Bluetooth Classic (SPP). Perangkat BLE, iOS, dan protokol khusus produsen belum didukung. Karakter di luar ASCII diganti dengan `?` pada cetakan Bluetooth; pilihan PDF tetap tersedia.
+
+## Dev di HP asli (USB)
+
+App memakai `API_URL` dari `--dart-define`; tanpa itu ia memanggil `https://api.example.com` dan selalu gagal terhubung.
+Untuk dev, `adb reverse` meneruskan port 8080 HP ke PC, jadi `http://127.0.0.1:8080` di HP = API di PC (tanpa IP/firewall).
+
+1. Colok HP via USB, aktifkan USB debugging (`adb devices` harus menampilkan HP).
+2. Jalankan API: `cd ../rust-api && cargo run`.
+3. Jalankan app: `./run_dev.ps1 -d <device-id>` (atau F5 konfigurasi "Dev (HP via USB)" di VS Code).
+
+Ulangi langkah 3 setelah kabel dicabut/dicolok (reverse hilang saat koneksi terputus).
+
+## Build APK produksi
+
+Build release memerlukan keystore produksi dan `android/key.properties` (keduanya tidak boleh di-commit). Isi `key.properties`:
+
+```properties
+storeFile=path/ke/keystore.jks
+storePassword=PASSWORD_KEYSTORE
+keyAlias=ALIAS_KUNCI
+keyPassword=PASSWORD_KUNCI
+```
+
+`storeFile` adalah path absolut atau relatif terhadap direktori `android`. Simpan cadangan keystore dan password di tempat yang aman: pembaruan Android harus ditandatangani dengan kunci yang sama. APK lama yang ditandatangani dengan kunci debug tidak dapat diperbarui langsung memakai kunci produksi yang berbeda.
+
+```powershell
+flutter build apk --release --dart-define=API_URL=https://api.kopkarksk.com
+```
+
+APK hasil build berada di `build/app/outputs/flutter-apk/app-release.apk`. Periksa tanda tangan, versi, dan koneksi ke server produksi sebelum distribusi.
+
+## Rilis & update otomatis
+
+Aplikasi memeriksa `https://api.kopkarksk.com/downloads/version.json` saat dibuka/kembali ke depan dan menampilkan dialog "Versi X tersedia" (unduh, verifikasi SHA-256, lalu layar pasang Android). Pemasangan pertama perlu mengizinkan "Pasang aplikasi tidak dikenal"; update tidak bisa sepenuhnya senyap.
+
+Tiap rilis: naikkan angka setelah `+` di `version:` pada `pubspec.yaml` (versionCode), lalu:
+
+```powershell
+.\tools\rilis-apk.ps1 -Catatan "Isi perubahan" [-MinVersionCode N]
+```
+
+Skrip membangun APK, mengunggahnya ke `D:\be-rustapi\downloads` di server lewat `ssh.kopkarksk.com`, menulis `version.json`, dan memverifikasi hash. `-MinVersionCode N` memaksa versi di bawah N untuk update (dialog tidak bisa ditutup).
+
+## Halaman unduh (update.kopkarksk.com)
+
+Halaman HTML/CSS di `site/` disajikan nginx (service `KopkarNginx`, `D:\nginx`, hanya `127.0.0.1:8081`) lewat Cloudflare Tunnel. Halaman membaca `version.json` dan APK dari folder `downloads` yang sama dengan API, jadi `rilis-apk.ps1` tidak perlu diubah.
+
+- Ubah tampilan: edit `site/`, lalu `.\tools\deploy-situs.ps1`.
+- Konfigurasi nginx dan service ada di `tools/nginx/` (salin ke `D:\nginx\conf\nginx.conf` dan `D:\nginx\nginx-service.xml`; `nginx-service.exe` adalah salinan WinSW dari `D:\be-rustapi\pos-api-service.exe`).
+- Hostname publik diatur di Cloudflare Zero Trust > Tunnels > Public hostname: `update.kopkarksk.com` -> `HTTP` `localhost:8081`.
+
+## Getting Started
+
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
+
+## iPhone (PWA)
+
+iOS tidak bisa memasang APK. Aplikasi web (Flutter web) disajikan di `https://ios.kopkarksk.com` oleh nginx (server block kedua di `tools/nginx/nginx.conf`, root `D:\ios-web`, `/api/` di-proxy ke `127.0.0.1:8080` sehingga satu origin tanpa CORS). Hostname `ios.kopkarksk.com` harus ditambahkan di Cloudflare Tunnel → `http://localhost:8081`.
+
+- Rilis/update: `.\tools\rilis-web.ps1` (tanpa restart; pengguna mendapat versi baru saat membuka ulang).
+- Pasang di iPhone: buka URL di Safari → Bagikan → **Tambah ke Layar Utama**.
+- Batasan: tanpa push notification andal, cek update APK dinonaktifkan di web, token disimpan di penyimpanan browser.
