@@ -21,6 +21,27 @@ pub fn username_valid(u: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
 }
 
+/// Username akun anggota = NIK ternormalisasi. Harus identik dengan `usernameDariNik` (mobile/lib/core/validasi.dart).
+pub fn username_dari_nik(nik: &str) -> String {
+    let mut out = String::new();
+    let mut gap = false;
+    for c in nik.trim().to_lowercase().chars() {
+        if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-') {
+            if gap {
+                out.push('.');
+                gap = false;
+            }
+            out.push(c);
+        } else {
+            gap = true;
+        }
+    }
+    if gap {
+        out.push('.');
+    }
+    out.chars().take(50).collect()
+}
+
 pub async fn list(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user::UserInfo>>> {
     a.peran(ADMIN)?;
     Ok(Json(db::run(&s.pool, user::list_users).await?))
@@ -98,6 +119,12 @@ pub fn validasi_buat(req: &BuatReq, default_nik: &str) -> AppResult<ValidBuat> {
             return Err(AppError::validation(
                 "NIK pelanggan umum (tunai) tidak dapat dibuatkan akun",
             ));
+        }
+        let wajib = username_dari_nik(n);
+        if req.role == Role::Anggota && username != wajib {
+            return Err(AppError::validation(format!(
+                "Username akun anggota harus sama dengan NIK ({wajib})"
+            )));
         }
     }
     Ok(ValidBuat {
@@ -311,7 +338,14 @@ mod tests {
         assert!(galat(req("budi", "Budi", Role::Kasir, Some("01.00062"))).contains("NIK hanya untuk akun anggota"));
         assert!(galat(req("budi", "Budi", Role::Anggota, Some(&"1".repeat(31)))).contains("maksimal 30"));
         assert!(galat(req("budi", "Budi", Role::Anggota, Some("00.00004"))).contains("pelanggan umum"));
-        assert_eq!(galat(req("budi", "Budi", Role::Anggota, Some("01.00062"))), "OK");
+        assert_eq!(galat(req("01.00062", "Budi", Role::Anggota, Some("01.00062"))), "OK");
+    }
+
+    #[test]
+    fn username_anggota_harus_nik() {
+        assert!(galat(req("budi", "Budi", Role::Anggota, Some("01.00062"))).contains("harus sama dengan NIK"));
+        assert_eq!(galat(req("kb.23.001", "Budi", Role::Anggota, Some("KB 23/001"))), "OK");
+        assert_eq!(super::username_dari_nik("A-24-061"), "a-24-061");
     }
 }
 
