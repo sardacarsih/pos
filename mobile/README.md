@@ -63,3 +63,11 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## iPhone (PWA)
+
+iOS tidak bisa memasang APK. Aplikasi web (Flutter web) disajikan di `https://ios.kopkarksk.com` oleh nginx (server block kedua di `tools/nginx/nginx.conf`, root `D:\ios-web`, `/api/` di-proxy ke `127.0.0.1:8080` sehingga satu origin tanpa CORS). Hostname `ios.kopkarksk.com` harus ditambahkan di Cloudflare Tunnel → `http://localhost:8081`.
+
+- Rilis/update: `.\tools\rilis-web.ps1` (tanpa restart; pengguna mendapat versi baru saat membuka ulang).
+- Pasang di iPhone: buka URL di Safari → Bagikan → **Tambah ke Layar Utama**.
+- Batasan: tanpa push notification andal, cek update APK dinonaktifkan di web, token disimpan di penyimpanan browser.
