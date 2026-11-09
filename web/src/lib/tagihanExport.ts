@@ -26,8 +26,36 @@ export async function buildComparisonWorkbook(report: ComparisonReport, rows: Co
 }
 export async function exportComparison(report: ComparisonReport, rows: ComparisonItem[], search: string, differenceOnly: boolean) {
   const workbook = await buildComparisonWorkbook(report, rows, search, differenceOnly);
-  const bytes = await workbook.xlsx.writeBuffer();
+  await saveWorkbook(workbook, `tagihan-vs-rekap-${report.periode}-${periodName(report.remise)}.xlsx`);
+}
+
+const periodName = (remise: number) => ['', 'remise-1', 'remise-2', 'bulanan'][remise] || String(remise);
+
+async function saveWorkbook(workbook: { xlsx: { writeBuffer(): Promise<ArrayBuffer | Uint8Array | Buffer | unknown> } }, filename: string) {
+  const bytes = (await workbook.xlsx.writeBuffer()) as BlobPart;
   const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-  const link = document.createElement('a'); link.href = url; link.download = `tagihan-vs-rekap-${report.periode}-${['', 'remise-1', 'remise-2', 'bulanan'][report.remise] || report.remise}.xlsx`;
+  const link = document.createElement('a'); link.href = url; link.download = filename;
   try { document.body.appendChild(link); link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+
+/**
+ * Format "Potongan Koperasi" (Template_Koperasi_Bulanan.xlsx): NO | NIK | NAMA | KEBUN | PONTIANAK.
+ * NIK tetap NIK database (teks). KEBUN = rekap kredit anggota; PONTIANAK = 0. Urut NIK.
+ */
+export async function buildPotonganWorkbook(rows: ComparisonItem[]) {
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Kopkar Kusuma Lestari';
+  const sheet = workbook.addWorksheet('Potongan Koperasi');
+  sheet.columns = [{ width: 9.1 }, { width: 13 }, { width: 35.1 }, { width: 13.3 }, { width: 13.3 }];
+  sheet.getRow(1).values = ['NO', 'NIK', 'NAMA', 'KEBUN', 'PONTIANAK'];
+  sheet.getRow(1).font = { bold: true };
+  sheet.getColumn(2).numFmt = '@';
+  [...rows].sort((a, b) => a.nik.localeCompare(b.nik, 'id', { numeric: true })).forEach((item, i) => {
+    sheet.addRow([i + 1, String(item.nik), item.nama, item.rekap, 0]);
+  });
+  return workbook;
+}
+export async function exportPotongan(report: ComparisonReport, rows: ComparisonItem[]) {
+  await saveWorkbook(await buildPotonganWorkbook(rows), `potongan-koperasi-${report.periode}-${periodName(report.remise)}.xlsx`);
 }
