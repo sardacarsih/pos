@@ -1,0 +1,180 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:ota_update/ota_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'providers.dart';
+
+/// Isi `downloads/version.json` di server (dibuat oleh tools/rilis-apk.ps1).
+class InfoRilis {
+  const InfoRilis({
+    required this.versionCode,
+    required this.versionName,
+    required this.apk,
+    required this.sha256,
+    this.minVersionCode = 0,
+    this.catatan = '',
+  });
+
+  factory InfoRilis.dariJson(Map<String, dynamic> j) => InfoRilis(
+    versionCode: j['versionCode'] as int,
+    versionName: j['versionName'] as String,
+    apk: j['apk'] as String,
+    sha256: j['sha256'] as String,
+    minVersionCode: (j['minVersionCode'] as int?) ?? 0,
+    catatan: (j['catatan'] as String?) ?? '',
+  );
+
+  final int versionCode;
+  final String versionName;
+  final String apk;
+  final String sha256;
+  final int minVersionCode;
+  final String catatan;
+
+  bool lebihBaru(int terpasang) => versionCode > terpasang;
+
+  /// Versi terpasang terlalu lama: dialog tidak boleh ditutup.
+  bool wajib(int terpasang) => terpasang < minVersionCode;
+}
+
+const _kunciDilewati = 'update_dilewati';
+
+/// Null bila tidak ada update (atau server tidak terjangkau: tidak boleh mengganggu aplikasi).
+Future<InfoRilis?> cekRilis() async {
+  try {
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ),
+    );
+    final res = await dio.get<Map<String, dynamic>>(
+      '$apiUrl/downloads/version.json',
+    );
+    final info = InfoRilis.dariJson(res.data!);
+    final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
+    if (!info.lebihBaru(terpasang)) return null;
+    if (!info.wajib(terpasang)) {
+      final p = await SharedPreferences.getInstance();
+      if (p.getInt(_kunciDilewati) == info.versionCode) return null;
+    }
+    return info;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Pengecekan sekali per pemanggilan; dialog ditampilkan di atas navigator [context].
+Future<void> tawarkanUpdate(BuildContext context) async {
+  final info = await cekRilis();
+  if (info == null || !context.mounted) return;
+  final terpasang = int.parse((await PackageInfo.fromPlatform()).buildNumber);
+  if (!context.mounted) return;
+  final wajib = info.wajib(terpasang);
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: !wajib,
+    builder: (_) => _DialogUpdate(info: info, wajib: wajib),
+  );
+}
+
+class _DialogUpdate extends StatefulWidget {
+  const _DialogUpdate({required this.info, required this.wajib});
+  final InfoRilis info;
+  final bool wajib;
+  @override
+  State<_DialogUpdate> createState() => _DialogUpdateState();
+}
+
+class _DialogUpdateState extends State<_DialogUpdate> {
+  bool _mengunduh = false;
+  int _persen = 0;
+  String? _galat;
+
+  void _mulai() {
+    setState(() {
+      _mengunduh = true;
+      _galat = null;
+    });
+    OtaUpdate()
+        .execute(
+          '$apiUrl/downloads/${widget.info.apk}',
+          destinationFilename: 'pos-kasir.apk',
+          sha256checksum: widget.info.sha256,
+        )
+        .listen((e) {
+          if (!mounted) return;
+          switch (e.status) {
+            case OtaStatus.DOWNLOADING:
+              setState(() => _persen = int.tryParse(e.value ?? '') ?? _persen);
+            case OtaStatus.INSTALLING:
+            case OtaStatus.INSTALLATION_DONE:
+              break; // layar pemasangan Android yang mengambil alih
+            case OtaStatus.CHECKSUM_ERROR:
+              _gagal('File unduhan rusak. Coba lagi.');
+            case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
+              _gagal(
+                'Izinkan "Pasang aplikasi tidak dikenal" untuk aplikasi ini, lalu coba lagi.',
+              );
+            default:
+              _gagal('Gagal memperbarui. Periksa koneksi lalu coba lagi.');
+          }
+        });
+  }
+
+  void _gagal(String pesan) => setState(() {
+    _mengunduh = false;
+    _galat = pesan;
+  });
+
+  Future<void> _nanti() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kunciDilewati, widget.info.versionCode);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !widget.wajib,
+      child: AlertDialog(
+        title: Text('Versi ${widget.info.versionName} tersedia'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.info.catatan.isNotEmpty) Text(widget.info.catatan),
+            if (widget.wajib)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Pembaruan ini wajib untuk melanjutkan.'),
+              ),
+            if (_mengunduh)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(value: _persen / 100),
+              ),
+            if (_galat != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _galat!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          if (!widget.wajib && !_mengunduh)
+            TextButton(onPressed: _nanti, child: const Text('Nanti')),
+          FilledButton(
+            onPressed: _mengunduh ? null : _mulai,
+            child: Text(_mengunduh ? 'Mengunduh $_persen%' : 'Perbarui'),
+          ),
+        ],
+      ),
+    );
+  }
+}

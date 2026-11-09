@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/providers.dart';
 import 'core/theme.dart';
+import 'core/update.dart';
 import 'features/admin/admin_dashboard_page.dart';
 import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
@@ -32,11 +33,14 @@ String? redirectUntuk(AuthState a, String loc) {
   return null;
 }
 
+final _navKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
   ref.listen(authProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
   return GoRouter(
+    navigatorKey: _navKey,
     initialLocation: '/mulai',
     refreshListenable: refresh,
     redirect: (ctx, st) =>
@@ -86,11 +90,43 @@ class KopkarApp extends ConsumerStatefulWidget {
   ConsumerState<KopkarApp> createState() => _KopkarAppState();
 }
 
-class _KopkarAppState extends ConsumerState<KopkarApp> {
+class _KopkarAppState extends ConsumerState<KopkarApp>
+    with WidgetsBindingObserver {
+  bool _sedangCek = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => ref.read(authProvider.notifier).pulihkan());
+    // Cek setelah sesi pulih (bukan di layar /mulai), sekali tiap login/pemulihan.
+    ref.listenManual(authProvider, (_, a) {
+      if (!a.memulihkan) _cekUpdate();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed && !ref.read(authProvider).memulihkan) {
+      _cekUpdate();
+    }
+  }
+
+  Future<void> _cekUpdate() async {
+    final ctx = _navKey.currentContext;
+    if (_sedangCek || ctx == null) return;
+    _sedangCek = true;
+    try {
+      await tawarkanUpdate(ctx);
+    } finally {
+      _sedangCek = false;
+    }
   }
 
   @override

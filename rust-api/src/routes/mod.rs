@@ -14,7 +14,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use crate::{
     auth::{
@@ -138,6 +138,7 @@ pub fn idempotency_key(headers: &HeaderMap) -> AppResult<String> {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .nest_service("/downloads", ServeDir::new("downloads"))
         .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/refresh", post(auth::refresh))
