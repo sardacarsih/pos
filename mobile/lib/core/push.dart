@@ -11,6 +11,9 @@ import 'models.dart';
 /// Pengelolaan FCM hanya untuk Android; kegagalan konfigurasi tidak memblokir login.
 class PushService {
   PushService(this.api);
+  // Id baru: suara channel Android tidak bisa diganti setelah channel dibuat.
+  static const _channelId = 'transaksi_suara2';
+  static const _suara = RawResourceAndroidNotificationSound('notif_transaksi');
   final ApiClient api;
   void Function(String no)? onTap;
   final _local = FlutterLocalNotificationsPlugin();
@@ -29,6 +32,19 @@ class PushService {
         ),
         onDidReceiveNotificationResponse: (response) => _tap(response.payload),
       );
+      // Channel dibuat di sini agar notif FCM saat app tertutup (channel_id dari server) memakai suaranya.
+      await _local
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              _channelId,
+              'Transaksi anggota',
+              importance: Importance.high,
+              sound: _suara,
+            ),
+          );
       _subscriptions.add(
         FirebaseMessaging.onMessage.listen((message) async {
           if (_user == null || message.data['type'] != 'transaction') return;
@@ -40,10 +56,11 @@ class PushService {
             body: 'Ada transaksi baru pada akun Anda.',
             notificationDetails: const NotificationDetails(
               android: AndroidNotificationDetails(
-                'transaksi',
+                _channelId,
                 'Transaksi anggota',
                 importance: Importance.high,
                 priority: Priority.high,
+                sound: _suara,
               ),
             ),
             payload: no,
