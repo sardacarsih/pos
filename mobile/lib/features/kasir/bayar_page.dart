@@ -496,7 +496,7 @@ class _PelangganPickerState extends ConsumerState<PelangganPicker> {
           ),
         Expanded(
           child: _loading && _items.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? const LoadingKopkar()
               : RefreshIndicator(
                   onRefresh: _muat,
                   child: ListView(

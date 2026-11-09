@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/update.dart';
 import '../../core/widgets.dart';
 import '../admin/admin_produk_page.dart' show fotoPersegi;
+import 'changelog_page.dart';
 import 'foto_crop_page.dart';
 
 /// Profil akun sendiri (semua role): foto, nama tampilan, kontak, dan ganti password.
@@ -291,7 +292,7 @@ class _ProfilPageState extends ConsumerState<ProfilPage> {
         onPressed: () => Navigator.of(context).pop(),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingKopkar()
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
@@ -342,6 +343,13 @@ class _ProfilPageState extends ConsumerState<ProfilPage> {
                       child: const Text('Ganti password'),
                     ),
                   ],
+                ),
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: const Text('Riwayat versi'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const ChangelogPage()),
+                  ),
                 ),
                 if (!kIsWeb)
                   ListTile(

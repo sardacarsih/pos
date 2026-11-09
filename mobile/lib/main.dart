@@ -8,6 +8,7 @@ import 'core/providers.dart';
 import 'core/tema_mode.dart';
 import 'core/theme.dart';
 import 'core/update.dart';
+import 'core/widgets.dart';
 import 'features/admin/admin_dashboard_page.dart';
 import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
@@ -52,7 +53,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mulai',
         builder: (_, _) =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
+            const Scaffold(body: LoadingKopkar()),
       ),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/ganti', builder: (_, _) => const GantiPasswordPage()),

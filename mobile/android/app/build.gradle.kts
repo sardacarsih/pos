@@ -18,7 +18,7 @@ if (signingPropertiesFile.exists()) {
 
 android {
     namespace = "id.kopkar.kopkar_pos"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

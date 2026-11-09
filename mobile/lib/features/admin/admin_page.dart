@@ -220,7 +220,7 @@ class _AdminPageState extends ConsumerState<AdminPage>
         if (_loading)
           const Padding(
             padding: EdgeInsets.all(40),
-            child: Center(child: CircularProgressIndicator()),
+            child: LoadingKopkar(),
           ),
         if (_error != null)
           Card(
@@ -461,7 +461,7 @@ class _AnggotaPickerDialogState extends ConsumerState<AnggotaPickerDialog> {
 
   Widget _isiDaftar() {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingKopkar();
     }
     if (_error != null) {
       return Center(

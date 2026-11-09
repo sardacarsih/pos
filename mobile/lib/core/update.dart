@@ -40,6 +40,42 @@ class InfoRilis {
   bool wajib(int terpasang) => terpasang < minVersionCode;
 }
 
+/// Satu entri `downloads/changelog.json` (diunggah oleh tools/rilis-apk.ps1).
+class EntriRilis {
+  const EntriRilis({
+    required this.versionName,
+    required this.versionCode,
+    required this.tanggal,
+    required this.perubahan,
+  });
+
+  factory EntriRilis.dariJson(Map<String, dynamic> j) => EntriRilis(
+    versionName: j['versionName'] as String,
+    versionCode: j['versionCode'] as int,
+    tanggal: (j['tanggal'] as String?) ?? '',
+    perubahan: ((j['perubahan'] as List?) ?? const []).cast<String>(),
+  );
+
+  final String versionName;
+  final int versionCode;
+  final String tanggal;
+  final List<String> perubahan;
+}
+
+/// Melempar galat jaringan/format agar layar bisa menawarkan "Coba lagi".
+Future<List<EntriRilis>> ambilChangelog() async {
+  final dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 5),
+    ),
+  );
+  final res = await dio.get<List<dynamic>>('$apiUrl/downloads/changelog.json');
+  return res.data!
+      .map((e) => EntriRilis.dariJson(e as Map<String, dynamic>))
+      .toList();
+}
+
 const _kunciDilewati = 'update_dilewati';
 const _kunciCekTerakhir = 'update_cek_terakhir';
 const _jedaCek = Duration(hours: 6);
@@ -157,8 +193,11 @@ class _DialogUpdateState extends State<_DialogUpdate> {
               _gagal(
                 'Izinkan "Pasang aplikasi tidak dikenal" untuk aplikasi ini, lalu coba lagi.',
               );
+            case OtaStatus.INSTALLATION_ERROR:
+            case OtaStatus.INTERNAL_ERROR:
+              _gagal('Gagal memasang pembaruan (${e.value ?? e.status.name}).');
             default:
-              _gagal('Gagal memperbarui. Periksa koneksi lalu coba lagi.');
+              _gagal('Gagal mengunduh. Periksa koneksi lalu coba lagi.');
           }
         });
   }
