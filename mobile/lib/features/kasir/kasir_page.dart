@@ -10,13 +10,20 @@ import '../../core/checkout.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../../core/toast.dart';
 import '../../core/cart.dart';
 import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
 import 'bayar_page.dart';
 
-void pesan(BuildContext c, String m) =>
-    ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(m)));
+/// Sukses: toast ringan di atas (tidak menutupi tombol Keranjang). Galat: SnackBar yang
+/// menggantikan SnackBar sebelumnya agar tidak mengantre.
+void pesan(BuildContext c, String m, {bool galat = false}) {
+  if (!galat) return tampilToast(c, m);
+  ScaffoldMessenger.of(c)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(m), behavior: SnackBarBehavior.floating));
+}
 
 /// Layar kamera untuk scan barcode / kartu anggota. Opsional: aplikasi tetap penuh tanpa kamera.
 class ScanPage extends StatefulWidget {
@@ -243,7 +250,7 @@ class _KasirPageState extends ConsumerState<KasirPage> {
           _errorPemulihan =
               'Transaksi belum tersimpan dan perlu dibuat ulang: ${e.pesan}';
         });
-        pesan(context, _errorPemulihan!);
+        pesan(context, _errorPemulihan!, galat: true);
       } else if (mounted) {
         setState(() => _errorPemulihan = e.pesan);
       }
@@ -320,6 +327,7 @@ class _KasirPageState extends ConsumerState<KasirPage> {
           e.status == 404
               ? 'Barang dengan barcode itu tidak ditemukan'
               : e.pesan,
+          galat: true,
         );
     }
   }
@@ -744,6 +752,7 @@ class _BarangDetailPageState extends ConsumerState<BarangDetailPage> {
       pesan(
         context,
         'Jumlah harus lebih dari 0 dan maksimal ${Cart.maxQty} ${widget.barang.dijualPerLiter ? 'liter' : 'unit'}',
+        galat: true,
       );
       return;
     }

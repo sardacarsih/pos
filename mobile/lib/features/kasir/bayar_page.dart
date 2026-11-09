@@ -442,7 +442,7 @@ class _PelangganPickerState extends ConsumerState<PelangganPicker> {
           ),
         );
       } else if (mounted) {
-        pesan(context, e.pesan);
+        pesan(context, e.pesan, galat: true);
       }
     }
   }
@@ -579,6 +579,7 @@ class _StrukPageState extends ConsumerState<StrukPage> {
         pesan(
           context,
           'Faktur sudah tersimpan, tetapi gagal dicetak. Coba lagi dari tombol Cetak.',
+          galat: true,
         );
     }
   }
@@ -591,7 +592,7 @@ class _StrukPageState extends ConsumerState<StrukPage> {
       final daftar = await layanan.daftar();
       if (!mounted) return;
       if (daftar.isEmpty) {
-        pesan(context, 'Belum ada perangkat Bluetooth yang dipasangkan. Pasangkan printer di pengaturan Bluetooth Android.');
+        pesan(context, 'Belum ada perangkat Bluetooth yang dipasangkan. Pasangkan printer di pengaturan Bluetooth Android.', galat: true);
         return;
       }
       final printer = await showDialog<PrinterBluetooth>(
@@ -619,9 +620,9 @@ class _StrukPageState extends ConsumerState<StrukPage> {
       await layanan.cetak(printer, widget.faktur);
       if (mounted) pesan(context, 'Nota dikirim ke printer.');
     } on PlatformException catch (e) {
-      if (mounted) pesan(context, e.message ?? 'Gagal mengakses printer Bluetooth.');
+      if (mounted) pesan(context, e.message ?? 'Gagal mengakses printer Bluetooth.', galat: true);
     } catch (_) {
-      if (mounted) pesan(context, 'Gagal mengirim nota ke printer Bluetooth.');
+      if (mounted) pesan(context, 'Gagal mengirim nota ke printer Bluetooth.', galat: true);
     } finally {
       if (mounted) setState(() => _mencetakBluetooth = false);
     }
