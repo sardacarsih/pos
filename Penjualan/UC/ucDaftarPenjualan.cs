@@ -51,6 +51,8 @@ namespace Penjualan.UC
             //DaftarPenjualan.Clear();
             DaftarPenjualan = controller.GetPenjualan(date1, date2);
             gridControl1.DataSource = DaftarPenjualan;
+            gridView1.Columns["KASIR"].Visible = false;
+            gridView1.Columns["NAMA_KASIR"].Visible = false;
             gridView1.Columns["STATUS"].GroupIndex = 0;
             gridView1.Columns["UNIT_KERJA"].GroupIndex = 1;
             gridView1.Columns["BRUTO"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
@@ -176,6 +178,9 @@ namespace Penjualan.UC
             report.Parameters["Bruto"].Value = FakturPenjualanHeader.BRUTO;
             report.Parameters["Potongan"].Value = FakturPenjualanHeader.POTONGAN;
             report.Parameters["Total"].Value = FakturPenjualanHeader.TOTAL;
+            report.Parameters["Kasir"].Value = string.IsNullOrWhiteSpace(FakturPenjualanHeader.NAMA_KASIR)
+                ? FakturPenjualanHeader.KASIR ?? string.Empty
+                : FakturPenjualanHeader.NAMA_KASIR;
 
             report.ShowPrintMarginsWarning = false;
             ReportPrintTool tool = new(report);

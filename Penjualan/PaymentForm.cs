@@ -202,7 +202,9 @@ namespace Penjualan
             report.Parameters["Potongan"].Value = FakturPenjualanHeader.POTONGAN;
             report.Parameters["Total"].Value = FakturPenjualanHeader.TOTAL;
 
-            report.Parameters["Kasir"].Value = "";
+            report.Parameters["Kasir"].Value = string.IsNullOrWhiteSpace(FakturPenjualanHeader.NAMA_KASIR)
+                ? FakturPenjualanHeader.KASIR ?? string.Empty
+                : FakturPenjualanHeader.NAMA_KASIR;
             report.Parameters["Bayar"].Value = decimal.TryParse(txtcash.Text, out var bayarVal) ? bayarVal : 0m;
             report.Parameters["Kembalian"].Value = decimal.TryParse(txtkembali.Text, out var kembaliVal) ? kembaliVal : 0m;
             report.ShowPrintMarginsWarning = false;

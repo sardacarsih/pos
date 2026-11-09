@@ -11,6 +11,8 @@ namespace Penjualan.Model
         public string UNIT_KERJA { get; set; }
         public string NO_TRANSAKSI { get; set; }
         public DateTime TANGGAL { get; set; }
+        public string KASIR { get; set; } = string.Empty;
+        public string NAMA_KASIR { get; set; } = string.Empty;
         public string NIK { get; set; }
         public string NAMA_PELANGGAN { get; set; }       
         public string STATUS { get; set; }
