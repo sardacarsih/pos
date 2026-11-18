@@ -7,7 +7,7 @@ use pos_api::{
     routes::{self, AppState},
 };
 
-const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN [--nik NIK]";
+const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN [--nik NIK]\n  pos-api user-add-anggota --xlsx FILE.xlsx | --dry-run   (akun semua anggota aktif yang belum punya akun)";
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
@@ -84,6 +84,30 @@ async fn run() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
             // Ditampilkan sekali; wajib diganti saat login pertama.
             println!("User dibuat. Password sementara: {tmp}");
+            Ok(())
+        }
+        "user-add-anggota" => {
+            let xlsx = arg(&args, "--xlsx");
+            let dry = args.iter().any(|a| a == "--dry-run");
+            if xlsx.is_none() && !dry {
+                return Err(USAGE.into());
+            }
+            let default_nik = cfg.default_nik.clone();
+            let h = db::run(&pool, move |c| pos_api::anggota_massal::jalankan(c, &default_nik, dry))
+                .await
+                .map_err(|e| e.to_string())?;
+            println!(
+                "{}: {} akun, dilewati/gagal: {}",
+                if dry { "Dry-run (tidak ada yang ditulis)" } else { "Dibuat" },
+                h.dibuat.len(),
+                h.dilewati.len()
+            );
+            if let (Some(f), false) = (xlsx, dry) {
+                pos_api::anggota_massal::tulis_xlsx(&f, &h).map_err(|e| {
+                    format!("akun sudah dibuat tetapi file gagal ditulis ({e}); reset password lewat admin")
+                })?;
+                println!("Daftar password sementara: {f} (berisi password, hapus setelah dibagikan)");
+            }
             Ok(())
         }
         "serve" => {
