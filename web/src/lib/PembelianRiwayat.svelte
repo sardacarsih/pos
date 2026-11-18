@@ -277,7 +277,7 @@
         <label>Tanggal pembayaran <input type="date" min={pilihan?.tanggal_faktur ?? undefined} max={pilihan?.tanggal_server} bind:value={tanggalBayar} required /></label>
         <label>Nominal <input type="number" inputmode="numeric" min="1" step="1" max={pilihan?.sisa ?? undefined} bind:value={nominal} required /></label>
         <label>Metode pembayaran
-          <select bind:value={metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
+          <select aria-label="Metode pembayaran" bind:value={metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
         </label>
         <label>Referensi pembayaran <input maxlength="100" bind:value={referensi} /></label>
       {:else}

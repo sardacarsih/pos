@@ -41,6 +41,12 @@
   $: barangAktif = new Map(referensi.barang.map(p => [p.id, p]));
 
   function simpan() { dispatch('simpan', draf); }
+
+  function simpanInput(e: Event) {
+    // Bind Svelte pada select diperbarui saat change, setelah event input.
+    if (!(e.target instanceof HTMLSelectElement)) simpan();
+  }
+
   onDestroy(hentikanKamera);
 
   function hentikanKamera() {
@@ -212,7 +218,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Ctrl+Enter berlaku dari setiap kolom form) -->
-<form aria-label="Input pembelian" on:input={simpan} on:change={simpan} on:keydown={shortcut} on:submit|preventDefault={tinjau}>
+<form aria-label="Input pembelian" on:input={simpanInput} on:change={simpan} on:keydown={shortcut} on:submit|preventDefault={tinjau}>
   <div class="beli-layout">
     <div class="beli-kolom">
       <section class="panel beli-panel">
@@ -316,8 +322,8 @@
           <label>Uang muka <input type="number" min="0" step="1" inputmode="numeric" bind:value={draf.uang_muka} /></label>
         {/if}
         {#if draf.jenis === 'TUNAI' || dibayar > 0}
-          <label>Metode
-            <select bind:value={draf.metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
+          <label>Metode pembayaran
+            <select aria-label="Metode pembayaran" bind:value={draf.metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
           </label>
           <label>Referensi pembayaran <input maxlength="100" bind:value={draf.referensi} /></label>
         {/if}

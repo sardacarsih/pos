@@ -63,8 +63,11 @@ def test_pembelian(url):
             route.fulfill(json=ref)
         elif path == "/pembelian" and request.method == "POST":
             key = request.headers["idempotency-key"]
-            percobaan.append((key, request.post_data_json))
-            resmi.setdefault(key, faktur["no_transaksi"])
+            data = request.post_data_json
+            percobaan.append((key, data))
+            if key not in resmi:
+                resmi[key] = faktur["no_transaksi"]
+                faktur.update(sudah_bayar=data["uang_muka"], sisa=67000 - data["uang_muka"])
             if len(percobaan) == 1:
                 route.abort("failed")
             else:
@@ -75,7 +78,7 @@ def test_pembelian(url):
             data = request.post_data_json
             pembayaran.append(dict(id=3, **data, balik_id=None, alasan=None, operator="Admin Uji",
                                    created_at="2026-11-18 13:00:00", dibalik=False))
-            faktur.update(sudah_bayar=data["nominal"], sisa=67000 - data["nominal"])
+            faktur.update(sudah_bayar=faktur["sudah_bayar"] + data["nominal"], sisa=faktur["sisa"] - data["nominal"])
             route.fulfill(json=dict(id="3"))
         elif path == "/pembelian/BW-26-000001":
             route.fulfill(json=dict(**faktur, tanggal_server=ref["tanggal_server"], pembayaran=pembayaran, baris=[
@@ -125,12 +128,27 @@ def test_pembelian(url):
         page.wait_for_function("!!navigator.serviceWorker.controller")
         page.get_by_label("Supplier", exact=True).select_option("S1")
         page.get_by_label("No. faktur supplier").fill("INV-UJI")
+        metode = page.get_by_role("combobox", name="Metode pembayaran", exact=True)
+        expect(metode).to_have_value("TUNAI")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
+        metode.press("ArrowUp")
+        expect(metode).to_have_value("TUNAI")
+        metode.select_option(label="Transfer")
+        expect(metode).to_have_value("TRANSFER")
+        metode.select_option(label="Tunai")
+        expect(metode).to_have_value("TUNAI")
         page.get_by_label("Jenis pembayaran").select_option("TEMPO")
         page.get_by_label("Jatuh tempo").fill("2026-12-01")
+        page.get_by_label("Uang muka").fill("2000")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
 
         jaringan_putus = True
         context.set_offline(True)
         expect(page.get_by_text("Mode offline", exact=True)).to_be_visible()
+        page.reload()
+        expect(metode).to_have_value("TRANSFER")
         page.get_by_role("button", name="Scan dengan kamera").press("Enter")
         expect(page.get_by_label("Jumlah Teh Uji")).to_be_focused()
         assert page.evaluate("window.testCameraTrack.readyState") == "ended"
@@ -174,6 +192,8 @@ def test_pembelian(url):
         tab_lain.evaluate("window.dispatchEvent(new Event('online'))")
         expect(page.get_by_text("Tersinkron", exact=True)).to_be_visible(timeout=35_000)
         assert len(percobaan) >= 2 and len(resmi) == 1 and percobaan[0] == percobaan[1], percobaan
+        assert percobaan[0][1]["metode"] == "TRANSFER"
+        assert percobaan[0][1]["uang_muka"] == 2000
         assert percobaan[0][1]["baris"][0] == {
             "product_id": 42, "satuan": "BOX", "isi": "12", "qty": "2", "harga": 36000, "potongan": 5000
         }, percobaan
@@ -184,9 +204,12 @@ def test_pembelian(url):
         page.get_by_role("button", name="INV-UJI", exact=True).press("Enter")
         page.get_by_role("button", name="Catat pembayaran").press("Enter")
         page.get_by_label("Nominal", exact=True).fill("17000")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
         page.get_by_role("button", name="Konfirmasi", exact=True).press("Enter")
         expect(page.get_by_text("Pembayaran dicatat.", exact=True)).to_be_visible()
         assert pembayaran[0]["nominal"] == 17000
+        assert pembayaran[0]["metode"] == "TRANSFER"
         page.get_by_role("button", name="Tutup", exact=True).press("Enter")
         page.get_by_role("button", name="Keluar", exact=True).press("Enter")
         page.get_by_label("Username").fill("petugas")
