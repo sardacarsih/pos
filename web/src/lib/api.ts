@@ -3,8 +3,15 @@ const prefix = '/api/v1';
 const tokenKey = 'kopkar_web_tokens';
 type Tokens = { access_token: string; refresh_token: string };
 export class ApiError extends Error { constructor(message: string, public status = 0, public code = '') { super(message); } }
-function tokens(): Tokens | null { try { return JSON.parse(localStorage.getItem(tokenKey) || 'null'); } catch { return null; } }
-function saveTokens(t: Tokens) { localStorage.setItem(tokenKey, JSON.stringify({ access_token: t.access_token, refresh_token: t.refresh_token })); }
+// Tanpa "ingat saya" token di sessionStorage (hilang saat tab ditutup); dengan centang di localStorage.
+function wadah(): Storage | null { try { return sessionStorage.getItem(tokenKey) ? sessionStorage : localStorage.getItem(tokenKey) ? localStorage : null; } catch { return null; } }
+function tokens(): Tokens | null { try { return JSON.parse(wadah()?.getItem(tokenKey) || 'null'); } catch { return null; } }
+function saveTokens(t: Tokens, ingat?: boolean) {
+  const target = ingat === undefined ? (wadah() ?? localStorage) : ingat ? localStorage : sessionStorage;
+  (target === localStorage ? sessionStorage : localStorage).removeItem(tokenKey);
+  target.setItem(tokenKey, JSON.stringify({ access_token: t.access_token, refresh_token: t.refresh_token }));
+}
+export function clearSession() { localStorage.removeItem(tokenKey); sessionStorage.removeItem(tokenKey); }
 function deviceId() { let id = localStorage.getItem('kopkar_web_device'); if (!id) { id = crypto.randomUUID(); localStorage.setItem('kopkar_web_device', id); } return id; }
 let refreshing: Promise<boolean> | null = null;
 async function refresh(oldAccess: string): Promise<boolean> {
@@ -13,7 +20,7 @@ async function refresh(oldAccess: string): Promise<boolean> {
     if (t.access_token !== oldAccess) return true;
     let response: Response;
     try { response = await fetch(prefix + '/auth/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: t.refresh_token, device_id: deviceId() }) }); } catch { throw new ApiError('Tidak dapat terhubung ke server'); }
-    if (!response.ok) { if (response.status === 401) localStorage.removeItem(tokenKey); return false; }
+    if (!response.ok) { if (response.status === 401) clearSession(); return false; }
     saveTokens(await response.json()); return true;
   };
   if (!refreshing) {
@@ -38,8 +45,7 @@ export async function api<T = any>(path: string, options: { method?: string; bod
   if (response.status === 204) return undefined as T;
   return (raw ? await response.blob() : await response.json()) as T;
 }
-export async function login(username: string, password: string): Promise<User> { const t = await api<Tokens>('/auth/login', { method: 'POST', auth: false, body: { username, password, device_id: deviceId() } }); saveTokens(t); return api<User>('/me'); }
+export async function login(username: string, password: string, ingat = false): Promise<User> { const t = await api<Tokens>('/auth/login', { method: 'POST', auth: false, body: { username, password, device_id: deviceId(), ingat } }); saveTokens(t, ingat); return api<User>('/me'); }
 export async function restore(): Promise<User | null> { if (!tokens()) return null; try { return await api<User>('/me'); } catch (e) { if (e instanceof ApiError && e.status === 401) return null; throw e; } }
-export async function logout() { const t = tokens(); try { if (t) await api('/auth/logout', { method: 'POST', auth: false, body: { refresh_token: t.refresh_token } }); } finally { localStorage.removeItem(tokenKey); } }
-export function clearSession() { localStorage.removeItem(tokenKey); }
+export async function logout() { const t = tokens(); try { if (t) await api('/auth/logout', { method: 'POST', auth: false, body: { refresh_token: t.refresh_token } }); } finally { clearSession(); } }
 export const query = (v: Record<string, string | number | undefined>) => '?' + new URLSearchParams(Object.entries(v).filter(([, x]) => x !== undefined && x !== '').map(([k, x]) => [k, String(x)])).toString();
