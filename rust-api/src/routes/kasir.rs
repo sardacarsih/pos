@@ -18,8 +18,10 @@ const KASIR_ADMIN: &[Role] = &[Role::Kasir, Role::Admin];
 /// Katalog barang read-only: juga dipakai anggota untuk belanja mandiri.
 const KATALOG: &[Role] = &[Role::Kasir, Role::Anggota];
 
+/// Status periode hari ini. Dibaca semua peran (kasir untuk blokir jual, anggota/admin untuk chip topbar web);
+/// datanya tidak sensitif, dan peran() tetap menolak akun yang masih memakai password sementara.
 pub async fn periode_status(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
-    a.peran(KASIR)?;
+    a.peran(&[Role::Kasir, Role::Anggota, Role::Admin])?;
     db::run(&s.pool, |c| {
         let (hari, _) = faktur::sekarang(c)?;
         let tanggal = hari.format("%Y-%m-%d").to_string();
