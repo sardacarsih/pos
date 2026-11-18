@@ -165,10 +165,10 @@
       <section class="panel beli-panel">
         <h2>Saldo per supplier</h2>
         <div class="beli-gulir"><table class="beli-tabel">
-          <thead><tr><th>Supplier</th><th>Faktur terbuka</th><th>Sisa hutang</th><th>Terlambat</th></tr></thead>
+          <thead><tr><th>Supplier</th><th class="beli-angka">Faktur terbuka</th><th class="beli-angka">Sisa hutang</th><th class="beli-angka">Terlambat</th></tr></thead>
           <tbody>{#each supplier as s (s.supplier_id)}
             <tr><th scope="row"><button class="beli-teks-button" type="button" on:click={() => { kodeSupplier = s.supplier_id; cari(); }}>{s.supplier_nama}</button></th>
-              <td>{formatJumlahBeli(s.faktur)}</td><td class="beli-angka">{rpBeli(s.saldo)}</td><td class="beli-angka">{rpBeli(s.terlambat)}</td></tr>
+              <td class="beli-angka">{formatJumlahBeli(s.faktur)}</td><td class="beli-angka">{rpBeli(s.saldo)}</td><td class="beli-angka">{rpBeli(s.terlambat)}</td></tr>
           {/each}</tbody>
         </table></div>
       </section>
@@ -192,7 +192,7 @@
       {#if galat}<p class="error" role="alert">{galat}</p>{/if}
       <div class="beli-gulir"><table class="beli-tabel" aria-busy={loading}>
         <thead><tr><th>Faktur</th><th>Supplier</th><th>{hutang ? 'Jatuh tempo' : 'Penerimaan'}</th>
-          <th>{hutang ? 'Sisa hutang' : 'Total faktur'}</th><th>Status</th></tr></thead>
+          <th class="beli-angka">{hutang ? 'Sisa hutang' : 'Total faktur'}</th><th>Status</th></tr></thead>
         <tbody>
           {#each daftar as f (f.asal + ':' + f.no_transaksi)}
             <tr><th scope="row"><button type="button" class="beli-teks-button" on:click={() => detail(f.no_transaksi)}>{f.no_faktur ?? f.no_transaksi}</button>
@@ -227,11 +227,11 @@
         {#if pilihan.batal_at}<div><dt>Pembatalan</dt><dd>{pilihan.batal_at} · {pilihan.batal_nama} · {pilihan.batal_alasan}</dd></div>{/if}
       </dl>
       <div class="beli-gulir"><table class="beli-tabel">
-        <thead><tr><th>Barang</th><th>Jumlah</th><th>Harga beli</th><th>Potongan</th><th>Subtotal</th></tr></thead>
+        <thead><tr><th>Barang</th><th class="beli-angka">Jumlah</th><th class="beli-angka">Harga beli</th><th class="beli-angka">Potongan</th><th class="beli-angka">Subtotal</th></tr></thead>
         <tbody>{#each pilihan.baris as b}
           <tr><th scope="row">{b.nama ?? b.kode}<small>{b.kode}</small></th>
-            <td>{formatJumlahBeli(b.qty)} {b.satuan}{#if Number(b.isi) !== 1}<small>{formatJumlahBeli(b.isi)} {b.satuan_dasar} per {b.satuan}</small>{/if}</td>
-            <td>{rpBeli(b.harga)}</td><td>{rpBeli(b.potongan)}</td><td>{rpBeli(b.total)}</td></tr>
+            <td class="beli-angka">{formatJumlahBeli(b.qty)} {b.satuan}{#if Number(b.isi) !== 1}<small>{formatJumlahBeli(b.isi)} {b.satuan_dasar} per {b.satuan}</small>{/if}</td>
+            <td class="beli-angka">{rpBeli(b.harga)}</td><td class="beli-angka">{rpBeli(b.potongan)}</td><td class="beli-angka">{rpBeli(b.total)}</td></tr>
         {/each}</tbody>
       </table></div>
       <dl class="beli-total">
@@ -245,12 +245,12 @@
         <h3>Riwayat pembayaran</h3>
         {#if pilihan.pembayaran.length}
           <div class="beli-gulir"><table class="beli-tabel">
-            <thead><tr><th>Tanggal / petugas</th><th>Pembayaran</th><th>Nominal</th><th>Tindakan</th></tr></thead>
+            <thead><tr><th>Tanggal / petugas</th><th>Pembayaran</th><th class="beli-angka">Nominal</th><th>Tindakan</th></tr></thead>
             <tbody>{#each pilihan.pembayaran as p (p.id)}
               <tr><td>{p.tanggal}<small>{p.operator} · {p.created_at}</small></td>
                 <td>{p.balik_id ? 'Pembalikan #' + p.balik_id : metodeBayar[p.metode] + ' #' + p.id}
                   {#if p.referensi}<small>{p.referensi}</small>{/if}{#if p.alasan}<small>{p.alasan}</small>{/if}</td>
-                <td>{rpBeli(p.nominal)}</td><td>
+                <td class="beli-angka">{rpBeli(p.nominal)}</td><td>
                   {#if p.dibalik}<small>Sudah dibalik</small>
                   {:else if !p.balik_id && pilihan.status !== 'BATAL'}
                     <button type="button" class="beli-teks-button" disabled={!online} on:click={() => mulaiAksi('balik', p)}>Balik</button>
@@ -280,7 +280,7 @@
         <label>Tanggal pembayaran <input type="date" min={pilihan?.tanggal_faktur ?? undefined} max={pilihan?.tanggal_server} bind:value={tanggalBayar} required /></label>
         <label>Nominal
           {#key sesiAksi}
-            <input inputmode="numeric" required use:inputAngkaPembelian={{
+            <input class="beli-angka" inputmode="numeric" required use:inputAngkaPembelian={{
               jenis: 'rupiah', nilai: nominal, min: 1, max: pilihan?.sisa ?? undefined, ubah: nilai => nominal = nilai
             }} />
           {/key}

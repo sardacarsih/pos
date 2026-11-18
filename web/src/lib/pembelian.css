@@ -60,10 +60,10 @@
 .beli-tabel .beli-kosong { text-align: center; color: var(--beli-muted); padding: 22px 10px; }
 .beli-grid-barang { min-width: 565px; }
 .beli-grid-barang th[scope=row] { min-width: 140px; }
-.beli-grid-barang td input { min-width: 66px; padding: 7px 6px; border-radius: 7px; font-variant-numeric: tabular-nums; }
+.beli-grid-barang td input { min-width: 66px; padding: 7px 6px; border-radius: 7px; }
 .beli-grid-barang td:nth-child(3), .beli-grid-barang td:nth-child(4) { min-width: 92px; }
 .beli-grid-barang th select { margin-top: 4px; padding: 5px; max-width: 150px; font-size: .8rem; }
-.beli-angka { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.beli-angka { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .beli-baris-judul, .beli-aksi { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .beli-aksi { justify-content: flex-end; margin-top: 14px; }
 .beli-teks-button { padding: 5px 0; color: var(--beli-focus); font-weight: 700; text-align: left; }
@@ -74,6 +74,7 @@
 .beli-total { margin: 14px 0; font-variant-numeric: tabular-nums; }
 .beli-total div { display: flex; gap: 8px; justify-content: space-between; padding: 6px 0; }
 .beli-total dd, .beli-meta dd { margin: 0; font-weight: 700; }
+.beli-total dd { text-align: right; }
 .beli-total-utama { margin-top: 4px; padding-top: 10px !important; border-top: 1px solid var(--beli-line); font-weight: 700; color: var(--beli-focus); }
 .beli-status { display: inline-block; border-radius: 30px; background: var(--beli-soft); color: var(--beli-focus); padding: 4px 8px; font-size: .75rem; font-weight: 700; }
 .beli-status.waspada, .beli-offline { background: var(--beli-warn-bg); color: var(--beli-warn); }

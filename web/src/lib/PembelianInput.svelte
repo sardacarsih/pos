@@ -282,7 +282,7 @@
         <div class="sr-only" role="status">{pesan}</div>
         <div class="beli-gulir">
           <table class="beli-tabel beli-grid-barang" bind:this={tabel}>
-            <thead><tr><th>Barang / satuan</th><th>Jumlah</th><th>Harga beli</th><th>Potongan</th><th>Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
+            <thead><tr><th>Barang / satuan</th><th class="beli-angka">Jumlah</th><th class="beli-angka">Harga beli</th><th class="beli-angka">Potongan</th><th class="beli-angka">Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
             <tbody>
               {#each draf.baris as b, i (b.id)}
                 {@const bruto = brutoBaris(b)}
@@ -300,13 +300,13 @@
                       {:else}<small>Barang sudah tidak tersedia</small>{/if}
                     {/if}
                   </th>
-                  <td><input aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" required
+                  <td><input class="beli-angka" aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" required
                     use:inputAngkaPembelian={{ jenis: 'jumlah', nilai: b.qty, ubah: nilai => b.qty = nilai }}
                     on:keydown={(e) => pindahKolom(e, i, 'harga')} /></td>
-                  <td><input aria-label={'Harga beli ' + b.nama} inputmode="numeric" data-kolom="harga" required
+                  <td><input class="beli-angka" aria-label={'Harga beli ' + b.nama} inputmode="numeric" data-kolom="harga" required
                     use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.harga, min: 1, ubah: nilai => b.harga = nilai }}
                     on:keydown={(e) => pindahKolom(e, i, 'potongan')} /></td>
-                  <td><input aria-label={'Potongan ' + b.nama} inputmode="numeric" data-kolom="potongan"
+                  <td><input class="beli-angka" aria-label={'Potongan ' + b.nama} inputmode="numeric" data-kolom="potongan"
                     use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.potongan, ubah: nilai => b.potongan = nilai }}
                     on:keydown={(e) => pindahKolom(e, i)} /></td>
                   <td class="beli-angka">{rpBeli(bruto === null ? null : bruto - (b.potongan ?? 0))}</td>
@@ -329,7 +329,7 @@
         </label>
         {#if draf.jenis === 'TEMPO'}
           <label>Jatuh tempo <input type="date" min={draf.tanggal_faktur} bind:value={draf.jatuh_tempo} required /></label>
-          <label>Uang muka <input inputmode="numeric"
+          <label>Uang muka <input class="beli-angka" inputmode="numeric"
             use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: draf.uang_muka, ubah: nilai => draf.uang_muka = nilai }} />
           </label>
         {/if}
