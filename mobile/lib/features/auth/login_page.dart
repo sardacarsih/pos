@@ -15,7 +15,7 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _u = TextEditingController();
   final _p = TextEditingController();
-  bool _busy = false, _lihat = false;
+  bool _busy = false, _lihat = false, _ingat = false;
   String? _error;
 
   Future<void> _masuk() async {
@@ -25,7 +25,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _error = null;
     });
     try {
-      await ref.read(authProvider.notifier).login(_u.text, _p.text);
+      await ref
+          .read(authProvider.notifier)
+          .login(_u.text, _p.text, ingat: _ingat);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.pesan);
     } finally {
@@ -181,6 +183,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             setState(() => _lihat = !_lihat),
                                       ),
                                     ),
+                                  ),
+                                  CheckboxListTile(
+                                    value: _ingat,
+                                    onChanged: _busy
+                                        ? null
+                                        : (v) => setState(
+                                            () => _ingat = v ?? false,
+                                          ),
+                                    title: const Text('Ingat saya'),
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
                                   ),
                                   if (_error != null)
                                     Padding(

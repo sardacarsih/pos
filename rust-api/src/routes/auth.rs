@@ -12,13 +12,20 @@ use crate::{
     error::{AppError, AppResult},
 };
 
-const REFRESH_TTL_DAYS: i64 = 30;
+const TTL_INGAT_HARI: i64 = 30;
+const TTL_SESI_HARI: i64 = 1;
+
+/// Hanya `ingat=false` eksplisit yang pendek; klien lama (field kosong) tetap 30 hari.
+fn ttl_login(ingat: Option<bool>) -> i64 {
+    if ingat == Some(false) { TTL_SESI_HARI } else { TTL_INGAT_HARI }
+}
 
 #[derive(Deserialize)]
 pub struct LoginReq {
     pub username: String,
     pub password: String,
     pub device_id: Option<String>,
+    pub ingat: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -75,6 +82,7 @@ pub async fn login(
         return Err(AppError::LoginGagal);
     }
     let secret = s.cfg.jwt_secret.clone();
+    let ttl = ttl_login(req.ingat);
     let (u, refresh) = db::run(&s.pool, move |c| {
         // Argon2 mahal: dijalankan di thread blocking yang sama dengan DB.
         let Some(u) = user::find_by_username(c, &req.username)? else {
@@ -108,7 +116,7 @@ pub async fn login(
             &hash,
             &device.chars().take(100).collect::<String>(),
             &ip,
-            REFRESH_TTL_DAYS,
+            ttl,
         )?;
         Ok((u, plain))
     })
@@ -160,7 +168,7 @@ pub async fn refresh(
             &new_hash,
             &device.chars().take(100).collect::<String>(),
             &ip,
-            REFRESH_TTL_DAYS,
+            ses.ttl_hari,
         )?;
         Ok((u, plain))
     })
@@ -228,4 +236,16 @@ pub async fn me(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
         "nik": a.0.nik, "ganti_password": a.0.ganti, "kategori_diizinkan": kat,
         "default_nik": s.cfg.default_nik,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ttl_mengikuti_ingat_saya() {
+        assert_eq!(ttl_login(None), 30);
+        assert_eq!(ttl_login(Some(false)), 1);
+        assert_eq!(ttl_login(Some(true)), 30);
+    }
 }
