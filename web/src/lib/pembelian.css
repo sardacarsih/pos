@@ -98,3 +98,6 @@
   .beli-form.kisi { grid-template-columns: minmax(0, 1fr); }
   .beli-tab button { padding-inline: 8px; }
 }
+.beli input[aria-invalid='true'] {
+  border-color: var(--beli-err, #a32c25);
+}

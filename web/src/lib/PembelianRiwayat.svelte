@@ -1,9 +1,10 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { api, ApiError, query } from './api';
-  import { labelFaktur, metodeBayar, rpBeli, type DetailBeli, type FakturBeli,
+  import { formatJumlahBeli, labelFaktur, metodeBayar, rpBeli, type DetailBeli, type FakturBeli,
     type Metode, type Pembayaran, type SaldoSupplier } from './pembelian';
   import type { User } from './types';
+  import { inputAngkaPembelian } from './inputAngkaPembelian';
   import './pembelian.css';
 
   export let user: User;
@@ -33,6 +34,7 @@
   let balikBayar: Pembayaran | undefined;
   let sibuk = false;
   let nominal: number | undefined;
+  let sesiAksi = 0;
   let tanggalBayar = '';
   let metode: Metode = 'TUNAI';
   let referensi = '';
@@ -95,6 +97,7 @@
   function mulaiAksi(mode: typeof aksi, p?: Pembayaran) {
     if (!pilihan || !online) return;
     aksi = mode;
+    sesiAksi += 1;
     balikBayar = p;
     nominal = pilihan.sisa ?? undefined;
     tanggalBayar = pilihan.tanggal_server;
@@ -165,7 +168,7 @@
           <thead><tr><th>Supplier</th><th>Faktur terbuka</th><th>Sisa hutang</th><th>Terlambat</th></tr></thead>
           <tbody>{#each supplier as s (s.supplier_id)}
             <tr><th scope="row"><button class="beli-teks-button" type="button" on:click={() => { kodeSupplier = s.supplier_id; cari(); }}>{s.supplier_nama}</button></th>
-              <td>{s.faktur}</td><td class="beli-angka">{rpBeli(s.saldo)}</td><td class="beli-angka">{rpBeli(s.terlambat)}</td></tr>
+              <td>{formatJumlahBeli(s.faktur)}</td><td class="beli-angka">{rpBeli(s.saldo)}</td><td class="beli-angka">{rpBeli(s.terlambat)}</td></tr>
           {/each}</tbody>
         </table></div>
       </section>
@@ -227,7 +230,7 @@
         <thead><tr><th>Barang</th><th>Jumlah</th><th>Harga beli</th><th>Potongan</th><th>Subtotal</th></tr></thead>
         <tbody>{#each pilihan.baris as b}
           <tr><th scope="row">{b.nama ?? b.kode}<small>{b.kode}</small></th>
-            <td>{b.qty} {b.satuan}{#if Number(b.isi) !== 1}<small>{b.isi} {b.satuan_dasar} per {b.satuan}</small>{/if}</td>
+            <td>{formatJumlahBeli(b.qty)} {b.satuan}{#if Number(b.isi) !== 1}<small>{formatJumlahBeli(b.isi)} {b.satuan_dasar} per {b.satuan}</small>{/if}</td>
             <td>{rpBeli(b.harga)}</td><td>{rpBeli(b.potongan)}</td><td>{rpBeli(b.total)}</td></tr>
         {/each}</tbody>
       </table></div>
@@ -275,7 +278,13 @@
       {#if aksi === 'bayar'}
         <p>Sisa hutang {rpBeli(pilihan?.sisa)}</p>
         <label>Tanggal pembayaran <input type="date" min={pilihan?.tanggal_faktur ?? undefined} max={pilihan?.tanggal_server} bind:value={tanggalBayar} required /></label>
-        <label>Nominal <input type="number" inputmode="numeric" min="1" step="1" max={pilihan?.sisa ?? undefined} bind:value={nominal} required /></label>
+        <label>Nominal
+          {#key sesiAksi}
+            <input inputmode="numeric" required use:inputAngkaPembelian={{
+              jenis: 'rupiah', nilai: nominal, min: 1, max: pilihan?.sisa ?? undefined, ubah: nilai => nominal = nilai
+            }} />
+          {/key}
+        </label>
         <label>Metode pembayaran
           <select aria-label="Metode pembayaran" bind:value={metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
         </label>
