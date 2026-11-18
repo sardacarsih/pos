@@ -1,15 +1,15 @@
 /// <reference lib="webworker" />
-import { base, build, version } from '$service-worker';
+import { base, build, files, version } from '$service-worker';
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const prefix = 'kopkar-shell-';
 const name = prefix + version;
 const shell = base + '/';
-const assets = new Set(build);
+const assets = new Set([...build, ...files]);
 
 worker.addEventListener('install', event => {
   event.waitUntil(caches.open(name).then(cache => cache.addAll([
-    ...build.map(path => new Request(path, { cache: 'reload' })),
+    ...[...assets].map(path => new Request(path, { cache: 'reload' })),
     new Request(shell, { cache: 'reload' })
   ])));
 });
