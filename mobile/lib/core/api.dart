@@ -561,7 +561,7 @@ class ApiClient {
   }
 
   /// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
-  Future<({List<StokItem> items, bool lagi, int? jumlah})> stokHabis({
+  Future<({List<StokItem> items, bool lagi, int? jumlah, bool kontrolStok})> stokHabis({
     String? q,
     int page = 1,
   }) async {
@@ -576,14 +576,20 @@ class ApiClient {
       ],
       lagi: j['ada_lagi'] == true,
       jumlah: (j['jumlah'] as num?)?.toInt(),
+      kontrolStok: j['kontrol_stok'] != false,
     );
   }
 
-  /// Koreksi stok satu barang lewat dokumen SO. Mengembalikan nomor SO.
-  Future<String> opnameStok(int produkId, String qtyFisik) async {
+  /// Koreksi stok satu barang lewat dokumen SO. `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
+  Future<String> opnameStok(
+    int produkId,
+    String qtyFisik, {
+    required String idempotencyKey,
+  }) async {
     final j = await post(
       '/api/v1/admin/stok-opname',
       body: {'produk_id': produkId, 'qty_fisik': num.parse(qtyFisik)},
+      headers: {'Idempotency-Key': idempotencyKey},
     ) as Map<String, dynamic>;
     return j['nomor_so'] as String? ?? '';
   }
