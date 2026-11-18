@@ -144,4 +144,116 @@ void main() {
       expect(find.text('Periode tertutup'), findsOneWidget);
     });
   });
+
+  group('rincian penjualan: rentang', () {
+    test('tambah hari lintas bulan/tahun dan jumlah hari inklusif', () {
+      expect(tambahHari('2026-11-18', -6), '2026-11-12');
+      expect(tambahHari('2027-01-02', -7), '2026-12-26');
+      expect(tambahHari('2026-02-28', 1), '2026-03-01');
+      expect(jumlahHari(const Rentang('2026-11-18', '2026-11-18')), 1);
+      expect(jumlahHari(const Rentang('2026-11-12', '2026-11-18')), 7);
+    });
+
+    test('pilihan cepat mengikuti tanggal server', () {
+      expect(rentangPreset(PresetRentang.hari, '2026-11-18'), const Rentang('2026-11-18', '2026-11-18'));
+      expect(rentangPreset(PresetRentang.tujuh, '2026-11-18'), const Rentang('2026-11-12', '2026-11-18'));
+      expect(rentangPreset(PresetRentang.hari, 'salah'), isNull);
+      expect(rentangPreset(PresetRentang.bebas, '2026-11-18'), isNull);
+    });
+
+    test('periode berjalan dipotong sampai hari ini, null bila tidak diketahui', () {
+      expect(
+        rentangPreset(PresetRentang.periode, '2026-11-18', periodeDari: '2026-11-01', periodeSampai: '2026-11-30'),
+        const Rentang('2026-11-01', '2026-11-18'),
+      );
+      expect(
+        rentangPreset(PresetRentang.periode, '2026-12-05', periodeDari: '2026-11-01', periodeSampai: '2026-11-30'),
+        const Rentang('2026-11-01', '2026-11-30'),
+      );
+      expect(rentangPreset(PresetRentang.periode, '2026-11-18'), isNull);
+      expect(
+        rentangPreset(PresetRentang.periode, '2026-10-31', periodeDari: '2026-11-01', periodeSampai: '2026-11-30'),
+        isNull,
+      );
+    });
+
+    test('validasi rentang meniru aturan server', () {
+      const h = '2026-11-18';
+      expect(validasiRentang(const Rentang('2026-11-12', h), h), isNull);
+      expect(validasiRentang(const Rentang('', h), h), contains('tanggal'));
+      expect(validasiRentang(const Rentang('2026-11-19', '2026-11-18'), h), contains('setelah'));
+      expect(validasiRentang(const Rentang('2026-11-18', '2026-11-19'), h), contains('hari ini'));
+      expect(validasiRentang(const Rentang('2026-08-18', '2026-11-17'), h), isNull); // tepat 92 hari
+      expect(validasiRentang(const Rentang('2026-08-17', '2026-11-17'), h), contains('92'));
+      expect(persenJenis(1, 3), 33);
+      expect(persenJenis(5, 0), 0);
+    });
+  });
+
+  group('rincian penjualan: model dan widget', () {
+    final json = <String, dynamic>{
+      'dari': '2026-11-16',
+      'sampai': '2026-11-18',
+      'hari': 3,
+      'ringkasan': {
+        'tunai': {'jumlah': 2, 'total': 400},
+        'kredit': {'jumlah': 2, 'total': 270},
+        'lain': {'jumlah': 1, 'total': 50},
+        'total': {'jumlah': 5, 'total': 720},
+      },
+      'per_kasir': [
+        {
+          'kasir': 'k1',
+          'nama': 'Rina',
+          'tunai': {'jumlah': 2, 'total': 400},
+          'kredit': {'jumlah': 1, 'total': 200},
+          'lain': {'jumlah': 0, 'total': 0},
+          'total': {'jumlah': 3, 'total': 600},
+        },
+      ],
+      'harian': [
+        {'tanggal': '2026-11-16', 'tunai': 100, 'kredit': 0, 'lain': 0, 'jumlah': 1},
+        {'tanggal': '2026-11-17', 'tunai': 0, 'kredit': 0, 'lain': 0, 'jumlah': 0},
+        {'tanggal': '2026-11-18', 'tunai': 300, 'kredit': 270, 'lain': 50, 'jumlah': 4},
+      ],
+    };
+
+    test('model membaca ringkasan, kasir (pecahan di level yang sama), dan harian', () {
+      final r = RincianPenjualan.fromJson(json);
+      expect(r.hari, 3);
+      expect(r.ringkasan.total.total, 720);
+      expect(r.ringkasan.tunai.total + r.ringkasan.kredit.total + r.ringkasan.lain.total, r.ringkasan.total.total);
+      expect(r.perKasir.single.nama, 'Rina');
+      expect(r.perKasir.single.pecahan.total.total, 600);
+      expect(r.harian.length, 3);
+      expect(r.harian[2].kredit, 270);
+    });
+
+    testWidgets('KasirRincianKartu menampilkan tunai, kredit, total; Lainnya hanya bila ada', (t) async {
+      final r = RincianPenjualan.fromJson(json);
+      await t.pumpWidget(_host(KasirRincianKartu(judul: 'Rina', subjudul: 'k1', pecahan: r.perKasir.single.pecahan)));
+      expect(find.text('Rina'), findsOneWidget);
+      expect(find.text('Tunai'), findsOneWidget);
+      expect(find.text('Kredit'), findsOneWidget);
+      expect(find.text('Lainnya'), findsNothing);
+      expect(find.textContaining('Total · 3 trx'), findsOneWidget);
+      await t.pumpWidget(_host(KasirRincianKartu(judul: 'Semua kasir', pecahan: r.ringkasan, total: true)));
+      expect(find.text('Lainnya'), findsOneWidget);
+    });
+
+    testWidgets('JenisKartu menampilkan total, jumlah transaksi, dan persen', (t) async {
+      final r = RincianPenjualan.fromJson(json);
+      await t.pumpWidget(_host(JenisKartu(label: 'Tunai', bagian: r.ringkasan.tunai, persen: 56, warna: Colors.green)));
+      expect(find.text('Tunai'), findsOneWidget);
+      expect(find.text('2 transaksi · 56%'), findsOneWidget);
+    });
+
+    testWidgets('TrenBertumpuk menyediakan ringkasan tunai/kredit untuk pembaca layar', (t) async {
+      final handle = t.ensureSemantics();
+      final r = RincianPenjualan.fromJson(json);
+      await t.pumpWidget(_host(TrenBertumpuk(harian: r.harian)));
+      expect(find.bySemanticsLabel(RegExp(r'^Penjualan harian tunai dan kredit: Sen tunai Rp 100, kredit Rp 0')), findsOneWidget);
+      handle.dispose();
+    });
+  });
 }

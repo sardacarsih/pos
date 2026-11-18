@@ -553,3 +553,252 @@ class JudulBagian extends StatelessWidget {
     ),
   );
 }
+
+// ---------------------------------------------------------------- rincian penjualan: rentang waktu (logika murni)
+
+enum PresetRentang { hari, tujuh, periode, bebas }
+
+class Rentang {
+  const Rentang(this.dari, this.sampai);
+  final String dari, sampai; // YYYY-MM-DD
+
+  @override
+  bool operator ==(Object other) => other is Rentang && other.dari == dari && other.sampai == sampai;
+  @override
+  int get hashCode => Object.hash(dari, sampai);
+}
+
+/// Batas rentang yang diterima server (hari) dan batas grafik harian.
+const maksHariRincian = 92;
+const maksHariGrafik = 31;
+
+DateTime? _tgl(String s) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) ? DateTime.tryParse('${s}T00:00:00Z') : null;
+
+String isoTanggal(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+String tambahHari(String iso, int n) => isoTanggal(_tgl(iso)!.add(Duration(days: n)));
+
+int jumlahHari(Rentang r) => _tgl(r.sampai)!.difference(_tgl(r.dari)!).inDays + 1;
+
+/// Rentang dari pilihan cepat. "Hari ini" mengikuti tanggal server. Periode berjalan dipotong sampai hari ini;
+/// null bila tidak diketahui.
+Rentang? rentangPreset(PresetRentang p, String hariIni, {String? periodeDari, String? periodeSampai}) {
+  if (_tgl(hariIni) == null) return null;
+  switch (p) {
+    case PresetRentang.hari:
+      return Rentang(hariIni, hariIni);
+    case PresetRentang.tujuh:
+      return Rentang(tambahHari(hariIni, -6), hariIni);
+    case PresetRentang.periode:
+      if (periodeDari == null || periodeSampai == null) return null;
+      if (_tgl(periodeDari) == null || _tgl(periodeSampai) == null || periodeDari.compareTo(hariIni) > 0) return null;
+      return Rentang(periodeDari, periodeSampai.compareTo(hariIni) < 0 ? periodeSampai : hariIni);
+    case PresetRentang.bebas:
+      return null;
+  }
+}
+
+/// Pesan galat untuk rentang yang tidak akan diterima server; null bila valid.
+String? validasiRentang(Rentang r, String hariIni) {
+  if (_tgl(r.dari) == null || _tgl(r.sampai) == null) return 'Isi tanggal awal dan akhir.';
+  if (r.dari.compareTo(r.sampai) > 0) return 'Tanggal awal tidak boleh setelah tanggal akhir.';
+  if (r.sampai.compareTo(hariIni) > 0) return 'Tanggal akhir tidak boleh melewati hari ini.';
+  if (jumlahHari(r) > maksHariRincian) return 'Rentang maksimal $maksHariRincian hari.';
+  return null;
+}
+
+/// Persen bagian terhadap total (0 bila total 0).
+int persenJenis(int bagian, int total) => total > 0 ? (bagian / total * 100).round() : 0;
+
+// ---------------------------------------------------------------- rincian penjualan: widget
+
+const _kuning = Color(0xFFE0A100);
+
+Color _warnaLain(BuildContext c) =>
+    Theme.of(c).brightness == Brightness.dark ? const Color(0xFF6F8D78) : const Color(0xFF8AA08F);
+
+/// Kartu satu jenis bayar: total besar, jumlah transaksi, dan persen dari total rentang.
+class JenisKartu extends StatelessWidget {
+  const JenisKartu({super.key, required this.label, required this.bagian, required this.persen, required this.warna});
+  final String label;
+  final BagianJual bagian;
+  final int persen;
+  final Color warna;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(border: Border(left: BorderSide(color: warna, width: 5))),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: t.bodySmall),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                rupiah(bagian.total),
+                style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+              ),
+            ),
+            Text('${bagian.jumlah} transaksi · $persen%', style: t.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bar proporsi tiga bagian (tunai, kredit, lainnya) terhadap total rentang.
+class ProporsiJenis extends StatelessWidget {
+  const ProporsiJenis({super.key, required this.pecahan});
+  final PecahanJual pecahan;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final total = pecahan.total.total;
+    int f(int v) => total <= 0 ? 0 : v;
+    final seg = <(int, Color)>[
+      (f(pecahan.tunai.total), cs.primary),
+      (f(pecahan.kredit.total), _kuning),
+      (f(pecahan.lain.total), _warnaLain(context)),
+    ].where((s) => s.$1 > 0).toList();
+    return Semantics(
+      label: 'Tunai ${persenJenis(pecahan.tunai.total, total)} persen, kredit ${persenJenis(pecahan.kredit.total, total)} persen',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: SizedBox(
+          height: 12,
+          child: seg.isEmpty
+              ? ColoredBox(color: cs.outline)
+              : Row(children: [for (final s in seg) Expanded(flex: s.$1, child: ColoredBox(color: s.$2, child: const SizedBox.expand()))]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grafik batang bertumpuk harian: tunai (bawah), kredit, lainnya. Hanya untuk rentang <= [maksHariGrafik] hari.
+class TrenBertumpuk extends StatelessWidget {
+  const TrenBertumpuk({super.key, required this.harian});
+  final List<RincianHari> harian;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final totals = [for (final h in harian) h.tunai + h.kredit + h.lain];
+    final lain = _warnaLain(context);
+    String label(String iso) => harian.length <= 7 ? hariSingkat(iso) : iso.substring(8);
+    return Semantics(
+      label: 'Penjualan harian tunai dan kredit: ${[for (final h in harian) '${label(h.tanggal)} tunai ${rupiah(h.tunai)}, kredit ${rupiah(h.kredit)}'].join('; ')}',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          height: 160,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < harian.length; i++)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: harian.length > 14 ? 1 : 3),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: cs.outline.withValues(alpha: .45), borderRadius: BorderRadius.circular(6)),
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: totals[i] <= 0
+                                  ? const SizedBox.shrink()
+                                  : FractionallySizedBox(
+                                      heightFactor: tinggiBatang(totals[i], totals),
+                                      child: ClipRRect(
+                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                        child: Column(
+                                          children: [
+                                            if (harian[i].lain > 0) Expanded(flex: harian[i].lain, child: ColoredBox(color: lain, child: const SizedBox.expand())),
+                                            if (harian[i].kredit > 0) Expanded(flex: harian[i].kredit, child: const ColoredBox(color: _kuning, child: SizedBox.expand())),
+                                            if (harian[i].tunai > 0) Expanded(flex: harian[i].tunai, child: ColoredBox(color: cs.primary, child: const SizedBox.expand())),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(label(harian[i].tanggal), style: t.labelSmall?.copyWith(fontSize: 9, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.clip),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Satu kasir (atau baris total): tunai, kredit, lainnya (bila ada), total, dan jumlah transaksi.
+class KasirRincianKartu extends StatelessWidget {
+  const KasirRincianKartu({super.key, required this.judul, this.subjudul, required this.pecahan, this.total = false});
+  final String judul;
+  final String? subjudul;
+  final PecahanJual pecahan;
+  final bool total;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    Widget baris(String l, BagianJual b) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(child: Text(l, style: t.bodySmall)),
+          Text('${b.jumlah} trx', style: t.bodySmall),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 112,
+            child: Text(rupiah(b.total), textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+          ),
+        ],
+      ),
+    );
+    return Card(
+      margin: EdgeInsets.zero,
+      color: total ? cs.primaryContainer : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(judul, style: const TextStyle(fontWeight: FontWeight.w700)),
+            if (subjudul != null && subjudul!.isNotEmpty) Text(subjudul!, style: t.bodySmall),
+            const SizedBox(height: 6),
+            baris('Tunai', pecahan.tunai),
+            baris('Kredit', pecahan.kredit),
+            if (pecahan.lain.jumlah > 0 || pecahan.lain.total > 0) baris('Lainnya', pecahan.lain),
+            const Divider(height: 14),
+            Row(
+              children: [
+                Expanded(child: Text('Total · ${pecahan.total.jumlah} trx', style: const TextStyle(fontWeight: FontWeight.w700))),
+                Text(rupiah(pecahan.total.total), style: const TextStyle(fontWeight: FontWeight.w800, fontFeatures: [FontFeature.tabularFigures()])),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

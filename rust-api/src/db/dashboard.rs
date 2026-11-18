@@ -325,6 +325,248 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
     })
 }
 
+// ------------------------------------------------------------------ rincian penjualan (tunai/kredit, per kasir)
+
+/// Rentang maksimum rincian (hari): menjaga query dan grafik tetap ringan.
+pub const MAKS_HARI_RINCIAN: i64 = 92;
+
+/// Jumlah transaksi dan nilai rupiahnya.
+#[derive(Debug, Serialize, Clone, Copy, Default, PartialEq)]
+pub struct Bagian {
+    pub jumlah: i64,
+    pub total: i64,
+}
+
+/// Penjualan dipecah menurut jenis bayar. `lain` = selain TUNAI/KREDIT; `total` selalu = tunai + kredit + lain.
+#[derive(Debug, Serialize, Clone, Copy, Default, PartialEq)]
+pub struct Pecahan {
+    pub tunai: Bagian,
+    pub kredit: Bagian,
+    pub lain: Bagian,
+    pub total: Bagian,
+}
+
+impl Pecahan {
+    fn dari(total: Bagian, tunai: Bagian, kredit: Bagian) -> Self {
+        Self {
+            lain: Bagian {
+                jumlah: total.jumlah - tunai.jumlah - kredit.jumlah,
+                total: total.total - tunai.total - kredit.total,
+            },
+            tunai,
+            kredit,
+            total,
+        }
+    }
+
+    fn tambah(&mut self, o: &Pecahan) {
+        for (a, b) in [
+            (&mut self.tunai, o.tunai),
+            (&mut self.kredit, o.kredit),
+            (&mut self.lain, o.lain),
+            (&mut self.total, o.total),
+        ] {
+            a.jumlah += b.jumlah;
+            a.total += b.total;
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct HarianRincian {
+    pub tanggal: String,
+    pub tunai: i64,
+    pub kredit: i64,
+    pub lain: i64,
+    pub jumlah: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct KasirRincian {
+    pub kasir: String,
+    pub nama: String,
+    #[serde(flatten)]
+    pub pecahan: Pecahan,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Rincian {
+    pub dari: String,
+    pub sampai: String,
+    pub hari: i64,
+    pub ringkasan: Pecahan,
+    pub per_kasir: Vec<KasirRincian>,
+    pub harian: Vec<HarianRincian>,
+}
+
+/// Validasi rentang tanggal rincian: format YYYY-MM-DD, dari <= sampai, tidak melewati hari ini, maks 92 hari.
+pub fn validasi_rentang(dari: &str, sampai: &str, hari_ini: NaiveDate) -> AppResult<(NaiveDate, NaiveDate)> {
+    let parse = |s: &str, nama: &str| {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .map_err(|_| AppError::validation(format!("Tanggal {nama} harus berformat YYYY-MM-DD")))
+    };
+    let (d, s) = (parse(dari, "awal")?, parse(sampai, "akhir")?);
+    if d > s {
+        return Err(AppError::validation("Tanggal awal tidak boleh setelah tanggal akhir"));
+    }
+    if s > hari_ini {
+        return Err(AppError::validation("Tanggal akhir tidak boleh melewati hari ini"));
+    }
+    if (s - d).num_days() + 1 > MAKS_HARI_RINCIAN {
+        return Err(AppError::validation(format!("Rentang maksimal {MAKS_HARI_RINCIAN} hari")));
+    }
+    Ok((d, s))
+}
+
+/// Susun satu baris per hari dari `dari` s/d `sampai` (hari tanpa transaksi = 0).
+pub fn isi_harian(rows: &[(NaiveDate, Pecahan)], dari: NaiveDate, sampai: NaiveDate) -> Vec<HarianRincian> {
+    let n = (sampai - dari).num_days() + 1;
+    (0..n)
+        .map(|i| {
+            let d = dari + Duration::days(i);
+            let p = rows.iter().find(|(t, _)| *t == d).map(|(_, p)| *p).unwrap_or_default();
+            HarianRincian {
+                tanggal: d.format("%Y-%m-%d").to_string(),
+                tunai: p.tunai.total,
+                kredit: p.kredit.total,
+                lain: p.lain.total,
+                jumlah: p.total.jumlah,
+            }
+        })
+        .collect()
+}
+
+/// Ukuran yang sama untuk kelompok hari dan kasir: jumlah+total keseluruhan, TUNAI, dan KREDIT.
+fn ukuran_rincian() -> String {
+    let nilai = |cond: &str| tm(&format!("NVL(SUM(CASE WHEN {cond} THEN TOTAL END), 0)"));
+    format!(
+        "COUNT(*), {}, COUNT(CASE WHEN JENIS_BAYAR = 'TUNAI' THEN 1 END), {}, COUNT(CASE WHEN JENIS_BAYAR = 'KREDIT' THEN 1 END), {}",
+        tm("NVL(SUM(TOTAL), 0)"),
+        nilai("JENIS_BAYAR = 'TUNAI'"),
+        nilai("JENIS_BAYAR = 'KREDIT'"),
+    )
+}
+
+/// Baca enam kolom `ukuran_rincian` mulai indeks `o`.
+fn baca_pecahan(r: &oracle::Row, o: usize) -> AppResult<Pecahan> {
+    let rp = |i: usize| -> AppResult<i64> { Ok(tampil(dec(&r.get::<_, String>(i)?)?)) };
+    Ok(Pecahan::dari(
+        Bagian { jumlah: r.get(o)?, total: rp(o + 1)? },
+        Bagian { jumlah: r.get(o + 2)?, total: rp(o + 3)? },
+        Bagian { jumlah: r.get(o + 4)?, total: rp(o + 5)? },
+    ))
+}
+
+/// Rincian penjualan semua kasir (mobile dan desktop) pada rentang: per hari dan per kasir, tunai vs kredit.
+/// Ringkasan dijumlahkan dari baris harian yang sama sehingga selalu cocok dengan jumlah tabel kasir.
+pub fn rincian_penjualan(conn: &Connection, dari: NaiveDate, sampai: NaiveDate) -> AppResult<Rincian> {
+    let besok = sampai + Duration::days(1);
+    let sql = format!(
+        "SELECT TO_CHAR(TRUNC(TANGGAL), 'YYYY-MM-DD'), {} FROM POS_PENJUALAN \
+         WHERE TANGGAL >= :dari AND TANGGAL < :besok GROUP BY TRUNC(TANGGAL)",
+        ukuran_rincian()
+    );
+    let mut rows = Vec::new();
+    for r in conn.query_named(&sql, &[("dari", &dari), ("besok", &besok)])? {
+        let r = r?;
+        let tgl = NaiveDate::parse_from_str(&r.get::<_, String>(0)?, "%Y-%m-%d")
+            .map_err(|e| AppError::Internal(format!("tanggal rincian: {e}")))?;
+        rows.push((tgl, baca_pecahan(&r, 1)?));
+    }
+    let mut ringkasan = Pecahan::default();
+    for (_, p) in &rows {
+        ringkasan.tambah(p);
+    }
+
+    let sql = format!(
+        "SELECT NVL(KASIR, '-'), NVL(MAX(NAMA_KASIR), ''), {} FROM POS_PENJUALAN \
+         WHERE TANGGAL >= :dari AND TANGGAL < :besok GROUP BY KASIR ORDER BY SUM(TOTAL) DESC FETCH FIRST 50 ROWS ONLY",
+        ukuran_rincian()
+    );
+    let mut per_kasir = Vec::new();
+    for r in conn.query_named(&sql, &[("dari", &dari), ("besok", &besok)])? {
+        let r = r?;
+        per_kasir.push(KasirRincian {
+            kasir: r.get(0)?,
+            // Oracle menganggap '' sebagai NULL: penjualan lama/desktop bisa tanpa NAMA_KASIR.
+            nama: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+            pecahan: baca_pecahan(&r, 2)?,
+        });
+    }
+
+    Ok(Rincian {
+        dari: dari.format("%Y-%m-%d").to_string(),
+        sampai: sampai.format("%Y-%m-%d").to_string(),
+        hari: (sampai - dari).num_days() + 1,
+        ringkasan,
+        per_kasir,
+        harian: isi_harian(&rows, dari, sampai),
+    })
+}
+
+#[cfg(test)]
+mod rincian_tests {
+    use super::*;
+
+    fn d(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    }
+
+    fn bagian(jumlah: i64, total: i64) -> Bagian {
+        Bagian { jumlah, total }
+    }
+
+    #[test]
+    fn pecahan_menghitung_jenis_lain_dan_menjaga_total() {
+        let p = Pecahan::dari(bagian(10, 1000), bagian(6, 600), bagian(3, 300));
+        assert_eq!(p.lain, bagian(1, 100));
+        assert_eq!(p.tunai.total + p.kredit.total + p.lain.total, p.total.total);
+        let nol = Pecahan::dari(bagian(0, 0), bagian(0, 0), bagian(0, 0));
+        assert_eq!(nol, Pecahan::default());
+    }
+
+    #[test]
+    fn rentang_divalidasi() {
+        let hari = d("2026-11-18");
+        assert_eq!(validasi_rentang("2026-11-18", "2026-11-18", hari).unwrap(), (hari, hari));
+        assert!(validasi_rentang("2026-11-12", "2026-11-18", hari).is_ok());
+        for (a, b) in [
+            ("2026-11-19", "2026-11-18"), // terbalik
+            ("2026-11-18", "2026-11-19"), // masa depan
+            ("2026-01-01", "2026-11-18"), // > 92 hari
+            ("18-11-2026", "2026-11-18"), // format salah
+            ("2026-11-18", ""),
+        ] {
+            assert!(validasi_rentang(a, b, hari).is_err(), "{a} {b}");
+        }
+        // Tepat 92 hari diterima, 93 ditolak.
+        assert!(validasi_rentang("2026-08-18", "2026-11-17", hari).is_ok());
+        assert!(validasi_rentang("2026-08-17", "2026-11-17", hari).is_err());
+    }
+
+    #[test]
+    fn harian_mengisi_hari_kosong_dan_lintas_tahun() {
+        let p = Pecahan::dari(bagian(3, 300), bagian(2, 200), bagian(1, 100));
+        let h = isi_harian(&[(d("2026-12-31"), p)], d("2026-12-30"), d("2027-01-01"));
+        assert_eq!(h.len(), 3);
+        assert_eq!((h[0].tanggal.as_str(), h[0].jumlah), ("2026-12-30", 0));
+        assert_eq!((h[1].tunai, h[1].kredit, h[1].lain, h[1].jumlah), (200, 100, 0, 3));
+        assert_eq!(h[2].tanggal, "2027-01-01");
+        assert_eq!(isi_harian(&[], d("2026-11-18"), d("2026-11-18")).len(), 1);
+    }
+
+    #[test]
+    fn ringkasan_menjumlahkan_pecahan() {
+        let a = Pecahan::dari(bagian(3, 300), bagian(2, 200), bagian(1, 100));
+        let b = Pecahan::dari(bagian(2, 500), bagian(0, 0), bagian(2, 500));
+        let mut r = Pecahan::default();
+        r.tambah(&a);
+        r.tambah(&b);
+        assert_eq!(r.total, bagian(5, 800));
+        assert_eq!((r.tunai, r.kredit), (bagian(2, 200), bagian(3, 600)));
+    }
+}
+
 #[cfg(test)]
 mod tren_tests {
     use super::*;

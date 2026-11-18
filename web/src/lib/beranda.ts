@@ -59,3 +59,43 @@ export function hariSingkat(tanggal: string): string {
   const d = new Date(`${tanggal}T00:00:00`);
   return Number.isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('id-ID', { weekday: 'short' }).format(d);
 }
+
+// ---- rincian penjualan: rentang waktu
+
+export type Preset = 'hari' | 'tujuh' | 'periode' | 'bebas';
+export interface Rentang { dari: string; sampai: string }
+/** Batas rentang yang diterima server (hari). */
+export const MAKS_HARI_RINCIAN = 92;
+/** Grafik harian hanya ditampilkan sampai sejauh ini (lebih dari ini batang terlalu rapat). */
+export const MAKS_HARI_GRAFIK = 31;
+
+const MS_HARI = 86_400_000;
+const keMs = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
+const keIso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+const tanggalValid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(keMs(s)) && keIso(keMs(s)) === s;
+
+export function tambahHari(iso: string, n: number): string { return keIso(keMs(iso) + n * MS_HARI); }
+export function jumlahHari(r: Rentang): number { return Math.round((keMs(r.sampai) - keMs(r.dari)) / MS_HARI) + 1; }
+
+/** Rentang dari pilihan cepat. "Hari ini" mengikuti tanggal server. Periode berjalan dipotong sampai hari ini; null bila tidak diketahui. */
+export function rentangPreset(preset: Exclude<Preset, 'bebas'>, hariIni: string, periodeDari?: string | null, periodeSampai?: string | null): Rentang | null {
+  if (!tanggalValid(hariIni)) return null;
+  if (preset === 'hari') return { dari: hariIni, sampai: hariIni };
+  if (preset === 'tujuh') return { dari: tambahHari(hariIni, -6), sampai: hariIni };
+  if (!periodeDari || !periodeSampai || !tanggalValid(periodeDari) || !tanggalValid(periodeSampai) || periodeDari > hariIni) return null;
+  return { dari: periodeDari, sampai: periodeSampai < hariIni ? periodeSampai : hariIni };
+}
+
+/** Pesan galat untuk rentang yang tidak akan diterima server; null bila valid. */
+export function validasiRentang(r: Rentang, hariIni: string): string | null {
+  if (!tanggalValid(r.dari) || !tanggalValid(r.sampai)) return 'Isi tanggal awal dan akhir.';
+  if (r.dari > r.sampai) return 'Tanggal awal tidak boleh setelah tanggal akhir.';
+  if (r.sampai > hariIni) return 'Tanggal akhir tidak boleh melewati hari ini.';
+  if (jumlahHari(r) > MAKS_HARI_RINCIAN) return `Rentang maksimal ${MAKS_HARI_RINCIAN} hari.`;
+  return null;
+}
+
+/** Persen bagian terhadap total (0 bila total 0). Tunai + kredit + lain dapat berjumlah 99-101 karena pembulatan. */
+export function persenJenis(bagian: number, total: number): number {
+  return total > 0 ? Math.round((bagian / total) * 100) : 0;
+}
