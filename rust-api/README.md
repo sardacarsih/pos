@@ -9,6 +9,9 @@ proyek C# tidak diubah. Tabel baru berprefiks `MOB_*` (user, sesi, kategori per 
 3. `cargo run -- migrate`, lalu `cargo run -- user-add --username admin --nama "Admin" --role ADMIN`
    (password sementara dicetak sekali; wajib diganti saat login pertama), lalu `cargo run`.
 4. HTTPS: dihentikan di reverse proxy (Caddy/nginx); set `POS_TRUST_PROXY=true`. Server tidak melayani TLS sendiri.
+   Akun semua anggota aktif sekaligus: `cargo run -- user-add-anggota --dry-run` (hitung saja), lalu
+   `cargo run -- user-add-anggota --xlsx anggota.xlsx` (username = NIK; daftar password sementara per unit kerja,
+   wajib ganti saat login pertama). File berisi password: hapus setelah dibagikan.
 5. Mobile: `flutter run --dart-define=API_URL=https://alamat-server`.
 
 ## Identitas
