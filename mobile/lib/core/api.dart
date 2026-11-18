@@ -560,6 +560,34 @@ class ApiClient {
     );
   }
 
+  /// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
+  Future<({List<StokItem> items, bool lagi, int? jumlah})> stokHabis({
+    String? q,
+    int page = 1,
+  }) async {
+    final j = await get(
+      '/api/v1/admin/stok-habis',
+      q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': 30},
+    ) as Map<String, dynamic>;
+    return (
+      items: [
+        for (final p in j['items'] as List)
+          StokItem.fromJson(p as Map<String, dynamic>),
+      ],
+      lagi: j['ada_lagi'] == true,
+      jumlah: (j['jumlah'] as num?)?.toInt(),
+    );
+  }
+
+  /// Koreksi stok satu barang lewat dokumen SO. Mengembalikan nomor SO.
+  Future<String> opnameStok(int produkId, String qtyFisik) async {
+    final j = await post(
+      '/api/v1/admin/stok-opname',
+      body: {'produk_id': produkId, 'qty_fisik': num.parse(qtyFisik)},
+    ) as Map<String, dynamic>;
+    return j['nomor_so'] as String? ?? '';
+  }
+
   Future<ProdukAdmin> ubahProduk(
     int id, {
     required String nama,

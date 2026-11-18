@@ -316,6 +316,20 @@ class ProdukAdmin {
   final bool aktif;
 }
 
+/// Produk dengan stok sistem <= 0 (monitoring stok habis).
+class StokItem {
+  StokItem.fromJson(Map<String, dynamic> j)
+    : id = _i(j['id']),
+      kode = _s(j['kode']),
+      nama = _s(j['nama']),
+      satuan = _s(j['satuan']),
+      kategori = _s(j['kategori']),
+      stok = (j['stok'] as num?)?.toDouble() ?? 0;
+  final int id;
+  final String kode, nama, satuan, kategori;
+  final double stok;
+}
+
 class UserInfo {
   UserInfo.fromJson(Map<String, dynamic> j)
     : id = _i(j['id']),

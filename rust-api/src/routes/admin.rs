@@ -449,6 +449,83 @@ mod produk_query_tests {
     }
 }
 
+// ------------------------------------------------------------------ stok habis & opname
+
+#[derive(Deserialize)]
+pub struct StokQuery {
+    q: Option<String>,
+    kategori: Option<String>,
+    page: Option<u32>,
+    size: Option<u32>,
+}
+
+/// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
+pub async fn stok_habis(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<StokQuery>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let pg = super::Paging {
+        q: q.q,
+        page: q.page,
+        size: q.size,
+    };
+    let (page, size) = (pg.page(), pg.size());
+    let teks = pg.q;
+    let kategori = q.kategori;
+    let (h, jumlah) = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
+        katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size)
+    })
+    .await?;
+    Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah })))
+}
+
+#[derive(Deserialize)]
+pub struct OpnameReq {
+    produk_id: i64,
+    qty_fisik: rust_decimal::Decimal,
+}
+
+/// Koreksi stok satu barang lewat dokumen SO (berbagi tabel/nomor dengan desktop).
+pub async fn stok_opname(
+    State(s): State<AppState>,
+    a: Auth,
+    Json(req): Json<OpnameReq>,
+) -> AppResult<Json<db::opname::HasilOpname>> {
+    let admin = a.peran(ADMIN)?.usr.clone();
+    db::opname::validasi_qty(req.qty_fisik)?;
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        db::opname::simpan(c, req.produk_id, req.qty_fisik, hari)
+    })
+    .await?;
+    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, selisih = %h.selisih, "stok opname");
+    Ok(Json(h))
+}
+
+#[cfg(test)]
+mod opname_tests {
+    use super::*;
+
+    #[test]
+    fn opname_req_menerima_angka_json() {
+        let r: OpnameReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":12.5}"#).unwrap();
+        assert_eq!((r.produk_id, r.qty_fisik.to_string()), (7, "12.5".into()));
+        let r: OpnameReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":0}"#).unwrap();
+        assert!(r.qty_fisik.is_zero());
+    }
+
+    #[test]
+    fn stok_query_menerima_angka() {
+        let uri: axum::http::Uri = "/api/v1/admin/stok-habis?q=gula&page=2&size=30&kategori=14".parse().unwrap();
+        let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+    }
+}
+
 // ------------------------------------------------------------------ foto produk
 
 /// Unggah foto produk: body = bytes gambar mentah (PNG/JPEG, maks 1 MB). Jenis dicek dari isi file.
