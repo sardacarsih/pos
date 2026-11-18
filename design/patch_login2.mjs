@@ -1,0 +1,10 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+let s = readFileSync('screens_login.mjs', 'utf8');
+const rep = (a, b) => { if (!s.includes(a)) throw new Error('tidak ketemu: ' + a.slice(0, 60)); s = s.replace(a, b); };
+rep("V430 H0Z', p.jauh, 1, 'bukit jauh');", "V720 H0Z', { type: 'linearGradient', stops: [p.jauh, p.kabut] }, 1, 'bukit jauh');");
+rep("V430 H0Z', p.tengah, 1, 'bukit tengah');", "V720 H0Z', { type: 'linearGradient', stops: [p.tengah, p.kabut] }, 1, 'bukit tengah');");
+rep("    mahkota: g ?", "    kabut: g ? '#10241D' : '#EEF7EA',\n    mahkota: g ?");
+rep("size: 23, weight: 'Bold', color: p.teks", "size: 21, weight: 'Bold', color: p.teks");
+rep("l * 0.11) + daun(x, y, a + 58, l, l * 0.11)", "l * 0.16) + daun(x, y, a + 58, l, l * 0.16)");
+writeFileSync('screens_login.mjs', s);
+console.log('ok');
