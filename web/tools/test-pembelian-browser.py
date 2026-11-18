@@ -125,7 +125,8 @@ def test_pembelian(url):
         page.get_by_role("button", name="Pembelian", exact=True).press("Enter")
         scan = page.get_by_role("combobox", name="Barcode atau nama barang")
         expect(scan).to_be_visible()
-        page.wait_for_function("!!navigator.serviceWorker.controller")
+        page.wait_for_function("""navigator.serviceWorker.controller &&
+            new URL(navigator.serviceWorker.controller.scriptURL).searchParams.has('v')""")
         page.get_by_label("Supplier", exact=True).select_option("S1")
         page.get_by_label("No. faktur supplier").fill("INV-UJI")
         metode = page.get_by_role("combobox", name="Metode pembayaran", exact=True)
