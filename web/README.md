@@ -13,6 +13,10 @@ bun run dev
 
 Buka alamat yang dicetak Vite. Permintaan `/api` diteruskan ke `http://127.0.0.1:8080`; ubah target lokal dengan environment `API_PROXY_TARGET` jika diperlukan. Jalankan `bun run check`, `bun run test`, dan `bun run build` untuk verifikasi. Hasil build statis ada di `build/`.
 
+## Deploy produksi
+
+`.\web\tools\deploy-web.ps1` (dari root repo; `-DryRun` tanpa SSH, `-Rollback` untuk kembali) mengirim `build/` ke `admin.kopkarksk.com` (`D:/admin-web`) dengan verifikasi hash dan rollback otomatis. Deploy API dulu, web sesudahnya. Lihat [`docs/deploy-produksi.md`](../docs/deploy-produksi.md).
+
 ## Penyajian
 
 Sajikan `build/` melalui HTTPS dan proxy `/api/` ke API Rust pada origin yang sama. Contoh lokasi nginx (sesuaikan path dan TLS dengan lingkungan):

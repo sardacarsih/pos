@@ -1,12 +1,14 @@
 # Deploy rust-api ke server produksi: test, build, kirim ke .tmp, verifikasi sha256, tukar biner, health check, rollback otomatis.
-# Pakai: .\rust-api\tools\deploy-api.ps1 [-LewatiTest]
+# Pakai: .\rust-api\tools\deploy-api.ps1 [-LewatiTest] [-DryRun]
+# -DryRun: test + build + hash saja, TANPA koneksi SSH dan tanpa mengirim apa pun.
 # Tidak menyentuh .env, kredensial FCM, atau skema DB (migrasi: `pos-api migrate` terpisah bila ada).
 param(
     [string]$Server = 'ssh.kopkarksk.com',
     [string]$Dir = 'D:/be-rustapi',
     [string]$Layanan = 'KopkarPosApi',
     [string]$ApiUrl = 'https://api.kopkarksk.com',
-    [switch]$LewatiTest
+    [switch]$LewatiTest,
+    [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot)
@@ -17,6 +19,8 @@ if ($LASTEXITCODE) { throw 'build gagal' }
 
 $exe = 'target/release/pos-api.exe'
 $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+
+if ($DryRun) { "DryRun: biner $exe sha256 $sha; tidak ada yang dikirim ke $Server"; return }
 
 # scp/sftp ditolak server; pakai pengirim stdin yang sama dengan rilis APK.
 . "$PSScriptRoot\..\..\mobile\tools\ssh-kirim.ps1"
@@ -47,7 +51,7 @@ if (-not `$ok) {
 }
 'OK'
 "@
-$hasil = ($remote | ssh $Server 'powershell -NoProfile -Command -') | Select-Object -Last 1
+$hasil = (Invoke-SshSkrip $remote) | Select-Object -Last 1
 switch -Regex ($hasil) {
     '^OK'       { "Deploy OK, sha256 $sha, layanan $Layanan berjalan" }
     '^SAMA'     { 'Server sudah menjalankan biner yang sama; tidak ada yang diubah' }
