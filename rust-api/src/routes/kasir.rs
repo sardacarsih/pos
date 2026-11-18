@@ -110,11 +110,36 @@ pub struct BarangResp {
     kategori: String,
     /// Versi foto unggahan (epoch detik) atau null; ambil di GET /produk/{id}/foto.
     foto: Option<i64>,
+    /// Satuan jual tambahan (isi = jumlah satuan dasar); kosong bila hanya satuan dasar.
+    satuan_lain: Vec<SatuanResp>,
+    /// Hasil scan barcode satuan tambahan: nama satuan yang cocok; null bila barcode satuan dasar.
+    satuan_pilih: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SatuanResp {
+    satuan: String,
+    isi: f64,
+    harga: i64,
+    barcode: String,
+}
+
+fn satuan_resp(v: Vec<katalog::SatuanJual>) -> Vec<SatuanResp> {
+    v.into_iter()
+        .map(|s| SatuanResp {
+            satuan: s.satuan,
+            isi: s.isi.to_string().parse().unwrap_or(0.0),
+            harga: tampil(s.harga),
+            barcode: s.barcode,
+        })
+        .collect()
 }
 
 impl BarangResp {
-    fn dari(p: katalog::Produk, stok: Option<i64>) -> Self {
+    fn dari(p: katalog::Produk, stok: Option<i64>, lain: Vec<katalog::SatuanJual>, pilih: Option<String>) -> Self {
         Self {
+            satuan_lain: satuan_resp(lain),
+            satuan_pilih: pilih,
             id: p.id,
             kode: p.kode,
             barcode: p.barcode,
@@ -170,12 +195,15 @@ pub async fn barang(
             chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
         let kodes: Vec<String> = h.items.iter().map(|p| p.kode.clone()).collect();
         let stok = katalog::stok_map(c, &kodes, awal, hari)?;
+        let ids: Vec<i64> = h.items.iter().map(|p| p.id).collect();
+        let mut lain = katalog::satuan_map(c, &ids)?;
         let items: Vec<BarangResp> = h
             .items
             .into_iter()
             .map(|p| {
                 let st = stok.get(&p.kode).map(|d| tampil(*d));
-                BarangResp::dari(p, st)
+                let l = lain.remove(&p.id).unwrap_or_default();
+                BarangResp::dari(p, st, l, None)
             })
             .collect();
         Ok((items, h.ada_lagi))
@@ -198,14 +226,23 @@ pub async fn barang_barcode(
     }
     let r = db::run(&s.pool, move |c| {
         let allowed = if semua { Vec::new() } else { user::allowed_kategori(c)? };
-        let p = katalog::barang_by_barcode(c, &kode, &allowed)?
-            .ok_or_else(|| AppError::NotFound("Barang tidak ditemukan".into()))?;
+        let (p, pilih) = match katalog::barang_by_barcode(c, &kode, &allowed)? {
+            Some(p) => (p, None),
+            None => {
+                let (pid, sat) = katalog::produk_by_barcode_satuan(c, &kode)?
+                    .ok_or_else(|| AppError::NotFound("Barang tidak ditemukan".into()))?;
+                let p = katalog::barang_by_id(c, pid, &allowed)?
+                    .ok_or_else(|| AppError::NotFound("Barang tidak ditemukan".into()))?;
+                (p, Some(sat))
+            }
+        };
+        let lain = katalog::satuan_produk(c, p.id)?;
         let (hari, _) = faktur::sekarang(c)?;
         let awal =
             chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
         let stok = katalog::stok_map(c, std::slice::from_ref(&p.kode), awal, hari)?;
         let st = stok.get(&p.kode).map(|d| tampil(*d));
-        Ok(BarangResp::dari(p, st))
+        Ok(BarangResp::dari(p, st, lain, pilih))
     })
     .await?;
     Ok(Json(r))

@@ -275,7 +275,7 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
          FROM POS_PENJUALAN_DETAIL d JOIN POS_PENJUALAN m ON m.NO_TRANSAKSI = d.NO_TRANSAKSI \
          WHERE TRUNC(m.TANGGAL) = :hari GROUP BY d.KODE_BARANG \
          ORDER BY SUM(d.TOTAL_HARGA) DESC FETCH FIRST 5 ROWS ONLY",
-        tm("NVL(SUM(d.JUMLAH_BARANG), 0)"),
+        tm("NVL(SUM(d.JUMLAH_BARANG * d.ISI), 0)"),
         tm("NVL(SUM(d.TOTAL_HARGA), 0)")
     );
     let mut terlaris = Vec::new();

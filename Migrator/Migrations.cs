@@ -215,6 +215,25 @@ WHEN NOT MATCHED THEN
   INSERT (TRANSACTION_CODE, TRANSACTION_YEAR, LAST_NUMBER)
   VALUES (source.TRANSACTION_CODE, source.TRANSACTION_YEAR, source.LAST_NUMBER)",
                 }),
+
+            new Migration(
+                "0009_multi_satuan",
+                "Multi satuan jual: POS_PRODUCT_SATUAN (isi/harga/barcode per satuan) dan kolom ISI di detail penjualan/pending (default 1 = satuan dasar)",
+                new[]
+                {
+                    Ddl(@"CREATE TABLE POS_PRODUCT_SATUAN (
+  PRODUCT_ID NUMBER NOT NULL,
+  SATUAN     VARCHAR2(20) NOT NULL,
+  ISI        NUMBER(12,4) NOT NULL,
+  HARGA      NUMBER(18,2) NOT NULL,
+  BARCODE    VARCHAR2(50),
+  CONSTRAINT PK_POS_PRODUCT_SATUAN PRIMARY KEY (PRODUCT_ID, SATUAN),
+  CONSTRAINT CK_POS_PRODUCT_SATUAN_ISI CHECK (ISI > 1),
+  CONSTRAINT CK_POS_PRODUCT_SATUAN_HARGA CHECK (HARGA > 0))"),
+                    Ddl("CREATE UNIQUE INDEX UQ_POS_PRODUCT_SATUAN_BARCODE ON POS_PRODUCT_SATUAN (BARCODE)"),
+                    Ddl("ALTER TABLE POS_PENJUALAN_DETAIL ADD (ISI NUMBER(12,4) DEFAULT 1 NOT NULL)"),
+                    Ddl("ALTER TABLE POS_PENDING_DETAIL ADD (ISI NUMBER(12,4) DEFAULT 1 NOT NULL)"),
+                }),
         };
     }
 }

@@ -61,7 +61,7 @@ namespace Penjualan.DataLayer
                 LEFT JOIN
                     (SELECT 
                         d.kode_barang,
-                        SUM(d.jumlah_barang) AS jumlah_barang
+                        SUM(d.jumlah_barang * d.isi) AS jumlah_barang
                     FROM pos_penjualan_detail d
                     JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
                     WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_product_code
@@ -122,8 +122,8 @@ namespace Penjualan.DataLayer
 
                 Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
 
-                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA) " +
-                    "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
+                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, ISI, BRUTO, POTONGAN, TOTAL_HARGA) " +
+                    "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :ISI, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
 
                 foreach (var detail in ListItemsPenjualan)
                 {
@@ -178,8 +178,8 @@ namespace Penjualan.DataLayer
                 Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
 
                 // Insert sales details
-                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA) " +
-                                                 "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
+                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, ISI, BRUTO, POTONGAN, TOTAL_HARGA) " +
+                                                 "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :ISI, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
 
                 foreach (var detail in ListItemsPenjualan)
                 {
@@ -236,6 +236,27 @@ namespace Penjualan.DataLayer
                         productInfo.Satuan = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
                         productInfo.Price = reader.IsDBNull(4) ? 0.0m : reader.GetDecimal(4);
                         productInfo.Hpp = reader.IsDBNull(5) ? 0.0m : reader.GetDecimal(5);
+                    }
+                }
+
+                if (productInfo.ProductId == 0)
+                {
+                    // Barcode satuan tambahan (box/dus): harga satuan itu, HPP = BELI * ISI.
+                    string sqlSatuan = @"SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, s.SATUAN, s.HARGA, p.BELI * s.ISI, s.ISI
+                                         FROM POS_PRODUCT_SATUAN s JOIN POS_PRODUCT p ON p.PRODUCTID = s.PRODUCT_ID
+                                         WHERE s.BARCODE = :barcode";
+                    using OracleCommand cmdSatuan = new(sqlSatuan, connection);
+                    cmdSatuan.Parameters.Add("barcode", OracleDbType.Varchar2).Value = barcode;
+                    using OracleDataReader rs = cmdSatuan.ExecuteReader();
+                    if (rs.Read())
+                    {
+                        productInfo.ProductId = rs.GetInt32(0);
+                        productInfo.KodeItem = rs.GetString(1);
+                        productInfo.ProductName = rs.IsDBNull(2) ? string.Empty : rs.GetString(2);
+                        productInfo.Satuan = rs.GetString(3);
+                        productInfo.Price = rs.GetDecimal(4);
+                        productInfo.Hpp = rs.IsDBNull(5) ? 0.0m : rs.GetDecimal(5);
+                        productInfo.Isi = rs.GetDecimal(6);
                     }
                 }
 
