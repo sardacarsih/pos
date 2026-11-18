@@ -9,6 +9,10 @@ import 'admin_opname_page.dart';
 import 'admin_produk_page.dart';
 import 'admin_stok_page.dart';
 
+/// Permintaan pindah sub-tab Produk dari Beranda admin (0 Produk, 1 Stok habis, 2 Harga ≤ HPP, 3 Opname, 4 Kategori).
+/// Diatur oleh pemanggil lalu dikosongkan oleh [AdminKatalogPage] setelah dipindah.
+final ValueNotifier<int?> adminKatalogTab = ValueNotifier<int?>(null);
+
 /// Halaman Produk admin dengan dua tab: Produk (kelola produk) dan Kategori (kategori tampil di kasir).
 class AdminKatalogPage extends ConsumerStatefulWidget {
   const AdminKatalogPage({super.key});
@@ -24,7 +28,22 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
     });
 
   @override
+  void initState() {
+    super.initState();
+    adminKatalogTab.addListener(_pindah);
+    _pindah(); // permintaan yang masuk sebelum halaman dibuat
+  }
+
+  void _pindah() {
+    final v = adminKatalogTab.value;
+    if (v == null || v < 0 || v >= _tab.length) return;
+    adminKatalogTab.value = null;
+    _tab.animateTo(v);
+  }
+
+  @override
   void dispose() {
+    adminKatalogTab.removeListener(_pindah);
     _tab.dispose();
     super.dispose();
   }

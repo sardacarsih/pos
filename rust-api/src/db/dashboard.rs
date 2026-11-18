@@ -1,4 +1,5 @@
 //! Ringkasan harian kasir. Selalu dibatasi ke username kasir dari token.
+use chrono::{Duration, NaiveDate};
 use oracle::Connection;
 use serde::Serialize;
 
@@ -153,6 +154,56 @@ pub struct RingkasanUser {
     pub terkunci: i64,
 }
 
+/// Penjualan satu hari (semua kasir): untuk pembanding kemarin dan grafik tren.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct HariJual {
+    pub tanggal: String,
+    pub jumlah: i64,
+    pub total: i64,
+}
+
+/// Hal yang perlu ditindak admin dan murah dihitung (stok habis dimuat terpisah karena berat).
+#[derive(Debug, Serialize)]
+pub struct Perhatian {
+    pub harga_rendah: i64,
+}
+
+/// Susun `n` hari berakhir di `hari` (lama -> baru); hari tanpa transaksi diisi 0.
+pub fn isi_tren(rows: &[(NaiveDate, i64, i64)], hari: NaiveDate, n: i64) -> Vec<HariJual> {
+    (0..n)
+        .map(|i| {
+            let d = hari - Duration::days(n - 1 - i);
+            let (jumlah, total) = rows
+                .iter()
+                .find(|(t, _, _)| *t == d)
+                .map_or((0, 0), |(_, j, t)| (*j, *t));
+            HariJual {
+                tanggal: d.format("%Y-%m-%d").to_string(),
+                jumlah,
+                total,
+            }
+        })
+        .collect()
+}
+
+/// Penjualan `n` hari terakhir (termasuk `hari`), satu query GROUP BY tanggal.
+pub fn tren_penjualan(conn: &Connection, hari: NaiveDate, n: i64) -> AppResult<Vec<HariJual>> {
+    let dari = hari - Duration::days(n - 1);
+    let besok = hari + Duration::days(1);
+    let sql = format!(
+        "SELECT TO_CHAR(TRUNC(TANGGAL), 'YYYY-MM-DD'), COUNT(*), {} FROM POS_PENJUALAN          WHERE TANGGAL >= :dari AND TANGGAL < :besok GROUP BY TRUNC(TANGGAL)",
+        tm("NVL(SUM(TOTAL), 0)")
+    );
+    let mut rows = Vec::new();
+    for r in conn.query_named(&sql, &[("dari", &dari), ("besok", &besok)])? {
+        let r = r?;
+        let tgl = NaiveDate::parse_from_str(&r.get::<_, String>(0)?, "%Y-%m-%d")
+            .map_err(|e| AppError::Internal(format!("tanggal tren: {e}")))?;
+        rows.push((tgl, r.get(1)?, tampil(dec(&r.get::<_, String>(2)?)?)));
+    }
+    Ok(isi_tren(&rows, hari, n))
+}
+
 #[derive(Debug, Serialize)]
 pub struct DashboardAdmin {
     pub tanggal: String,
@@ -166,6 +217,11 @@ pub struct DashboardAdmin {
     pub per_kasir: Vec<PerKasir>,
     pub terlaris: Vec<Terlaris>,
     pub user: RingkasanUser,
+    /// Penjualan kemarin (pembanding KPI hari ini).
+    pub kemarin: HariJual,
+    /// 7 hari terakhir termasuk hari ini, lama -> baru.
+    pub tren: Vec<HariJual>,
+    pub perhatian: Perhatian,
 }
 
 /// Ringkasan hari ini semua kasir (mobile dan desktop), per kasir, barang terlaris, dan jumlah user mobile.
@@ -245,6 +301,12 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         }
     }
 
+    let tren = tren_penjualan(conn, hari, 7)?;
+    let kemarin = tren[tren.len() - 2].clone();
+    let perhatian = Perhatian {
+        harga_rendah: super::katalog::jumlah_harga_rendah(conn)?,
+    };
+
     Ok(DashboardAdmin {
         tanggal: hari.format("%Y-%m-%d").to_string(),
         periode_terbuka,
@@ -257,5 +319,37 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
         per_kasir,
         terlaris,
         user,
+        kemarin,
+        tren,
+        perhatian,
     })
+}
+
+#[cfg(test)]
+mod tren_tests {
+    use super::*;
+
+    fn d(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    }
+
+    #[test]
+    fn tren_mengisi_hari_kosong_dan_berurutan() {
+        let rows = [(d("2026-11-17"), 3, 300), (d("2026-11-13"), 1, 50)];
+        let t = isi_tren(&rows, d("2026-11-18"), 7);
+        assert_eq!(t.len(), 7);
+        assert_eq!(t[0].tanggal, "2026-11-12");
+        assert_eq!(t[6].tanggal, "2026-11-18");
+        assert_eq!((t[6].jumlah, t[6].total), (0, 0)); // hari ini belum ada transaksi
+        assert_eq!((t[5].jumlah, t[5].total), (3, 300)); // kemarin
+        assert_eq!((t[1].jumlah, t[1].total), (1, 50));
+        assert_eq!(t.iter().filter(|h| h.total == 0).count(), 5);
+    }
+
+    #[test]
+    fn tren_melewati_pergantian_bulan_dan_tahun() {
+        let t = isi_tren(&[], d("2027-01-02"), 7);
+        assert_eq!(t[0].tanggal, "2026-12-27");
+        assert_eq!(t[6].tanggal, "2027-01-02");
+    }
 }

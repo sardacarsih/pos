@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../profil/profil_aksi.dart';
 import '../../core/api.dart';
+import '../../core/beranda_widgets.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import 'riwayat_page.dart';
 
-/// Ringkasan hari ini milik kasir. [aktif] berubah true saat tab dibuka -> data dimuat ulang.
+/// Beranda kasir: status periode -> aksi utama (Mulai jual) -> KPI hari ini -> transaksi terakhir.
+/// [aktif] berubah true saat tab dibuka -> data dimuat ulang.
 class DashboardPage extends ConsumerStatefulWidget {
-  const DashboardPage({super.key, required this.aktif, required this.onJual});
+  const DashboardPage({super.key, required this.aktif, required this.onJual, this.onRiwayat});
   final bool aktif;
   final VoidCallback onJual;
+  final VoidCallback? onRiwayat;
 
   @override
   ConsumerState<DashboardPage> createState() => _DashboardPageState();
@@ -51,52 +54,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
   }
 
-  Widget _kartu(String label, String nilai, {IconData? icon}) => Card(
-    margin: EdgeInsets.zero,
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 18),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 30,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                nilai,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     final d = _data;
+    final profil = ref.watch(authProvider).profil;
     return TropicalScaffold(
-      title: 'Dashboard',
+      title: 'Beranda',
       actions: [
         const ProfilAksi(),
         IconButton(
@@ -109,14 +72,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         onRefresh: _muat,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            const SapaanProfil(),
             if (_loading && d == null)
-              const Padding(
-                padding: EdgeInsets.all(40),
-                child: LoadingKopkar(),
-              ),
+              const Padding(padding: EdgeInsets.all(40), child: LoadingKopkar()),
             if (_error != null)
               Card(
                 color: Theme.of(context).colorScheme.errorContainer,
@@ -125,55 +84,68 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   child: Column(
                     children: [
                       Text(_error!),
-                      TextButton(
-                        onPressed: _muat,
-                        child: const Text('Coba lagi'),
-                      ),
+                      TextButton(onPressed: _muat, child: const Text('Coba lagi')),
                     ],
                   ),
                 ),
               ),
             if (d != null) ...[
-              StatusPeriodeCard(
-                kode: d.periodeKode,
-                pesan: d.periodePesan,
+              BerandaHeader(
+                leading: const ProfilAvatar(radius: 24),
+                nama: (profil?.nama ?? '').split(' ').first,
                 tanggal: d.tanggal,
-                periode: d.periode,
-                dari: d.periodeDari,
-                sampai: d.periodeSampai,
+                chip: ChipPeriode(
+                  kode: d.periodeKode,
+                  periode: d.periode,
+                  dari: d.periodeDari,
+                  sampai: d.periodeSampai,
+                ),
               ),
-              const SizedBox(height: 12),
-              _kartu(
-                'Total penjualan hari ini',
-                rupiah(d.total),
-                icon: Icons.payments_outlined,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: _kartu('Transaksi', '${d.jumlah}')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _kartu('Tunai', rupiah(d.tunai))),
-                  const SizedBox(width: 8),
-                  Expanded(child: _kartu('Kredit', rupiah(d.kredit))),
-                ],
-              ),
+              if (!d.periodeTerbuka) ...[
+                const SizedBox(height: 12),
+                BannerBeranda(
+                  tingkat: Tingkat.bahaya,
+                  judul: 'Penjualan diblokir',
+                  pesan: d.periodePesan,
+                  catatan: hubungiAdminPeriode,
+                ),
+              ],
               const SizedBox(height: 16),
-              GradientActionButton(
+              AksiUtama(
                 label: 'Mulai jual',
                 icon: Icons.point_of_sale,
                 onPressed: d.periodeTerbuka ? widget.onJual : null,
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Transaksi terakhir',
-                style: Theme.of(context).textTheme.titleMedium,
+              const SizedBox(height: 16),
+              KpiKartu(label: 'Total penjualan hari ini', nilai: rupiah(d.total), hero: true),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: KpiKartu(label: 'Transaksi', nilai: '${d.jumlah}')),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: KpiKartu(
+                      label: 'Rata-rata/transaksi',
+                      nilai: rupiah(d.jumlah == 0 ? 0 : (d.total / d.jumlah).round()),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
+              ProporsiKartu(tunai: d.tunai, kredit: d.kredit),
+              JudulBagian(
+                'Transaksi terakhir',
+                aksi: widget.onRiwayat == null
+                    ? null
+                    : TextButton(onPressed: widget.onRiwayat, child: const Text('Riwayat')),
+              ),
               if (d.terakhir.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),
-                  child: Center(child: Text('Belum ada transaksi hari ini.')),
+                  child: Center(
+                    child: Text('Belum ada transaksi hari ini. Tekan "Mulai jual" untuk memulai.', textAlign: TextAlign.center),
+                  ),
                 ),
               for (final t in d.terakhir)
                 Card(
@@ -195,10 +167,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         ],
                       ),
                     ),
-                    trailing: Text(
-                      rupiah(t.total),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                    trailing: Text(rupiah(t.total), style: const TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
             ],
@@ -209,7 +178,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
-/// Shell kasir: tab Dashboard (awal) dan Jual (layar Pilih BBM).
+/// Shell kasir: tab Beranda (awal), Jual (layar Pilih BBM), dan Riwayat.
 class KasirShell extends ConsumerStatefulWidget {
   const KasirShell({super.key, required this.jual});
   final Widget jual;
@@ -239,6 +208,7 @@ class _KasirShellState extends ConsumerState<KasirShell> {
               ref.invalidate(periodeProvider);
               setState(() => _i = 1);
             },
+            onRiwayat: () => setState(() => _i = 2),
           ),
           widget.jual,
           RiwayatPage(aktif: _i == 2),
@@ -258,7 +228,7 @@ class _KasirShellState extends ConsumerState<KasirShell> {
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard),
-                label: 'Dashboard',
+                label: 'Beranda',
               ),
               NavigationDestination(
                 icon: Icon(Icons.point_of_sale_outlined),

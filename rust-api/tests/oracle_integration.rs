@@ -110,7 +110,7 @@ impl<'a> SkemaPos<'a> {
             "CREATE TABLE POS_STOCK (KODE_BARANG VARCHAR2(30), TANGGAL DATE, QUANTITY NUMBER, HPP NUMBER)",
             "CREATE TABLE POS_PEMBELIAN (PURCHASE_ID NUMBER, TANGGAL DATE)",
             "CREATE TABLE POS_PEMBELIANDETAIL (PURCHASE_ID NUMBER, KODE_BARANG VARCHAR2(30), QUANTITY NUMBER, HARGA_BELI NUMBER)",
-            "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30), TANGGAL DATE)",
+            "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30), TANGGAL DATE, TOTAL NUMBER, JENIS_BAYAR VARCHAR2(10), KASIR VARCHAR2(30))",
             "CREATE TABLE POS_PENJUALAN_DETAIL (NO_TRANSAKSI VARCHAR2(30), KODE_BARANG VARCHAR2(30), JUMLAH_BARANG NUMBER)",
             "CREATE TABLE POS_BARANGRUSAK (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHFISIK NUMBER)",
             "CREATE TABLE POS_STOCKOPNAME (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHSISTEM NUMBER, JUMLAHFISIK NUMBER, SELISIH NUMBER, HPP NUMBER, TOTAL NUMBER)",
@@ -157,7 +157,7 @@ fn stok_habis_dan_opname_idempoten() {
         &[("d", &awal.format("%Y-%m-%d").to_string())],
     )
     .unwrap();
-    c.execute("INSERT INTO POS_PENJUALAN VALUES ('J1', TRUNC(SYSDATE))", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL) VALUES ('J1', TRUNC(SYSDATE))", &[]).unwrap();
     c.execute("INSERT INTO POS_PENJUALAN_DETAIL VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
     c.commit().unwrap();
 
@@ -316,4 +316,47 @@ fn dokumen_so_multi_barang_riwayat_dan_idempotensi() {
     c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&uid]).unwrap();
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();
     c.commit().unwrap();
+}
+
+#[test]
+fn tren_penjualan_dan_jumlah_stok_habis() {
+    use pos_api::db::{dashboard, faktur, katalog};
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    let (hari, _) = faktur::sekarang(&c).unwrap();
+    let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).unwrap();
+    // Hari ini: 2 transaksi (300 + 200); kemarin: 1 (100); 10 hari lalu: di luar jendela 7 hari.
+    for (no, hari_lalu, total, bayar) in [("T1", 0, 300, "TUNAI"), ("T2", 0, 200, "KREDIT"), ("T3", 1, 100, "TUNAI"), ("T4", 10, 999, "TUNAI")] {
+        c.execute_named(
+            "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, TOTAL, JENIS_BAYAR, KASIR) VALUES (:n, TRUNC(SYSDATE) - :h + 0.5, :t, :b, 'k')",
+            &[("n", &no), ("h", &hari_lalu), ("t", &total), ("b", &bayar)],
+        )
+        .unwrap();
+    }
+    // Dua produk aktif: satu dengan stok 0, satu dengan stok 3; satu produk nonaktif tanpa stok.
+    for (id, kode, aktif) in [(1, "R-A", "Y"), (2, "R-B", "Y"), (3, "R-OFF", "N")] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', 100, 50, 1, :a)",
+            &[("i", &id), ("k", &kode), ("a", &aktif)],
+        )
+        .unwrap();
+    }
+    c.execute_named(
+        "INSERT INTO POS_STOCK VALUES ('R-B', TO_DATE(:d,'YYYY-MM-DD'), 3, 50)",
+        &[("d", &awal.format("%Y-%m-%d").to_string())],
+    )
+    .unwrap();
+    c.commit().unwrap();
+
+    let t = dashboard::tren_penjualan(&c, hari, 7).unwrap();
+    assert_eq!(t.len(), 7);
+    assert_eq!((t[6].jumlah, t[6].total), (2, 500));
+    assert_eq!((t[5].jumlah, t[5].total), (1, 100));
+    assert_eq!(t[..5].iter().map(|h| h.total).sum::<i64>(), 0); // T4 (10 hari lalu) tidak ikut
+    assert_eq!(katalog::jumlah_stok_habis(&c, awal, hari).unwrap(), 1);
 }

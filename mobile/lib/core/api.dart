@@ -584,6 +584,12 @@ class ApiClient {
     );
   }
 
+  /// Jumlah produk aktif stok habis untuk Beranda admin (dihitung berat di server, ada cache 60 detik).
+  Future<int> stokHabisJumlah() async {
+    final j = await get('/api/v1/admin/dashboard/stok-habis') as Map<String, dynamic>;
+    return (j['jumlah'] as num?)?.toInt() ?? 0;
+  }
+
   /// Cari barang aktif (nama/kode/barcode) beserta stok sistem, untuk dihitung di stock opname.
   Future<({List<StokItem> items, bool lagi})> cariStok({
     String? q,

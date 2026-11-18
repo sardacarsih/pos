@@ -285,7 +285,16 @@ class DashboardAdmin {
       userKasir = _i((j['user'] as Map)['kasir']),
       userAnggota = _i((j['user'] as Map)['anggota']),
       userNonaktif = _i((j['user'] as Map)['nonaktif']),
-      userTerkunci = _i((j['user'] as Map)['terkunci']);
+      userTerkunci = _i((j['user'] as Map)['terkunci']),
+      // Server lama belum mengirim bagian ini: tampil tanpa pembanding/tren/peringatan.
+      kemarin = j['kemarin'] == null
+          ? null
+          : HariJual.fromJson(j['kemarin'] as Map<String, dynamic>),
+      tren = [
+        for (final h in (j['tren'] as List? ?? []))
+          HariJual.fromJson(h as Map<String, dynamic>),
+      ],
+      hargaRendah = _i((j['perhatian'] as Map?)?['harga_rendah']);
   final String tanggal;
   final bool periodeTerbuka;
   final String? periodePesan, periodeKode;
@@ -295,6 +304,25 @@ class DashboardAdmin {
   final List<PerKasir> perKasir;
   final List<Terlaris> terlaris;
   final int userAdmin, userKasir, userAnggota, userNonaktif, userTerkunci;
+
+  /// Penjualan kemarin (pembanding KPI); null bila server belum mengirim.
+  final HariJual? kemarin;
+
+  /// 7 hari terakhir termasuk hari ini (lama -> baru); kosong bila server belum mengirim.
+  final List<HariJual> tren;
+
+  /// Jumlah produk aktif dengan harga jual <= harga beli.
+  final int hargaRendah;
+}
+
+/// Penjualan satu hari (semua kasir).
+class HariJual {
+  HariJual.fromJson(Map<String, dynamic> j)
+    : tanggal = _s(j['tanggal']),
+      jumlah = _i(j['jumlah']),
+      total = _i(j['total']);
+  final String tanggal;
+  final int jumlah, total;
 }
 
 class ProdukAdmin {
