@@ -44,10 +44,42 @@ async fn run() -> Result<(), String> {
 
     match cmd {
         "migrate" => {
-            let n = db::run(&pool, db::migrate)
-                .await
-                .map_err(|e| e.to_string())?;
-            println!("Migrasi selesai ({n} statement baru).");
+            let user = arg(&args, "--admin-user").unwrap_or_else(|| "admin".into());
+            let given = arg(&args, "--admin-password").filter(|p| !p.is_empty());
+            let acak = given.is_none();
+            // Tanpa password eksplisit: acak, tampil sekali (tidak ada akun/password bawaan).
+            let pwd = given.unwrap_or_else(|| password::temp_password() + &password::temp_password());
+            let hash = password::hash_desktop(&pwd);
+            if args.iter().any(|a| a == "--reset-admin") {
+                let ada = db::run(&pool, move |c| db::desktop_migrations::reset_admin(c, &user, &hash))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if !ada {
+                    return Err("user admin desktop tidak ditemukan".into());
+                }
+                println!("Password admin direset; akun diaktifkan dan dibuka kuncinya.");
+                if acak {
+                    println!("Password baru acak (tampil sekali): {pwd}");
+                }
+                return Ok(());
+            }
+            let skip_admin = args.iter().any(|a| a == "--skip-admin");
+            let (n_desktop, n_mob, dibuat) = db::run(&pool, move |c| {
+                println!("Migrasi desktop:");
+                let n_desktop = db::desktop_migrations::jalankan(c, &mut |l| println!("{l}"))?;
+                let n_mob = db::migrate(c)?;
+                let dibuat = !skip_admin && db::desktop_migrations::seed_admin(c, &user, &hash)?;
+                Ok((n_desktop, n_mob, dibuat))
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            println!("{n_desktop} migrasi desktop baru, {n_mob} statement MOB_* baru.");
+            if dibuat {
+                println!("User admin desktop dibuat.");
+                if acak {
+                    println!("Password admin acak (tampil sekali): {pwd}");
+                }
+            }
             Ok(())
         }
         "selftest" => {

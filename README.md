@@ -88,7 +88,7 @@ cp Migrator/appsettings.example.json   Migrator/appsettings.json
 
 ### Database setup (migrations + admin)
 
-Run the migrator once against your Oracle instance. It creates the login/RBAC
+Run the migrator (`pos-api migrate`, in `rust-api/`) once against your Oracle instance. It creates the login/RBAC
 tables (`POS_APP`, `POS_ROLE`, `POS_USER`, `POS_USER_ACCESS`), tracks applied
 migrations in `POS_SCHEMA_MIGRATION` (idempotent — safe to re-run), and seeds a
 default `admin` user with the `ADMIN` role on all apps:
@@ -97,8 +97,8 @@ default `admin` user with the `ADMIN` role on all apps:
 # uses Migrator/appsettings.json, or pass --connection / set POS_CONNECTION
 dotnet run --project Migrator -- --admin-password "ChangeMe#1"
 
-dotnet run --project Migrator -- --skip-admin   # schema only, no admin
-dotnet run --project Migrator -- --help
+cargo run -- migrate --skip-admin   # schema only, no admin
+cargo run -- migrate --reset-admin   # reset admin password
 ```
 
 > If `--admin-password` is omitted, a random admin password is generated and printed
