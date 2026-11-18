@@ -16,7 +16,10 @@ import '../../core/widgets.dart';
 
 /// Kelola produk (master POS_PRODUCT): cari, filter aktif, ubah, nonaktifkan. Tidak ada tambah/hapus.
 class AdminProdukPage extends ConsumerStatefulWidget {
-  const AdminProdukPage({super.key});
+  const AdminProdukPage({super.key, this.hargaRendah = false});
+
+  /// true = monitoring: hanya produk aktif dengan harga jual <= harga beli (HPP), paling rugi dulu.
+  final bool hargaRendah;
 
   @override
   ConsumerState<AdminProdukPage> createState() => _AdminProdukPageState();
@@ -28,6 +31,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   final List<ProdukAdmin> _items = [];
   List<Kategori> _kategori = [];
   String? _aktif; // null = semua, 'Y', 'N'
+  int? _jumlah;
   bool _loading = false;
   bool _lagi = false;
   String? _error;
@@ -82,12 +86,18 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     try {
       final r = await ref
           .read(apiProvider)
-          .produkAdmin(q: _q.text.trim(), aktif: _aktif, page: page);
+          .produkAdmin(
+            q: _q.text.trim(),
+            aktif: _aktif,
+            hargaRendah: widget.hargaRendah,
+            page: page,
+          );
       if (!mounted || requestId != _requestId) return;
       setState(() {
         _items.addAll(r.items);
         _page = page;
         _lagi = r.lagi;
+        if (r.jumlah != null) _jumlah = r.jumlah;
       });
     } on ApiException catch (e) {
       if (mounted && requestId == _requestId) setState(() => _error = e.pesan);
@@ -368,7 +378,9 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         final i = _items.indexWhere((e) => e.id == baru.id);
         if (i >= 0) _items[i] = baru;
         // Filter aktif/nonaktif aktif -> produk yang tidak lagi cocok hilang dari daftar.
-        if (_aktif == 'Y' && !baru.aktif || _aktif == 'N' && baru.aktif) {
+        if (_aktif == 'Y' && !baru.aktif ||
+            _aktif == 'N' && baru.aktif ||
+            widget.hargaRendah && (!baru.aktif || baru.harga > baru.beli)) {
           _items.removeWhere((e) => e.id == baru.id);
         }
       });
@@ -412,17 +424,30 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              _filter('Semua', null),
-              _filter('Aktif', 'Y'),
-              _filter('Nonaktif', 'N'),
-            ],
+        if (widget.hargaRendah)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _jumlah == null
+                    ? 'Harga jual ≤ harga beli (HPP)'
+                    : '$_jumlah produk aktif dengan harga jual ≤ HPP',
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                _filter('Semua', null),
+                _filter('Aktif', 'Y'),
+                _filter('Nonaktif', 'N'),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _cari(reset: true),
@@ -448,9 +473,15 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                     ),
                   ),
                 if (!_loading && _error == null && _items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(36),
-                    child: Center(child: Text('Produk tidak ditemukan.')),
+                  Padding(
+                    padding: const EdgeInsets.all(36),
+                    child: Center(
+                      child: Text(
+                        widget.hargaRendah
+                            ? 'Tidak ada produk dengan harga jual ≤ HPP.'
+                            : 'Produk tidak ditemukan.',
+                      ),
+                    ),
                   ),
                 for (final p in _items)
                   Card(
@@ -487,6 +518,14 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                                 color: Color(0xFF78817B),
                               ),
                             Text('${p.kode} · ${p.kategori} · ${p.satuan}'),
+                            if (widget.hargaRendah)
+                              Text(
+                                'beli ${rupiah(p.beli)} · margin ${rupiah(p.harga - p.beli)}',
+                                style: const TextStyle(
+                                  color: Color(0xFFB3261E),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                           ],
                         ),
                       ),
