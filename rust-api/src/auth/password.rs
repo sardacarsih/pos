@@ -19,6 +19,21 @@ pub fn hash(password: &str) -> AppResult<String> {
         .map_err(|e| AppError::Internal(format!("hash gagal: {e}")))
 }
 
+/// Hash format desktop (`Shared/Auth/PasswordCryptographyPbkdf2.cs`): `PBKDF2-SHA256$600000$<salt b64>$<hash b64>`.
+pub fn hash_desktop(password: &str) -> String {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    // Dua UUID v4 = 32 byte acak; 16 byte pertama dipakai sebagai salt (bit versi/varian tidak masalah untuk salt).
+    let salt = uuid::Uuid::new_v4().into_bytes();
+    hash_desktop_dengan(password, &salt, 600_000, STANDARD.encode(salt))
+}
+
+fn hash_desktop_dengan(password: &str, salt: &[u8], iterasi: u32, salt_b64: String) -> String {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let mut kunci = [0u8; 32];
+    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(password.as_bytes(), salt, iterasi, &mut kunci);
+    format!("PBKDF2-SHA256${iterasi}${salt_b64}${}", STANDARD.encode(kunci))
+}
+
 pub fn verify(password: &str, stored: &str) -> bool {
     match PasswordHash::new(stored) {
         Ok(parsed) => Argon2::default()
@@ -96,5 +111,29 @@ mod tests {
             assert!(t.bytes().all(|b| TEMP_ALPHABET.contains(&b)), "{t}");
             assert!(!t.contains(['I', 'O', '0', '1']), "{t}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_desktop {
+    use super::*;
+
+    #[test]
+    fn hash_desktop_berformat_dan_deterministik_per_salt() {
+        let salt = [7u8; 16];
+        let a = hash_desktop_dengan("rahasia", &salt, 1000, "B64".into());
+        let b = hash_desktop_dengan("rahasia", &salt, 1000, "B64".into());
+        assert_eq!(a, b);
+        let bagian: Vec<_> = a.split('$').collect();
+        assert_eq!((bagian.len(), bagian[0], bagian[1]), (4, "PBKDF2-SHA256", "1000"));
+        assert!(hash_desktop("x").starts_with("PBKDF2-SHA256$600000$"));
+    }
+
+    #[test]
+    fn hash_desktop_cocok_dengan_vektor_rfc7914() {
+        // RFC 7914 6: PBKDF2-HMAC-SHA256("passwd", "salt", c=1, dkLen=64) diawali 55ac046e56e3089f.
+        let mut k = [0u8; 8];
+        pbkdf2::pbkdf2_hmac::<sha2::Sha256>(b"passwd", b"salt", 1, &mut k);
+        assert_eq!(k, [0x55, 0xac, 0x04, 0x6e, 0x56, 0xe3, 0x08, 0x9f]);
     }
 }
