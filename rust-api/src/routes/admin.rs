@@ -423,7 +423,12 @@ pub async fn menu_badge(State(s): State<AppState>, a: Auth) -> AppResult<Json<Va
     if let Err(e) = &harga {
         tracing::warn!(error = %e, "lencana harga rendah gagal");
     }
-    Ok(Json(json!({ "stok_habis": stok.ok(), "harga_rendah": harga.ok() })))
+    let harga = harga.ok();
+    Ok(Json(json!({
+        "stok_habis": stok.ok(),
+        "harga_rendah": harga.map(|h| h.rugi),
+        "tanpa_hpp": harga.map(|h| h.tanpa_hpp),
+    })))
 }
 
 /// Field eksplisit (bukan `#[serde(flatten)]`): query string selalu string, flatten membuat angka gagal di-parse.
@@ -481,7 +486,11 @@ pub async fn produk_list(
         Ok((h, jumlah))
     })
     .await?;
-    Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah })))
+    Ok(Json(json!({
+        "items": h.items, "ada_lagi": h.ada_lagi, "page": page,
+        // Halaman 1 dengan harga_rendah=Y: panjang daftar dan rinciannya (rugi vs belum ada harga beli).
+        "jumlah": jumlah.map(|h| h.total()), "rugi": jumlah.map(|h| h.rugi), "tanpa_hpp": jumlah.map(|h| h.tanpa_hpp),
+    })))
 }
 
 #[derive(Deserialize)]
@@ -515,6 +524,24 @@ pub async fn produk_ubah(
     // Audit perubahan master produk (harga memengaruhi penjualan): siapa, produk mana, harga lama -> baru.
     tracing::info!(admin = %admin, produk = baru.id, kode = %baru.kode, harga_lama = lama, harga_baru = baru.harga, aktif = baru.aktif, "produk diubah");
     Ok(Json(baru))
+}
+
+/// Riwayat pemakaian produk (menentukan boleh tidaknya hapus permanen); dipanggil saat dialog hapus dibuka.
+pub async fn produk_jejak(State(s): State<AppState>, a: Auth, Path(id): Path<i64>) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let (p, j) = db::run(&s.pool, move |c| katalog::jejak_produk(c, id)).await?;
+    Ok(Json(json!({
+        "id": p.id, "kode": p.kode, "nama": p.nama,
+        "bisa_hapus": j.bisa_hapus(), "rincian": j.rincian(), "jejak": j,
+    })))
+}
+
+/// Hapus permanen produk tanpa riwayat (422 PRODUK_BERTRANSAKSI bila sudah dipakai).
+pub async fn produk_hapus(State(s): State<AppState>, a: Auth, Path(id): Path<i64>) -> AppResult<StatusCode> {
+    let admin = a.peran(ADMIN)?.usr.clone();
+    let p = db::run(&s.pool, move |c| katalog::hapus_produk(c, id)).await?;
+    tracing::info!(admin = %admin, produk = p.id, kode = %p.kode, nama = %p.nama, "produk dihapus permanen");
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

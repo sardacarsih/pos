@@ -11,6 +11,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
+import '../../core/beranda_widgets.dart' show statusMargin;
+import '../../core/katalog.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 
@@ -31,7 +33,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   final List<ProdukAdmin> _items = [];
   List<Kategori> _kategori = [];
   String? _aktif; // null = semua, 'Y', 'N'
-  int? _jumlah;
+  int? _rugi, _tanpaHpp;
   bool _loading = false;
   bool _lagi = false;
   String? _error;
@@ -97,7 +99,8 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         _items.addAll(r.items);
         _page = page;
         _lagi = r.lagi;
-        if (r.jumlah != null) _jumlah = r.jumlah;
+        if (r.rugi != null) _rugi = r.rugi;
+        if (r.tanpaHpp != null) _tanpaHpp = r.tanpaHpp;
       });
     } on ApiException catch (e) {
       if (mounted && requestId == _requestId) setState(() => _error = e.pesan);
@@ -159,6 +162,80 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     } on ApiException catch (e) {
       if (mounted) _pesan(e.pesan);
       return false;
+    }
+  }
+
+  Future<void> _toggleAktif(ProdukAdmin p) async {
+    try {
+      final baru = await ref.read(apiProvider).ubahProduk(
+        p.id,
+        nama: p.nama,
+        barcode: p.barcode,
+        satuan: p.satuan,
+        kategoriId: p.kategoriId,
+        harga: p.harga,
+        beli: p.beli,
+        aktif: !p.aktif,
+      );
+      if (!mounted) return;
+      setState(() {
+        final i = _items.indexWhere((e) => e.id == baru.id);
+        if (i >= 0) _items[i] = baru;
+        if (_aktif == 'Y' && !baru.aktif || _aktif == 'N' && baru.aktif) {
+          _items.removeWhere((e) => e.id == baru.id);
+        }
+      });
+      _pesan(baru.aktif ? 'Produk diaktifkan' : 'Produk dinonaktifkan');
+    } on ApiException catch (e) {
+      if (mounted) _pesan(e.pesan);
+    }
+  }
+
+  /// Hapus permanen: periksa riwayat dulu (server memeriksa ulang saat menghapus), lalu minta konfirmasi.
+  Future<void> _hapus(ProdukAdmin p) async {
+    final api = ref.read(apiProvider);
+    String? tolak;
+    try {
+      final j = await api.jejakProduk(p.id);
+      if (!j.bisaHapus) tolak = pesanTidakBisaHapus(j.rincian);
+    } on ApiException catch (e) {
+      tolak = e.pesan;
+    }
+    if (!mounted) return;
+    if (tolak != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Tidak bisa dihapus'),
+          content: Text('${p.nama}\n\n$tolak'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Mengerti'))],
+        ),
+      );
+      return;
+    }
+    final lanjut = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Hapus permanen?'),
+        content: Text('${p.nama} (${p.kode})\n\nProduk belum pernah dipakai di transaksi. Data dihapus dan tidak dapat dibatalkan.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E)),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Hapus permanen'),
+          ),
+        ],
+      ),
+    );
+    if (lanjut != true || !mounted) return;
+    try {
+      await api.hapusProduk(p.id);
+      if (!mounted) return;
+      setState(() => _items.removeWhere((e) => e.id == p.id));
+      _pesan('Produk dihapus permanen');
+    } on ApiException catch (e) {
+      if (mounted) _pesan(e.pesan);
     }
   }
 
@@ -380,7 +457,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         // Filter aktif/nonaktif aktif -> produk yang tidak lagi cocok hilang dari daftar.
         if (_aktif == 'Y' && !baru.aktif ||
             _aktif == 'N' && baru.aktif ||
-            widget.hargaRendah && (!baru.aktif || baru.harga > baru.beli)) {
+            widget.hargaRendah && (!baru.aktif || (baru.beli > 0 && baru.harga > baru.beli))) {
           _items.removeWhere((e) => e.id == baru.id);
         }
       });
@@ -430,9 +507,9 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                _jumlah == null
-                    ? 'Harga jual ≤ harga beli (HPP)'
-                    : '$_jumlah produk aktif dengan harga jual ≤ HPP',
+                _rugi == null || _tanpaHpp == null
+                    ? 'Harga jual ≤ harga beli (HPP) atau HPP belum diisi'
+                    : '$_rugi produk harga jual ≤ HPP · $_tanpaHpp belum ada harga beli',
               ),
             ),
           )
@@ -478,7 +555,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                     child: Center(
                       child: Text(
                         widget.hargaRendah
-                            ? 'Tidak ada produk dengan harga jual ≤ HPP.'
+                            ? 'Tidak ada produk dengan harga jual ≤ HPP atau tanpa harga beli.'
                             : 'Produk tidak ditemukan.',
                       ),
                     ),
@@ -519,19 +596,70 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                               ),
                             Text('${p.kode} · ${p.kategori} · ${p.satuan}'),
                             if (widget.hargaRendah)
-                              Text(
-                                'beli ${rupiah(p.beli)} · margin ${rupiah(p.harga - p.beli)}',
-                                style: const TextStyle(
-                                  color: Color(0xFFB3261E),
-                                  fontWeight: FontWeight.w600,
+                              if (statusMargin(p.harga, p.beli).tanpaHpp)
+                                const Text(
+                                  'HPP belum diisi',
+                                  style: TextStyle(
+                                    color: Color(0xFF8A5A00),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  'beli ${rupiah(p.beli)} · margin ${rupiah(p.harga - p.beli)}',
+                                  style: const TextStyle(
+                                    color: Color(0xFFB3261E),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
                           ],
                         ),
                       ),
-                      trailing: Text(
-                        rupiah(p.harga),
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            rupiah(p.harga),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Aksi untuk ${p.nama}',
+                            icon: const Icon(Icons.more_vert),
+                            onSelected: (a) async {
+                              switch (a) {
+                                case 'ubah':
+                                  await _edit(p);
+                                case 'foto':
+                                  final v = await _gantiFoto(p.id);
+                                  if (v != null && mounted) _cari(reset: true);
+                                case 'aktif':
+                                  await _toggleAktif(p);
+                                case 'hapus':
+                                  await _hapus(p);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(value: 'ubah', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Ubah'), dense: true)),
+                              const PopupMenuItem(value: 'foto', child: ListTile(leading: Icon(Icons.add_a_photo_outlined), title: Text('Ganti foto'), dense: true)),
+                              PopupMenuItem(
+                                value: 'aktif',
+                                child: ListTile(
+                                  leading: Icon(p.aktif ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                                  title: Text(p.aktif ? 'Nonaktifkan' : 'Aktifkan'),
+                                  dense: true,
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'hapus',
+                                child: ListTile(
+                                  leading: Icon(Icons.delete_outline, color: Color(0xFFB3261E)),
+                                  title: Text('Hapus permanen', style: TextStyle(color: Color(0xFFB3261E))),
+                                  dense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),

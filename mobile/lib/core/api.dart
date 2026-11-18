@@ -535,8 +535,8 @@ class ApiClient {
   );
 
   /// aktif: 'Y' | 'N' | null (semua).
-  /// hargaRendah: hanya produk aktif dengan harga jual <= harga beli (HPP); `jumlah` ada di halaman 1.
-  Future<({List<ProdukAdmin> items, bool lagi, int? jumlah})> produkAdmin({
+  /// hargaRendah: produk aktif rugi/impas (harga jual <= harga beli) lalu yang belum punya harga beli; `jumlah`, `rugi`, `tanpaHpp` ada di halaman 1.
+  Future<({List<ProdukAdmin> items, bool lagi, int? jumlah, int? rugi, int? tanpaHpp})> produkAdmin({
     String? q,
     String? kategori,
     String? aktif,
@@ -561,6 +561,8 @@ class ApiClient {
       ],
       lagi: j['ada_lagi'] == true,
       jumlah: (j['jumlah'] as num?)?.toInt(),
+      rugi: (j['rugi'] as num?)?.toInt(),
+      tanpaHpp: (j['tanpa_hpp'] as num?)?.toInt(),
     );
   }
 
@@ -722,6 +724,17 @@ class ApiClient {
       ),
     ) as Map<String, dynamic>;
     return (j['versi'] as num).toInt();
+  }
+
+  /// Riwayat pemakaian produk: `bisa_hapus`, `rincian` (mis. "penjualan (3)").
+  Future<({bool bisaHapus, String rincian})> jejakProduk(int id) async {
+    final j = await get('/api/v1/admin/produk/$id/jejak') as Map<String, dynamic>;
+    return (bisaHapus: j['bisa_hapus'] == true, rincian: (j['rincian'] as String?) ?? '');
+  }
+
+  /// Hapus permanen produk tanpa riwayat (server menolak dengan 422 PRODUK_BERTRANSAKSI bila sudah dipakai).
+  Future<void> hapusProduk(int id) async {
+    await _call(() => _dio.delete<dynamic>('/api/v1/admin/produk/$id'));
   }
 
   Future<void> hapusFoto(int id) async {

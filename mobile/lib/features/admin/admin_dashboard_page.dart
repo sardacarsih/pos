@@ -248,6 +248,13 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
           pesan: 'Periksa dan naikkan harga jual.',
           onTap: () => _buka(adminTabProduk, subTabProduk: 2),
         ),
+      if (d.tanpaHpp > 0)
+        PerhatianKartu(
+          tingkat: Tingkat.peringatan,
+          judul: '${d.tanpaHpp} produk belum ada harga beli',
+          pesan: 'Isi harga beli agar margin dapat dipantau.',
+          onTap: () => _buka(adminTabProduk, subTabProduk: 2),
+        ),
       if ((_stokHabis ?? 0) > 0)
         PerhatianKartu(
           tingkat: Tingkat.peringatan,

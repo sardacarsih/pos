@@ -537,7 +537,7 @@ pub fn daftar_produk_admin(
         sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
     }
     if harga_rendah {
-        // Monitoring margin: produk aktif dengan harga jual <= harga beli (HPP). BELI 0 = HPP belum diisi, dikecualikan.
+        // Monitoring margin: produk aktif yang rugi/impas (harga jual <= harga beli) ATAU belum punya HPP (BELI kosong/0).
         sql.push_str(&format!(" AND {HARGA_RENDAH}"));
     } else {
         match aktif {
@@ -548,9 +548,9 @@ pub fn daftar_produk_admin(
     }
     b.add("off", (page.saturating_sub(1) * size).to_string());
     b.add("lim", (size + 1).to_string());
-    // Harga rendah: paling rugi (margin terkecil) dulu; selain itu urutan manual admin.
+    // Harga rendah: yang rugi dulu (margin terkecil), lalu yang belum punya HPP (nama A-Z); selain itu urutan manual admin.
     let urut = if harga_rendah {
-        "(p.PRICE - p.BELI), p.PRODUCTNAME, p.PRODUCTID"
+        "CASE WHEN NVL(p.BELI, 0) > 0 THEN 0 ELSE 1 END, CASE WHEN NVL(p.BELI, 0) > 0 THEN p.PRICE - p.BELI END, p.PRODUCTNAME, p.PRODUCTID"
     } else {
         "NVL(u.URUT, 999999999), p.PRODUCTNAME, p.PRODUCTID"
     };
@@ -567,15 +567,36 @@ pub fn daftar_produk_admin(
     Ok(Halaman { items, ada_lagi })
 }
 
-/// Syarat produk aktif yang dijual di bawah/sama dengan HPP (harga beli terakhir); BELI 0 = HPP belum diisi.
-const HARGA_RENDAH: &str = "p.AKTIF = 'Y' AND NVL(p.BELI, 0) > 0 AND NVL(p.PRICE, 0) <= p.BELI";
+/// Rugi/impas: ada harga beli (HPP = harga beli terakhir) dan harga jual <= HPP.
+const RUGI: &str = "NVL(p.BELI, 0) > 0 AND NVL(p.PRICE, 0) <= p.BELI";
+/// Belum punya HPP: harga beli kosong/0 (data belum lengkap; margin tidak dapat dihitung).
+const TANPA_HPP: &str = "NVL(p.BELI, 0) <= 0";
+/// Isi daftar "Harga jual <= HPP": produk aktif yang rugi/impas ATAU belum punya HPP.
+const HARGA_RENDAH: &str = "p.AKTIF = 'Y' AND ((NVL(p.BELI, 0) > 0 AND NVL(p.PRICE, 0) <= p.BELI) OR NVL(p.BELI, 0) <= 0)";
 
-/// Total produk yang memenuhi `HARGA_RENDAH` (tanpa filter pencarian/kategori), untuk lencana monitoring.
-pub fn jumlah_harga_rendah(conn: &Connection) -> AppResult<i64> {
-    Ok(conn.query_row_as::<i64>(
-        &format!("SELECT COUNT(*) FROM POS_PRODUCT p WHERE {HARGA_RENDAH}"),
+/// Hitungan terpisah agar yang butuh tindakan (rugi) tidak tertutup oleh data belum lengkap (tanpa HPP).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct HargaRendah {
+    pub rugi: i64,
+    pub tanpa_hpp: i64,
+}
+
+impl HargaRendah {
+    /// Panjang daftar "Harga jual <= HPP" (rugi + tanpa HPP; keduanya saling lepas).
+    pub fn total(&self) -> i64 {
+        self.rugi + self.tanpa_hpp
+    }
+}
+
+/// Hitungan produk aktif rugi/impas dan tanpa HPP (tanpa filter pencarian/kategori; satu query ringan, tanpa join transaksi).
+pub fn jumlah_harga_rendah(conn: &Connection) -> AppResult<HargaRendah> {
+    let (rugi, tanpa_hpp) = conn.query_row_as::<(i64, i64)>(
+        &format!(
+            "SELECT COUNT(CASE WHEN {RUGI} THEN 1 END), COUNT(CASE WHEN {TANPA_HPP} THEN 1 END) FROM POS_PRODUCT p WHERE p.AKTIF = 'Y'"
+        ),
         &[],
-    )?)
+    )?;
+    Ok(HargaRendah { rugi, tanpa_hpp })
 }
 
 /// Jumlah produk aktif dengan stok sistem <= 0 (agregasi seluruh transaksi `dari`..`sampai`: berat, cache di pemanggil).
@@ -634,6 +655,98 @@ pub fn validasi_produk(p: &UbahProduk) -> AppResult<()> {
     Ok(())
 }
 
+/// Riwayat pemakaian satu produk (jumlah baris per tabel, dicocokkan lewat KODE_BARANG = KODE_ITEM).
+/// Produk hanya boleh dihapus permanen bila semuanya 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct JejakProduk {
+    pub penjualan: i64,
+    pub pembelian: i64,
+    pub pending: i64,
+    pub stok: i64,
+    pub opname: i64,
+    pub rusak: i64,
+}
+
+impl JejakProduk {
+    pub fn total(&self) -> i64 {
+        self.penjualan + self.pembelian + self.pending + self.stok + self.opname + self.rusak
+    }
+    pub fn bisa_hapus(&self) -> bool {
+        self.total() == 0
+    }
+    /// Rincian yang dipakai di pesan penolakan, mis. "penjualan (3), stok tahunan (1)".
+    pub fn rincian(&self) -> String {
+        [
+            ("penjualan", self.penjualan),
+            ("pembelian", self.pembelian),
+            ("transaksi tertunda", self.pending),
+            ("stok tahunan", self.stok),
+            ("stock opname", self.opname),
+            ("barang rusak", self.rusak),
+        ]
+        .iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(k, n)| format!("{k} ({n})"))
+        .collect::<Vec<_>>()
+        .join(", ")
+    }
+}
+
+fn jejak_kode(conn: &Connection, kode: &str) -> AppResult<JejakProduk> {
+    let c = |t: &str| format!("(SELECT COUNT(*) FROM {t} WHERE KODE_BARANG = :k)");
+    let sql = format!(
+        "SELECT {}, {}, {}, {}, {}, {} FROM DUAL",
+        c("POS_PENJUALAN_DETAIL"),
+        c("POS_PEMBELIANDETAIL"),
+        c("POS_PENDING_DETAIL"),
+        c("POS_STOCK"),
+        c("POS_STOCKOPNAME"),
+        c("POS_BARANGRUSAK")
+    );
+    let (penjualan, pembelian, pending, stok, opname, rusak) =
+        conn.query_row_as_named::<(i64, i64, i64, i64, i64, i64)>(&sql, &[("k", &kode)])?;
+    Ok(JejakProduk { penjualan, pembelian, pending, stok, opname, rusak })
+}
+
+/// Riwayat pemakaian produk `id` (NotFound bila produk tidak ada).
+pub fn jejak_produk(conn: &Connection, id: i64) -> AppResult<(ProdukAdmin, JejakProduk)> {
+    let p = produk_admin_by_id(conn, id)?
+        .ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
+    let j = jejak_kode(conn, &p.kode)?;
+    Ok((p, j))
+}
+
+/// Hapus permanen produk yang tidak punya riwayat apa pun. Mengunci baris produk (FOR UPDATE), memeriksa ulang
+/// riwayat di transaksi yang sama, lalu membersihkan tabel pendamping (foto, urutan, potongan qty). Tidak bisa dibatalkan.
+pub fn hapus_produk(conn: &Connection, id: i64) -> AppResult<ProdukAdmin> {
+    let hasil = (|| -> AppResult<ProdukAdmin> {
+        let terkunci: Option<i64> = opt(conn.query_row_as_named::<i64>(
+            "SELECT PRODUCTID FROM POS_PRODUCT WHERE PRODUCTID = :id FOR UPDATE",
+            &[("id", &id)],
+        ))?;
+        if terkunci.is_none() {
+            return Err(AppError::NotFound("Produk tidak ditemukan".into()));
+        }
+        let (p, j) = jejak_produk(conn, id)?;
+        if !j.bisa_hapus() {
+            return Err(AppError::rule(
+                "PRODUK_BERTRANSAKSI",
+                format!("Produk sudah punya riwayat: {}. Nonaktifkan saja.", j.rincian()),
+            ));
+        }
+        conn.execute_named("DELETE FROM MOB_PRODUK_FOTO WHERE PRODUCT_ID = :id", &[("id", &id)])?;
+        conn.execute_named("DELETE FROM MOB_PRODUK_URUT WHERE PRODUCT_ID = :id", &[("id", &id)])?;
+        conn.execute_named("DELETE FROM POS_POTONGANBERDASARKANQTY WHERE KODE_ITEM = :k", &[("k", &p.kode)])?;
+        conn.execute_named("DELETE FROM POS_PRODUCT WHERE PRODUCTID = :id", &[("id", &id)])?;
+        conn.commit()?;
+        Ok(p)
+    })();
+    if hasil.is_err() {
+        let _ = conn.rollback(); // lepas kunci FOR UPDATE
+    }
+    hasil
+}
+
 /// Ubah produk. Mengembalikan (harga jual lama, produk setelah diubah). `KODE_ITEM` tidak berubah.
 pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64, ProdukAdmin)> {
     validasi_produk(p)?;
@@ -677,6 +790,20 @@ pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64
     let baru = produk_admin_by_id(conn, id)?
         .ok_or_else(|| AppError::Internal("produk hilang setelah diubah".into()))?;
     Ok((lama.harga, baru))
+}
+
+#[cfg(test)]
+mod jejak_tests {
+    use super::*;
+
+    #[test]
+    fn rincian_hanya_memuat_yang_ada() {
+        let j = JejakProduk { penjualan: 3, pembelian: 0, pending: 0, stok: 1, opname: 0, rusak: 0 };
+        assert_eq!(j.rincian(), "penjualan (3), stok tahunan (1)");
+        assert!(!j.bisa_hapus());
+        let kosong = JejakProduk { penjualan: 0, pembelian: 0, pending: 0, stok: 0, opname: 0, rusak: 0 };
+        assert!(kosong.bisa_hapus() && kosong.rincian().is_empty());
+    }
 }
 
 #[cfg(test)]

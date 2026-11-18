@@ -165,7 +165,10 @@ pub struct HariJual {
 /// Hal yang perlu ditindak admin dan murah dihitung (stok habis dimuat terpisah karena berat).
 #[derive(Debug, Serialize)]
 pub struct Perhatian {
+    /// Produk aktif rugi/impas (harga jual <= harga beli); butuh tindakan.
     pub harga_rendah: i64,
+    /// Produk aktif belum punya harga beli (HPP); informasi kelengkapan data.
+    pub tanpa_hpp: i64,
 }
 
 /// Susun `n` hari berakhir di `hari` (lama -> baru); hari tanpa transaksi diisi 0.
@@ -303,8 +306,10 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
 
     let tren = tren_penjualan(conn, hari, 7)?;
     let kemarin = tren[tren.len() - 2].clone();
+    let hr = super::katalog::jumlah_harga_rendah(conn)?;
     let perhatian = Perhatian {
-        harga_rendah: super::katalog::jumlah_harga_rendah(conn)?,
+        harga_rendah: hr.rugi,
+        tanpa_hpp: hr.tanpa_hpp,
     };
 
     Ok(DashboardAdmin {

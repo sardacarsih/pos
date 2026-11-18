@@ -294,7 +294,8 @@ class DashboardAdmin {
         for (final h in (j['tren'] as List? ?? []))
           HariJual.fromJson(h as Map<String, dynamic>),
       ],
-      hargaRendah = _i((j['perhatian'] as Map?)?['harga_rendah']);
+      hargaRendah = _i((j['perhatian'] as Map?)?['harga_rendah']),
+      tanpaHpp = _i((j['perhatian'] as Map?)?['tanpa_hpp']);
   final String tanggal;
   final bool periodeTerbuka;
   final String? periodePesan, periodeKode;
@@ -313,6 +314,9 @@ class DashboardAdmin {
 
   /// Jumlah produk aktif dengan harga jual <= harga beli.
   final int hargaRendah;
+
+  /// Jumlah produk aktif yang belum punya harga beli (HPP belum diisi).
+  final int tanpaHpp;
 }
 
 /// Penjualan satu hari (semua kasir).

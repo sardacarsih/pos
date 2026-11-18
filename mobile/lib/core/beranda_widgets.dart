@@ -802,3 +802,7 @@ class KasirRincianKartu extends StatelessWidget {
     );
   }
 }
+
+/// Status margin produk: beli <= 0 = HPP belum diisi (margin tidak dapat dihitung), selain itu margin = harga - beli.
+({bool tanpaHpp, int? margin}) statusMargin(int harga, int beli) =>
+    beli <= 0 ? (tanpaHpp: true, margin: null) : (tanpaHpp: false, margin: harga - beli);
