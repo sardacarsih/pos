@@ -17,7 +17,7 @@ class AdminKatalogPage extends ConsumerStatefulWidget {
 
 class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 3, vsync: this)
+  late final TabController _tab = TabController(length: 4, vsync: this)
     ..addListener(() {
       if (!_tab.indexIsChanging) setState(() {});
     });
@@ -46,6 +46,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
           tabs: const [
             Tab(text: 'Produk'),
             Tab(text: 'Stok habis'),
+            Tab(text: 'Harga ≤ HPP'),
             Tab(text: 'Kategori'),
           ],
         ),
@@ -56,6 +57,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
             children: const [
               AdminProdukPage(),
               AdminStokPage(),
+              AdminProdukPage(hargaRendah: true),
               AdminKategoriPage(),
             ],
           ),

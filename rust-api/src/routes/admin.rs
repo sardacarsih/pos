@@ -363,6 +363,8 @@ pub struct ProdukQuery {
     q: Option<String>,
     kategori: Option<String>,
     aktif: Option<String>,
+    /// "Y" = hanya produk aktif dengan harga jual <= harga beli (monitoring margin).
+    harga_rendah: Option<String>,
     page: Option<u32>,
     size: Option<u32>,
 }
@@ -384,21 +386,33 @@ pub async fn produk_list(
         page: q.page,
         size: q.size,
     };
+    let harga_rendah = match q.harga_rendah.as_deref() {
+        None | Some("") => false,
+        Some("Y") => true,
+        Some(_) => return Err(AppError::validation("Filter harga_rendah harus Y")),
+    };
     let (page, size) = (pg.page(), pg.size());
     let teks = pg.q;
     let kategori = q.kategori;
-    let h = db::run(&s.pool, move |c| {
-        katalog::daftar_produk_admin(
+    let (h, jumlah) = db::run(&s.pool, move |c| {
+        let h = katalog::daftar_produk_admin(
             c,
             teks.as_deref(),
             kategori.as_deref(),
             aktif.as_deref(),
+            harga_rendah,
             page,
             size,
-        )
+        )?;
+        let jumlah = if harga_rendah && page <= 1 {
+            Some(katalog::jumlah_harga_rendah(c)?)
+        } else {
+            None
+        };
+        Ok((h, jumlah))
     })
     .await?;
-    Ok(super::halaman(h.items, h.ada_lagi, page))
+    Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah })))
 }
 
 #[derive(Deserialize)]
@@ -446,6 +460,13 @@ mod produk_query_tests {
                 .unwrap();
         let q = axum::extract::Query::<ProdukQuery>::try_from_uri(&uri).expect("query valid");
         assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+    }
+
+    #[test]
+    fn query_produk_menerima_harga_rendah() {
+        let uri: axum::http::Uri = "/api/v1/admin/produk?harga_rendah=Y&page=1".parse().unwrap();
+        let q = axum::extract::Query::<ProdukQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!(q.0.harga_rendah.as_deref(), Some("Y"));
     }
 }
 

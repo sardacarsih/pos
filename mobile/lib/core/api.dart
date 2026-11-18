@@ -535,10 +535,12 @@ class ApiClient {
   );
 
   /// aktif: 'Y' | 'N' | null (semua).
-  Future<({List<ProdukAdmin> items, bool lagi})> produkAdmin({
+  /// hargaRendah: hanya produk aktif dengan harga jual <= harga beli (HPP); `jumlah` ada di halaman 1.
+  Future<({List<ProdukAdmin> items, bool lagi, int? jumlah})> produkAdmin({
     String? q,
     String? kategori,
     String? aktif,
+    bool hargaRendah = false,
     int page = 1,
   }) async {
     final j = await get(
@@ -547,6 +549,7 @@ class ApiClient {
         if (q != null && q.isNotEmpty) 'q': q,
         'kategori': ?kategori,
         'aktif': ?aktif,
+        if (hargaRendah) 'harga_rendah': 'Y',
         'page': page,
         'size': 30,
       },
@@ -557,6 +560,7 @@ class ApiClient {
           ProdukAdmin.fromJson(p as Map<String, dynamic>),
       ],
       lagi: j['ada_lagi'] == true,
+      jumlah: (j['jumlah'] as num?)?.toInt(),
     );
   }
 

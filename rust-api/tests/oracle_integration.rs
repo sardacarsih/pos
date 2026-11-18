@@ -197,3 +197,38 @@ fn stok_habis_dan_opname_idempoten() {
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();
     c.commit().unwrap();
 }
+
+#[test]
+fn harga_rendah_menyaring_dan_mengurutkan() {
+    use pos_api::db::katalog;
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    // (id, kode, harga jual, harga beli, aktif)
+    for (id, kode, harga, beli, aktif) in [
+        (1, "H-RUGI", 900, 1000, "Y"),
+        (2, "H-IMPAS", 1000, 1000, "Y"),
+        (3, "H-UNTUNG", 1500, 1000, "Y"),
+        (4, "H-BELI0", 0, 0, "Y"),
+        (5, "H-NONAKTIF", 500, 1000, "N"),
+    ] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', :h, :b, 1, :a)",
+            &[("i", &id), ("k", &kode), ("h", &harga), ("b", &beli), ("a", &aktif)],
+        )
+        .unwrap();
+    }
+    c.commit().unwrap();
+
+    let h = katalog::daftar_produk_admin(&c, None, None, None, true, 1, 10).unwrap();
+    let kode: Vec<&str> = h.items.iter().map(|p| p.kode.as_str()).collect();
+    assert_eq!(kode, ["H-RUGI", "H-IMPAS"]); // paling rugi dulu; untung/beli 0/nonaktif tidak ada
+    assert_eq!(katalog::jumlah_harga_rendah(&c).unwrap(), 2);
+    // Tanpa filter, semua produk tetap muncul (jalur lama tidak berubah).
+    let semua = katalog::daftar_produk_admin(&c, None, None, None, false, 1, 10).unwrap();
+    assert_eq!(semua.items.len(), 5);
+}
