@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod faktur;
 pub mod foto;
 pub mod katalog;
+pub mod opname;
 pub mod profil;
 pub mod push;
 pub mod rekap;
