@@ -99,3 +99,13 @@ export function validasiRentang(r: Rentang, hariIni: string): string | null {
 export function persenJenis(bagian: number, total: number): number {
   return total > 0 ? Math.round((bagian / total) * 100) : 0;
 }
+
+export type StatusHarga = { tipe: 'tanpa-hpp'; margin: null } | { tipe: 'rugi' | 'impas'; margin: number };
+
+/** Status margin produk: harga beli kosong/<=0 = HPP belum diisi (margin tidak dapat dihitung), selain itu rugi atau impas. */
+export function statusHarga(harga: number, beli: number | null | undefined): StatusHarga {
+  const b = Number(beli) || 0;
+  if (b <= 0) return { tipe: 'tanpa-hpp', margin: null };
+  const m = (Number(harga) || 0) - b;
+  return { tipe: m < 0 ? 'rugi' : 'impas', margin: m };
+}
