@@ -40,8 +40,15 @@ Jalankan `pos-api migrate` di server **hanya** bila rilis berikutnya mengubah `s
 .\rust-api\tools\deploy-api.ps1
 ```
 
-Test, build release, kirim ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart
-layanan, health check `http://127.0.0.1:8080/health`, dan **rollback otomatis** bila health gagal. Layanan berhenti beberapa
+Test, build release, kirim ke `.tmp`, cocokkan sha256, **`pos-api selftest`**, cadangkan ke `pos-api-release.prev.exe`,
+tukar biner, restart layanan, health check `http://127.0.0.1:8080/health`, dan **rollback otomatis** bila health gagal.
+
+**`pos-api selftest`** menjalankan biner baru di server (folder `.env` yang sama) hanya dengan query **baca** terhadap Oracle
+produksi: kolom tabel yang dipakai fitur baru (termasuk jalur tulis opname, dibaca dari metadata), dashboard (kemarin, tren,
+perhatian), rincian penjualan (hari ini, 7, 31 hari; total kasir harus sama dengan ringkasan), stok habis, harga <= HPP,
+stok sistem, riwayat SO. Bila ada `[GAGAL]` (mis. `ORA-00904`), deploy **dibatalkan sebelum layanan disentuh** dan keluaran
+lengkap ditampilkan. Ini membuktikan SQL baru di Oracle sungguhan tanpa membuka endpoint. Bisa juga dijalankan manual di
+server: `cd D:/be-rustapi; .\pos-api-release.exe selftest`. Lewati dengan `-LewatiSelftest` (tidak disarankan). Layanan berhenti beberapa
 detik: lakukan di luar jam transaksi puncak. `.env`, kredensial FCM, dan skema DB tidak disentuh.
 
 ### Smoke test API (read-only dulu)
@@ -91,4 +98,6 @@ topbar (chip periode, menu pengguna), lencana Stok habis/Harga <= HPP; menu Stok
 setelah ada baris kosong, dan **tanpa itu sisa skrip hilang diam-diam** (tanpa galat). Karena itu skrip remote dikirim sebagai
 satu baris base64 dan dijalankan dengan `Invoke-Expression` (`Invoke-SshSkrip` di `mobile/tools/ssh-kirim.ps1`). Skrip
 `deploy-api.ps1` yang lama mengirim loop health check dan rollback sebagai blok multi-baris, jadi bagian itu mungkin tidak
-pernah berjalan di server yang memakai Windows PowerShell 5.1; kini ia memakai pengirim yang sama.
+pernah berjalan di server yang memakai Windows PowerShell 5.1; kini ia memakai pengirim yang sama. Alur remote-nya sudah
+diuji lokal dengan stub layanan untuk empat skenario (deploy OK, biner sama, health gagal -> rollback, selftest gagal ->
+dibatalkan tanpa menyentuh layanan); yang belum teruji hanyalah layanan Windows dan Oracle sungguhan.
