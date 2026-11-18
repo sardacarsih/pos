@@ -474,13 +474,17 @@ pub async fn stok_habis(
     let (page, size) = (pg.page(), pg.size());
     let teks = pg.q;
     let kategori = q.kategori;
-    let (h, jumlah) = db::run(&s.pool, move |c| {
+    let (h, jumlah, kontrol) = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
         let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
-        katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size)
+        let (h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size)?;
+        // Kontrol stok kasir mati = kasir menjual tanpa cek stok; daftar ini lalu bisa memuat barang yang tidak dilacak.
+        let kontrol = katalog::setting(c, "KONTROL_SALDO_QTY")?
+            .is_some_and(|v| v.trunc() > rust_decimal::Decimal::ZERO);
+        Ok((h, jumlah, kontrol))
     })
     .await?;
-    Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah })))
+    Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah, "kontrol_stok": kontrol })))
 }
 
 #[derive(Deserialize)]
@@ -493,16 +497,20 @@ pub struct OpnameReq {
 pub async fn stok_opname(
     State(s): State<AppState>,
     a: Auth,
+    headers: axum::http::HeaderMap,
     Json(req): Json<OpnameReq>,
 ) -> AppResult<Json<db::opname::HasilOpname>> {
-    let admin = a.peran(ADMIN)?.usr.clone();
-    db::opname::validasi_qty(req.qty_fisik)?;
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    let key = super::idempotency_key(&headers)?;
     let h = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
-        db::opname::simpan(c, req.produk_id, req.qty_fisik, hari)
+        db::opname::simpan(c, uid, &key, req.produk_id, req.qty_fisik, hari)
     })
     .await?;
-    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, selisih = %h.selisih, "stok opname");
+    tracing::info!(admin = %admin, produk = req.produk_id, nomor_so = %h.nomor_so, selisih = %h.selisih, ulang = h.ulang, "stok opname");
     Ok(Json(h))
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
+import '../../core/checkout.dart' show newCheckoutKey;
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -22,6 +23,7 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
   final _scroll = ScrollController();
   final List<StokItem> _items = [];
   int? _jumlah;
+  bool _kontrolStok = true;
   bool _loading = false;
   bool _lagi = false;
   String? _error;
@@ -75,6 +77,7 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
         _page = page;
         _lagi = r.lagi;
         if (r.jumlah != null) _jumlah = r.jumlah;
+        _kontrolStok = r.kontrolStok;
       });
     } on ApiException catch (e) {
       if (mounted && requestId == _requestId) setState(() => _error = e.pesan);
@@ -83,62 +86,15 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
     }
   }
 
-  static String _qty(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
-
   Future<void> _opname(StokItem p) async {
-    final qty = TextEditingController();
-    final hasil = await showModalBottomSheet<String>(
+    final no = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (c) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          16 + MediaQuery.of(c).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(p.nama, style: Theme.of(c).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text('${p.kode} · stok sistem ${_qty(p.stok)} ${p.satuan}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: qty,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}')),
-              ],
-              decoration: const InputDecoration(labelText: 'Qty fisik'),
-              onSubmitted: (v) => Navigator.pop(c, v),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, qty.text),
-              child: const Text('Simpan opname'),
-            ),
-          ],
-        ),
-      ),
+      builder: (c) => _OpnameSheet(item: p, api: ref.read(apiProvider)),
     );
-    qty.dispose();
-    if (hasil == null || !mounted) return;
-    final v = double.tryParse(hasil.trim());
-    if (v == null || v < 0) return _pesan('Qty fisik tidak valid');
-    try {
-      final no = await ref.read(apiProvider).opnameStok(p.id, hasil.trim());
-      if (!mounted) return;
-      _pesan('Opname $no tersimpan');
-      _cari(reset: true);
-    } on ApiException catch (e) {
-      if (mounted) _pesan(e.pesan);
-    }
+    if (no == null || !mounted) return;
+    _pesan('Opname $no tersimpan');
+    _cari(reset: true);
   }
 
   @override
@@ -166,6 +122,14 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
             ),
           ),
         ),
+        if (!_kontrolStok)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              'Kontrol stok di kasir nonaktif: daftar ini dapat memuat barang yang tidak dilacak stoknya.',
+              style: TextStyle(color: Color(0xFFB26A00)),
+            ),
+          ),
         if (_jumlah != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -216,7 +180,7 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
                       ),
                       subtitle: Text('${p.kode} · ${p.kategori}'),
                       trailing: Text(
-                        '${_qty(p.stok)} ${p.satuan}',
+                        '${_fmtQty(p.stok)} ${p.satuan}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFFB3261E),
@@ -236,4 +200,121 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
       ],
     ),
   );
+}
+
+String _fmtQty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+
+/// Sheet opname: controller, kunci idempotensi, dan panggilan API hidup di State sheet,
+/// jadi controller tidak di-dispose saat animasi tutup dan retry memakai kunci yang sama.
+class _OpnameSheet extends StatefulWidget {
+  const _OpnameSheet({required this.item, required this.api});
+  final StokItem item;
+  final ApiClient api;
+
+  @override
+  State<_OpnameSheet> createState() => _OpnameSheetState();
+}
+
+class _OpnameSheetState extends State<_OpnameSheet> {
+  final _qty = TextEditingController();
+  final String _key = newCheckoutKey();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _qty.dispose();
+    super.dispose();
+  }
+
+  Future<void> _simpan() async {
+    if (_busy) return;
+    // Keyboard desimal locale Indonesia memakai koma; server menerima titik.
+    final teks = _qty.text.trim().replaceAll(',', '.');
+    final v = double.tryParse(teks);
+    if (v == null || v < 0) {
+      return setState(() => _error = 'Qty fisik tidak valid');
+    }
+    final p = widget.item;
+    final lanjut = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Koreksi stok?'),
+        content: Text(
+          '${p.nama}\nStok sistem ${_fmtQty(p.stok)} → fisik ${_fmtQty(v)} '
+          '(selisih ${_fmtQty(v - p.stok)}).\n'
+          'Dokumen SO tidak dapat dibatalkan dari aplikasi.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Ya, simpan'),
+          ),
+        ],
+      ),
+    );
+    if (lanjut != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final no = await widget.api.opnameStok(
+        p.id,
+        teks,
+        idempotencyKey: _key,
+      );
+      if (mounted) Navigator.pop(context, no);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.pesan);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.item;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(p.nama, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text('${p.kode} · stok sistem ${_fmtQty(p.stok)} ${p.satuan}'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _qty,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,4}')),
+            ],
+            decoration: InputDecoration(
+              labelText: 'Qty fisik',
+              errorText: _error,
+            ),
+            onSubmitted: (_) => _simpan(),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _busy ? null : _simpan,
+            child: Text(_busy ? 'Menyimpan…' : 'Simpan opname'),
+          ),
+        ],
+      ),
+    );
+  }
 }

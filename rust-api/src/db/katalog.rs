@@ -253,32 +253,28 @@ pub fn stok_habis(
     if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
         b.add("q", like(q));
         b.add("qraw", q.trim());
-        where_sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\' OR p.BARCODE = :qraw)");
+        where_sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw)");
     }
     if let Some(k) = kategori.filter(|k| !k.trim().is_empty()) {
         b.add("kat", k.trim());
         where_sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
     }
-    let dari_sql = format!(
-        "FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql}",
-        stok_join(None)
-    );
-    let jumlah = if page <= 1 {
-        let sql = format!("SELECT COUNT(*) {dari_sql}");
-        Some(b.with(|p| conn.query_row_as_named::<i64>(&sql, p))?)
-    } else {
-        None
-    };
     b.add("off", (page.saturating_sub(1) * size).to_string());
     b.add("lim", (size + 1).to_string());
+    // COUNT(*) OVER () memberi total seluruh hasil dari agregasi yang sama (satu pemindaian, bukan dua).
     let sql = format!(
-        "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, p.SATUAN, k.KATEGORI, {} {dari_sql}          ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
-        tm(STOK_EXPR)
+        "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, p.SATUAN, k.KATEGORI, {}, COUNT(*) OVER () \
+         FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
+         ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
+        tm(STOK_EXPR),
+        stok_join(None)
     );
     let mut items = Vec::new();
+    let mut total: Option<i64> = None;
     b.with(|p| -> AppResult<()> {
         for r in conn.query_named(&sql, p)? {
             let r = r?;
+            total.get_or_insert(r.get::<_, i64>(6)?);
             items.push(StokHabis {
                 id: r.get(0)?,
                 kode: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
@@ -292,7 +288,30 @@ pub fn stok_habis(
     })?;
     let ada_lagi = items.len() > size as usize;
     items.truncate(size as usize);
+    // Total hanya dikirim di halaman 1 (halaman kosong di sana berarti memang 0).
+    let jumlah = (page <= 1).then(|| total.unwrap_or(0));
     Ok((Halaman { items, ada_lagi }, jumlah))
+}
+
+#[cfg(test)]
+mod stok_sql_tests {
+    use super::*;
+
+    #[test]
+    fn stok_join_tanpa_batas_kode_tidak_memakai_in() {
+        let s = stok_join(None);
+        assert!(!s.contains(" IN ("));
+        assert!(s.contains(":dari") && s.contains(":sampai"));
+        for t in ["POS_STOCK ", "POS_PEMBELIANDETAIL", "POS_PENJUALAN_DETAIL", "POS_BARANGRUSAK", "POS_STOCKOPNAME"] {
+            assert!(s.contains(t), "{t}");
+        }
+    }
+
+    #[test]
+    fn stok_join_dengan_batas_kode_membatasi_semua_subquery() {
+        let s = stok_join(Some(":k0,:k1"));
+        assert_eq!(s.matches("IN (:k0,:k1)").count(), 5);
+    }
 }
 
 #[derive(Debug, Serialize)]
