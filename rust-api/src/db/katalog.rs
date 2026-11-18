@@ -578,6 +578,18 @@ pub fn jumlah_harga_rendah(conn: &Connection) -> AppResult<i64> {
     )?)
 }
 
+/// Jumlah produk aktif dengan stok sistem <= 0 (agregasi seluruh transaksi `dari`..`sampai`: berat, cache di pemanggil).
+pub fn jumlah_stok_habis(conn: &Connection, dari: NaiveDate, sampai: NaiveDate) -> AppResult<i64> {
+    let mut b = Binds::default();
+    b.add("dari", dari.format("%Y-%m-%d"));
+    b.add("sampai", sampai.format("%Y-%m-%d"));
+    let sql = format!(
+        "SELECT COUNT(*) FROM POS_PRODUCT p {} WHERE p.AKTIF = 'Y' AND {STOK_EXPR} <= 0",
+        stok_join(None)
+    );
+    Ok(b.with(|p| conn.query_row_as_named::<i64>(&sql, p))?)
+}
+
 pub fn produk_admin_by_id(conn: &Connection, id: i64) -> AppResult<Option<ProdukAdmin>> {
     let sql = format!("SELECT {COLS_ADMIN} {FROM} WHERE p.PRODUCTID = :id");
     match opt(conn.query_row_named(&sql, &[("id", &id)]))? {

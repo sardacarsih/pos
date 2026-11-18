@@ -4,21 +4,23 @@ import 'package:go_router/go_router.dart';
 
 import '../profil/profil_aksi.dart';
 import '../../core/api.dart';
+import '../../core/beranda_widgets.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
-import 'transaksi_saya_page.dart' show KartuLimit;
 
-/// Dashboard anggota: limit periode berjalan (dengan rentang tanggal), transaksi terakhir, aksi cepat.
+/// Beranda anggota: sisa limit periode berjalan (hero) -> aksi cepat -> transaksi terakhir.
 class DashboardAnggotaPage extends ConsumerStatefulWidget {
   const DashboardAnggotaPage({
     super.key,
     required this.aktif,
     required this.onBelanja,
+    this.onRiwayat,
   });
   final bool aktif;
   final VoidCallback onBelanja;
+  final VoidCallback? onRiwayat;
 
   @override
   ConsumerState<DashboardAnggotaPage> createState() => _DashboardAnggotaState();
@@ -60,8 +62,10 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
   Widget build(BuildContext context) {
     final d = _d;
     final cs = Theme.of(context).colorScheme;
+    final profil = ref.watch(authProvider).profil;
+    final r = d?.ringkasan;
     return TropicalScaffold(
-      title: 'Dashboard',
+      title: 'Beranda',
       actions: [
         IconButton(
           tooltip: 'Kartu Anggota',
@@ -79,84 +83,77 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
         onRefresh: _muat,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             if (_loading && d == null)
-              const Padding(
-                padding: EdgeInsets.all(48),
-                child: LoadingKopkar(),
-              ),
+              const Padding(padding: EdgeInsets.all(48), child: LoadingKopkar()),
             if (_error != null)
               Card(
                 color: cs.errorContainer,
                 child: ListTile(
                   title: Text(_error!),
-                  trailing: TextButton(
-                    onPressed: _muat,
-                    child: const Text('Coba lagi'),
-                  ),
+                  trailing: TextButton(onPressed: _muat, child: const Text('Coba lagi')),
                 ),
               ),
             if (d != null) ...[
-              if (d.ringkasan != null) ...[
-                Row(
-                  children: [
-                    const ProfilAvatar(radius: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Halo, ${d.ringkasan!.nama}',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ],
+              BerandaHeader(
+                leading: const ProfilAvatar(radius: 24),
+                nama: (r?.nama ?? profil?.nama ?? '').split(' ').first,
+                tanggal: DateTime.now().toIso8601String().substring(0, 10),
+                chip: r == null
+                    ? null
+                    : ChipPeriode(
+                        kode: d.periodeTerbuka ? null : 'PERIODE_TUTUP',
+                        periode: r.periode,
+                        dari: r.dari,
+                        sampai: r.sampai,
                       ),
-                    ),
-                  ],
+              ),
+              const SizedBox(height: 12),
+              if (d.belanjaDemo) ...[
+                const BannerBeranda(
+                  tingkat: Tingkat.peringatan,
+                  judul: 'Mode demo',
+                  pesan: 'Belanja mandiri hanya simulasi dan tidak tersimpan.',
                 ),
-                const SizedBox(height: 8),
-                KartuLimit(
-                  r: d.ringkasan!,
-                  judul: 'Belanja periode ${namaPeriode(d.ringkasan!.periode)}',
+                const SizedBox(height: 12),
+              ],
+              if (r != null)
+                LimitHero(r: r)
+              else
+                const BannerBeranda(
+                  tingkat: Tingkat.peringatan,
+                  judul: 'Data limit belum tersedia',
+                  pesan: 'Tanggal hari ini di luar periode yang diatur.',
+                ),
+              if (!d.periodeTerbuka) ...[
+                const SizedBox(height: 12),
+                BannerBeranda(
+                  tingkat: Tingkat.bahaya,
+                  judul: 'Belanja belum bisa dilakukan',
+                  pesan: d.pesan ?? 'Periode belum dibuka',
+                  catatan: hubungiAdminPeriode,
                 ),
               ],
-              if (!d.periodeTerbuka)
-                Card(
-                  color: cs.errorContainer,
-                  child: ListTile(
-                    leading: const Icon(Icons.lock_outline),
-                    title: Text(d.pesan ?? 'Periode belum dibuka'),
-                    subtitle: const Text(hubungiAdminPeriode),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: d.periodeTerbuka ? widget.onBelanja : null,
-                      icon: const Icon(Icons.shopping_cart_outlined),
-                      label: const Text('Belanja Mandiri'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.go('/saya/kartu-anggota'),
-                      icon: const Icon(Icons.qr_code_2),
-                      label: const Text('Kartu Anggota'),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 12),
+              AksiUtama(
+                label: 'Belanja mandiri',
+                icon: Icons.shopping_cart_outlined,
+                onPressed: d.periodeTerbuka ? widget.onBelanja : null,
               ),
-              const SizedBox(height: 16),
-              Text(
+              const SizedBox(height: 8),
+              AksiUtama(
+                label: 'Kartu anggota',
+                icon: Icons.qr_code_2,
+                sekunder: true,
+                onPressed: () => context.go('/saya/kartu-anggota'),
+              ),
+              JudulBagian(
                 'Transaksi terakhir',
-                style: Theme.of(context).textTheme.titleSmall,
+                aksi: widget.onRiwayat == null
+                    ? null
+                    : TextButton(onPressed: widget.onRiwayat, child: const Text('Lihat semua')),
               ),
-              const SizedBox(height: 8),
               if (d.terakhir.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),
@@ -166,18 +163,13 @@ class _DashboardAnggotaState extends ConsumerState<DashboardAnggotaPage> {
                 Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    title: Text(
-                      rupiah(t.total),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                    title: Text(rupiah(t.total), style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
                       '${t.tanggal} ${t.jam}\n${t.no}${t.tenor > 1 ? ' · ${t.tenor}x angsuran' : ''}',
                     ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.go(
-                      '/saya/faktur/${Uri.encodeComponent(t.no)}',
-                    ),
+                    onTap: () => context.go('/saya/faktur/${Uri.encodeComponent(t.no)}'),
                   ),
                 ),
             ],

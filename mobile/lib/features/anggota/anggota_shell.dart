@@ -25,7 +25,11 @@ class _AnggotaShellState extends State<AnggotaShell> {
       child: IndexedStack(
         index: _i,
         children: [
-          DashboardAnggotaPage(aktif: _i == 0, onBelanja: () => setState(() => _i = 1)),
+          DashboardAnggotaPage(
+            aktif: _i == 0,
+            onBelanja: () => setState(() => _i = 1),
+            onRiwayat: () => setState(() => _i = 2),
+          ),
           BelanjaPage(
             onSelesai: () => setState(() {
               _riwayat++;
@@ -45,7 +49,7 @@ class _AnggotaShellState extends State<AnggotaShell> {
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard),
-                label: 'Dashboard',
+                label: 'Beranda',
               ),
               NavigationDestination(
                 icon: Icon(Icons.shopping_cart_outlined),

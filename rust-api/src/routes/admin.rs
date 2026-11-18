@@ -357,6 +357,34 @@ pub async fn dashboard(State(s): State<AppState>, a: Auth) -> AppResult<Json<Val
     Ok(Json(json!(d)))
 }
 
+/// Cache jumlah stok habis untuk Beranda admin: agregasinya berat, cukup diperbarui tiap 60 detik per proses.
+static STOK_HABIS_CACHE: std::sync::Mutex<Option<(std::time::Instant, i64)>> = std::sync::Mutex::new(None);
+const STOK_HABIS_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Jumlah produk aktif dengan stok sistem <= 0, dimuat terpisah agar Beranda tidak menunggu agregasi berat.
+pub async fn dashboard_stok_habis(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let segar = STOK_HABIS_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .filter(|(t, _)| t.elapsed() < STOK_HABIS_TTL)
+        .map(|(_, n)| n);
+    let jumlah = match segar {
+        Some(n) => n,
+        None => {
+            let n = db::run(&s.pool, |c| {
+                let (hari, _) = db::faktur::sekarang(c)?;
+                let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
+                katalog::jumlah_stok_habis(c, awal, hari)
+            })
+            .await?;
+            *STOK_HABIS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), n));
+            n
+        }
+    };
+    Ok(Json(json!({ "jumlah": jumlah })))
+}
+
 /// Field eksplisit (bukan `#[serde(flatten)]`): query string selalu string, flatten membuat angka gagal di-parse.
 #[derive(Deserialize)]
 pub struct ProdukQuery {
