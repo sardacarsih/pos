@@ -62,6 +62,21 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     user::reset_failures(&c, id).unwrap();
     assert!(!user::find_by_id(&c, id).unwrap().unwrap().locked);
 
+    // Siklus password sementara: akun baru wajib ganti; reset membuka kunci; ganti menurunkan flag.
+    assert!(user::find_by_id(&c, id).unwrap().unwrap().must_change);
+    for _ in 0..5 {
+        user::register_failure(&c, id).unwrap();
+    }
+    let tmp = password::temp_password();
+    user::set_password(&c, id, &password::hash(&tmp).unwrap(), true).unwrap();
+    let u = user::find_by_id(&c, id).unwrap().unwrap();
+    assert!(u.must_change && !u.locked);
+    assert!(password::verify(&tmp, &u.hash) && !password::verify("sementara-123", &u.hash));
+    user::set_password(&c, id, &password::hash("baru-12345").unwrap(), false).unwrap();
+    let u = user::find_by_id(&c, id).unwrap().unwrap();
+    assert!(!u.must_change);
+    assert!(password::verify("baru-12345", &u.hash) && !password::verify(&tmp, &u.hash));
+
     c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&id])
         .unwrap();
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&id])
