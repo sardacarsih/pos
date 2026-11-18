@@ -47,7 +47,7 @@ namespace Penjualan.UC
                             Convert.ToInt32(productInfo.ProductId), barcode,
                             productInfo.KodeItem, productInfo.ProductName,
                             productInfo.Satuan, Convert.ToDecimal(productInfo.Price),
-                            Convert.ToDecimal(productInfo.Hpp)))
+                            Convert.ToDecimal(productInfo.Hpp), productInfo.Isi))
                             return;
                     }
                     else
@@ -92,12 +92,12 @@ namespace Penjualan.UC
             }
         }
 
-        private bool AddProductToTransaction(int productid, string barcode, string kodeitem, string productname, string satuan, decimal price, decimal hpp)
+        private bool AddProductToTransaction(int productid, string barcode, string kodeitem, string productname, string satuan, decimal price, decimal hpp, decimal isi = 1m)
         {
             if (LoginInfo.Penjualan_Control_Qty)
             {
                 var qty_sistem = POS_Services.GetStocItem(kodeitem, startdate, enddate);
-                if (qty_sistem < 1)
+                if (qty_sistem < isi)
                 {
                     XtraMessageBox.Show("Barang belum dapat dijual, tidak terdapat stock pada system\nKode Barang : " + kodeitem + "\nNama Barang : " + productname + "\nStok System : " + qty_sistem, "Info", MessageBoxButtons.OK, MessageBoxIcon.Stop);
                     return false;
@@ -115,7 +115,7 @@ namespace Penjualan.UC
                 return false;
             }
 
-            var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid);
+            var existingProduct = transactionDataList.FirstOrDefault(p => p.ProductId == productid && p.Satuan == satuan);
             if (existingProduct != null)
             {
                 existingProduct.Qty++;
@@ -133,6 +133,7 @@ namespace Penjualan.UC
                     ProductName = productname,
                     Satuan = satuan,
                     Hpp = hpp,
+                    Isi = isi,
                     Price = price,
                     Qty = 1
                 };
@@ -275,6 +276,9 @@ namespace Penjualan.UC
                         {
                             // Get the system stock for the item
                             decimal qtySistem = POS_Services.GetStocItem(data.Kode_Item, startdate, enddate);
+                            // Stok dalam satuan dasar; baris lain produk sama (satuan berbeda) ikut dihitung.
+                            decimal qtyBaris = transactionDataList.Where(t => t.Kode_Item == data.Kode_Item && !ReferenceEquals(t, data)).Sum(t => t.Qty * t.Isi);
+                            qtySistem = Math.Max(0m, (qtySistem - qtyBaris) / data.Isi);
 
                             // Check if the changed quantity exceeds the system stock
                             if (data.Qty > qtySistem)
@@ -327,9 +331,9 @@ namespace Penjualan.UC
             var potongan = POS_Services.GetPotonganByKodeItem(data.Kode_Item);
 
             decimal discount = 0;
-            if (potongan != null && potongan.MinQty > 0 && qty >= potongan.MinQty)
+            if (potongan != null && potongan.MinQty > 0 && qty * data.Isi >= potongan.MinQty)
             {
-                discount = qty * potongan.Potongan;
+                discount = qty * data.Isi * potongan.Potongan;
             }
 
             data.Potongan = discount;
@@ -429,6 +433,7 @@ namespace Penjualan.UC
                     SATUAN = data.Satuan,
                     JUMLAH_BARANG = data.Qty,
                     HPP = data.Hpp,
+                    ISI = data.Isi,
                     HARGA_BARANG = data.Price,
                     BRUTO = data.Qty * data.Price,
                     POTONGAN = data.Potongan,
@@ -571,6 +576,7 @@ namespace Penjualan.UC
                     SATUAN = data.Satuan,
                     JUMLAH_BARANG = data.Qty,
                     HPP = data.Hpp,
+                    ISI = data.Isi,
                     HARGA_BARANG = data.Price,
                     BRUTO = data.Qty * data.Price,
                     POTONGAN = data.Potongan,
@@ -628,6 +634,7 @@ namespace Penjualan.UC
                         ProductName = item.NAMA_BARANG,
                         Satuan = item.SATUAN,
                         Hpp = item.HPP,
+                        Isi = item.ISI,
                         Price = item.HARGA_BARANG,
                         Qty = item.JUMLAH_BARANG
                     };

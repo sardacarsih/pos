@@ -1,11 +1,24 @@
 import 'models.dart';
 
 class CartLine {
-  CartLine(this.barang, this.qtyCenti);
+  CartLine(this.barang, this.qtyCenti, [this.satuan]);
   final Barang barang;
   int qtyCenti;
+
+  /// Satuan jual tambahan yang dipilih; null = satuan dasar produk.
+  final String? satuan;
+  SatuanJual? get _lain {
+    for (final s in barang.satuanLain) {
+      if (s.satuan == satuan) return s;
+    }
+    return null;
+  }
+
+  int get harga => _lain?.harga ?? barang.harga;
+  String get namaSatuan => _lain?.satuan ?? barang.satuan;
+  double get isi => _lain?.isi ?? 1;
   num get qty => qtyCenti % 100 == 0 ? qtyCenti ~/ 100 : qtyCenti / 100;
-  int get subtotal => (barang.harga * qtyCenti + 50) ~/ 100;
+  int get subtotal => (harga * qtyCenti + 50) ~/ 100;
 }
 
 /// Keranjang murni (tanpa UI). Pemilihan dari daftar dan hasil scan memakai `tambah` yang sama.
@@ -19,24 +32,35 @@ class Cart {
   int get perkiraan => lines.fold(0, (a, l) => a + l.subtotal);
   bool get kosong => lines.isEmpty;
 
-  void tambah(Barang b, {int qty = 1, int? qtyCenti}) {
+  /// Kunci baris = (barang, satuan): satuan berbeda dari produk sama = baris terpisah.
+  void tambah(Barang b, {int qty = 1, int? qtyCenti, String? satuan}) {
     final amount = qtyCenti ?? qty * 100;
-    final i = lines.indexWhere((l) => l.barang.id == b.id);
+    final sat = b.satuanLain.any((s) => s.satuan == satuan) ? satuan : null;
+    final i = lines.indexWhere((l) => l.barang.id == b.id && l.satuan == sat);
     if (i >= 0) {
       lines[i].qtyCenti = (lines[i].qtyCenti + amount).clamp(1, maxQtyCenti);
     } else {
-      lines.add(CartLine(b, amount.clamp(1, maxQtyCenti)));
+      lines.add(CartLine(b, amount.clamp(1, maxQtyCenti), sat));
     }
   }
 
+  /// Ganti satuan sebuah baris; bila sudah ada baris dengan satuan itu, jumlahnya digabung.
+  void ubahSatuan(CartLine l, String? baru) {
+    if (l.satuan == baru) return;
+    lines.remove(l);
+    tambah(l.barang, qtyCenti: l.qtyCenti, satuan: baru);
+  }
+
   /// Whole-unit compatibility for existing callers.
-  void atur(int barangId, int qty) {
-    aturCenti(barangId, qty * 100);
+  void atur(int barangId, int qty, {String? satuan}) {
+    aturCenti(barangId, qty * 100, satuan: satuan);
   }
 
   /// qtyCenti <= 0 removes the row; one centi-unit represents 0.01 L.
-  void aturCenti(int barangId, int qtyCenti) {
-    final i = lines.indexWhere((l) => l.barang.id == barangId);
+  void aturCenti(int barangId, int qtyCenti, {String? satuan}) {
+    final i = lines.indexWhere(
+      (l) => l.barang.id == barangId && l.satuan == satuan,
+    );
     if (i < 0) return;
     if (qtyCenti <= 0) {
       lines.removeAt(i);
@@ -52,14 +76,15 @@ class Cart {
       {
         'product_id': l.barang.id,
         'qty': l.qtyCenti % 100 == 0 ? l.qtyCenti ~/ 100 : l.qtyCenti / 100,
+        if (l.satuan != null) 'satuan': l.satuan!,
       },
   ];
 
   /// Peringatan stok (hanya informasi: server yang menegakkan bila kontrol stok aktif).
   List<String> peringatanStok() => [
     for (final l in lines)
-      if (l.barang.stok != null && l.qtyCenti > l.barang.stok! * 100)
-        '${l.barang.nama}: qty ${qtyString(l.qtyCenti, liter: l.barang.dijualPerLiter)} melebihi stok ${l.barang.stok}',
+      if (l.barang.stok != null && l.qtyCenti * l.isi > l.barang.stok! * 100)
+        '${l.barang.nama}: qty ${qtyString(l.qtyCenti, liter: l.barang.dijualPerLiter)} ${l.namaSatuan} melebihi stok ${l.barang.stok}',
   ];
 }
 

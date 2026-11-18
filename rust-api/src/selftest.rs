@@ -72,18 +72,19 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     let mut h: Vec<Hasil> = Vec::new();
 
     // Skema yang dibutuhkan fitur baru, termasuk jalur TULIS opname (diverifikasi lewat metadata, tanpa menulis).
-    let skema: [(&str, &[&str]); 15] = [
+    let skema: [(&str, &[&str]); 16] = [
         ("POS_PRODUCT", &["PRODUCTID", "KODE_ITEM", "BARCODE", "PRODUCTNAME", "SATUAN", "PRICE", "BELI", "KATEGORI_ID", "AKTIF"]),
         ("POS_KATEGORI", &["KODE", "KATEGORI"]),
         ("POS_STOCK", &["KODE_BARANG", "TANGGAL", "QUANTITY"]),
         ("POS_PEMBELIANDETAIL", &["PURCHASE_ID", "KODE_BARANG", "QUANTITY"]),
         ("POS_PENJUALAN", &["NO_TRANSAKSI", "TANGGAL", "TOTAL", "JENIS_BAYAR", "KASIR", "NAMA_KASIR"]),
-        ("POS_PENJUALAN_DETAIL", &["NO_TRANSAKSI", "KODE_BARANG", "NAMA_BARANG", "JUMLAH_BARANG", "TOTAL_HARGA"]),
+        ("POS_PENJUALAN_DETAIL", &["NO_TRANSAKSI", "KODE_BARANG", "NAMA_BARANG", "JUMLAH_BARANG", "ISI", "TOTAL_HARGA"]),
+        ("POS_PRODUCT_SATUAN", &["PRODUCT_ID", "SATUAN", "ISI", "HARGA", "BARCODE"]),
         ("POS_BARANGRUSAK", &["KODE_BARANG", "TANGGAL", "JUMLAHFISIK"]),
         ("POS_STOCKOPNAME", &["NOMOR_SO", "TANGGAL", "KODE_BARANG", "JUMLAHSISTEM", "JUMLAHFISIK", "SELISIH", "HPP", "TOTAL"]),
         ("POS_TRANSACTION_COUNTER", &["TRANSACTION_CODE", "TRANSACTION_YEAR", "LAST_NUMBER"]),
         ("NOMOR_TRANSAKSI", &["KODE", "NOMOR"]),
-        ("POS_PENDING_DETAIL", &["KODE_BARANG"]),
+        ("POS_PENDING_DETAIL", &["KODE_BARANG", "ISI"]),
         ("POS_POTONGANBERDASARKANQTY", &["KODE_ITEM"]),
         ("MOB_PRODUK_FOTO", &["PRODUCT_ID"]),
         ("MOB_PRODUK_URUT", &["PRODUCT_ID"]),

@@ -153,6 +153,82 @@ pub fn barang_by_id(conn: &Connection, id: i64, allowed: &[String]) -> AppResult
     )
 }
 
+/// Satuan jual tambahan sebuah produk (satuan dasar tetap di `POS_PRODUCT`; ISI = jumlah satuan dasar per satuan ini).
+#[derive(Debug, Clone)]
+pub struct SatuanJual {
+    pub satuan: String,
+    pub isi: Decimal,
+    pub harga: Decimal,
+    pub barcode: String,
+}
+
+fn kol_satuan() -> String {
+    format!("SATUAN, {}, {}, BARCODE", tm("ISI"), tm("HARGA"))
+}
+
+/// Satuan tambahan untuk banyak produk sekaligus (satu halaman).
+pub fn satuan_map(conn: &Connection, ids: &[i64]) -> AppResult<HashMap<i64, Vec<SatuanJual>>> {
+    let mut out: HashMap<i64, Vec<SatuanJual>> = HashMap::new();
+    if ids.is_empty() {
+        return Ok(out);
+    }
+    let mut b = Binds::default();
+    let names: Vec<String> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            b.add(format!("s{i}"), id);
+            format!("TO_NUMBER(:s{i})")
+        })
+        .collect();
+    let sql = format!(
+        "SELECT PRODUCT_ID, {} FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID IN ({}) ORDER BY PRODUCT_ID, ISI",
+        kol_satuan(),
+        names.join(",")
+    );
+    b.with(|p| -> AppResult<()> {
+        for r in conn.query_named(&sql, p)? {
+            let r = r?;
+            let pid: i64 = r.get(0)?;
+            let sj = SatuanJual {
+                satuan: r.get(1)?,
+                isi: dec(&r.get::<_, String>(2)?)?,
+                harga: dec(&r.get::<_, String>(3)?)?,
+                barcode: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            };
+            out.entry(pid).or_default().push(sj);
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// Satuan tambahan tertentu (nama dicocokkan tanpa beda huruf besar/kecil).
+pub fn satuan_jual(conn: &Connection, pid: i64, satuan: &str) -> AppResult<Option<SatuanJual>> {
+    let sql = format!(
+        "SELECT {} FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = TO_NUMBER(:p) AND UPPER(SATUAN) = UPPER(:s)",
+        kol_satuan()
+    );
+    let r = opt(conn.query_row_named(&sql, &[("p", &pid.to_string()), ("s", &satuan.trim())]))?;
+    let Some(r) = r else { return Ok(None) };
+    Ok(Some(SatuanJual {
+        satuan: r.get(0)?,
+        isi: dec(&r.get::<_, String>(1)?)?,
+        harga: dec(&r.get::<_, String>(2)?)?,
+        barcode: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+    }))
+}
+
+/// Barcode milik satuan tambahan -> (product_id, satuan).
+pub fn produk_by_barcode_satuan(conn: &Connection, barcode: &str) -> AppResult<Option<(i64, String)>> {
+    let r = opt(conn.query_row_named(
+        "SELECT PRODUCT_ID, SATUAN FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b",
+        &[("b", &barcode)],
+    ))?;
+    let Some(r) = r else { return Ok(None) };
+    Ok(Some((r.get(0)?, r.get(1)?)))
+}
+
 /// Ekspresi stok sistem (alias join dari `stok_join`): stok awal tahun + pembelian + selisih opname - penjualan - rusak.
 const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
 
@@ -179,7 +255,7 @@ fn stok_join(inl: Option<&str>) -> String {
         sub(
             "POS_PENJUALAN_DETAIL d JOIN POS_PENJUALAN m ON m.NO_TRANSAKSI = d.NO_TRANSAKSI",
             "d.KODE_BARANG",
-            "d.JUMLAH_BARANG",
+            "d.JUMLAH_BARANG * d.ISI", // ISI = faktor satuan jual -> satuan dasar
             "m.TANGGAL"
         ),
         sub("POS_BARANGRUSAK", "KODE_BARANG", "JUMLAHFISIK", "TANGGAL"),
@@ -730,6 +806,100 @@ pub fn jejak_produk(conn: &Connection, id: i64) -> AppResult<(ProdukAdmin, Jejak
     Ok((p, j))
 }
 
+/// Satuan jual tambahan satu produk (urut dari isi terkecil).
+pub fn satuan_produk(conn: &Connection, id: i64) -> AppResult<Vec<SatuanJual>> {
+    Ok(satuan_map(conn, &[id])?.remove(&id).unwrap_or_default())
+}
+
+/// Validasi daftar satuan tambahan terhadap satuan dasar (murni; tanpa DB).
+pub fn validasi_satuan(dasar: &str, daftar: &[SatuanJual]) -> AppResult<()> {
+    let mut nama_ada: Vec<String> = vec![dasar.trim().to_uppercase()];
+    let mut barcode_ada: Vec<&str> = Vec::new();
+    if daftar.len() > 10 {
+        return Err(AppError::validation("Maksimal 10 satuan tambahan"));
+    }
+    for s in daftar {
+        let nama = s.satuan.trim();
+        if nama.is_empty() || nama.chars().count() > 20 {
+            return Err(AppError::validation("Nama satuan 1-20 karakter"));
+        }
+        let up = nama.to_uppercase();
+        if nama_ada.contains(&up) {
+            return Err(AppError::validation(format!("Satuan ganda atau sama dengan satuan dasar: {nama}")));
+        }
+        nama_ada.push(up);
+        if s.isi <= Decimal::ONE || s.isi.scale() > 4 || s.isi > Decimal::from(1_000_000) {
+            return Err(AppError::validation(format!("Isi {nama} harus lebih dari 1 (maks. 4 desimal)")));
+        }
+        if s.harga <= Decimal::ZERO || s.harga.scale() > 2 {
+            return Err(AppError::validation(format!("Harga {nama} harus lebih dari 0")));
+        }
+        let bc = s.barcode.trim();
+        if bc.chars().count() > 50 {
+            return Err(AppError::validation("Barcode maksimal 50 karakter"));
+        }
+        if !bc.is_empty() {
+            if barcode_ada.contains(&bc) {
+                return Err(AppError::validation(format!("Barcode ganda: {bc}")));
+            }
+            barcode_ada.push(bc);
+        }
+    }
+    Ok(())
+}
+
+/// Ganti seluruh satuan tambahan produk (atomik). Barcode harus unik terhadap produk dan satuan lain.
+pub fn ganti_satuan(conn: &Connection, id: i64, daftar: &[SatuanJual]) -> AppResult<Vec<SatuanJual>> {
+    let hasil = (|| -> AppResult<()> {
+        let dasar: Option<String> = opt(conn.query_row_as_named::<Option<String>>(
+            "SELECT SATUAN FROM POS_PRODUCT WHERE PRODUCTID = :id FOR UPDATE",
+            &[("id", &id)],
+        ))?
+        .map(|s| s.unwrap_or_default());
+        let Some(dasar) = dasar else {
+            return Err(AppError::NotFound("Produk tidak ditemukan".into()));
+        };
+        validasi_satuan(&dasar, daftar)?;
+        for s in daftar {
+            let bc = s.barcode.trim();
+            if bc.is_empty() {
+                continue;
+            }
+            let (a, b): (i64, i64) = conn.query_row_as_named(
+                "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b), \
+                        (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b AND PRODUCT_ID <> :id) FROM DUAL",
+                &[("b", &bc), ("id", &id)],
+            )?;
+            if a + b > 0 {
+                return Err(AppError::rule("BARCODE_SUDAH_ADA", format!("Barcode {bc} sudah dipakai produk lain")));
+            }
+        }
+        conn.execute_named("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = :id", &[("id", &id)])?;
+        for s in daftar {
+            let mut b = Binds::default();
+            b.add("id", id);
+            b.add("sat", s.satuan.trim());
+            b.add("isi", s.isi);
+            b.add("harga", s.harga);
+            let bc = s.barcode.trim();
+            b.add("bc", bc);
+            let sql = format!(
+                "INSERT INTO POS_PRODUCT_SATUAN (PRODUCT_ID, SATUAN, ISI, HARGA, BARCODE) VALUES (TO_NUMBER(:id), :sat, {}, {}, NULLIF(:bc, ''))",
+                super::num("isi"),
+                super::num("harga")
+            );
+            b.with(|p| conn.execute_named(&sql, p))?;
+        }
+        conn.commit()?;
+        Ok(())
+    })();
+    if let Err(e) = hasil {
+        let _ = conn.rollback();
+        return Err(e);
+    }
+    satuan_produk(conn, id)
+}
+
 /// Hapus permanen produk yang tidak punya riwayat apa pun. Mengunci baris produk (FOR UPDATE), memeriksa ulang
 /// riwayat di transaksi yang sama, lalu membersihkan tabel pendamping (foto, urutan, potongan qty). Tidak bisa dibatalkan.
 pub fn hapus_produk(conn: &Connection, id: i64) -> AppResult<ProdukAdmin> {
@@ -751,6 +921,7 @@ pub fn hapus_produk(conn: &Connection, id: i64) -> AppResult<ProdukAdmin> {
         conn.execute_named("DELETE FROM MOB_PRODUK_FOTO WHERE PRODUCT_ID = :id", &[("id", &id)])?;
         conn.execute_named("DELETE FROM MOB_PRODUK_URUT WHERE PRODUCT_ID = :id", &[("id", &id)])?;
         conn.execute_named("DELETE FROM POS_POTONGANBERDASARKANQTY WHERE KODE_ITEM = :k", &[("k", &p.kode)])?;
+        conn.execute_named("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = :id", &[("id", &id)])?;
         conn.execute_named("DELETE FROM POS_PRODUCT WHERE PRODUCTID = :id", &[("id", &id)])?;
         conn.commit()?;
         Ok(p)
@@ -865,5 +1036,28 @@ mod produk_admin_tests {
         let mut p = ok();
         p.beli = -5;
         assert!(validasi_produk(&p).is_err());
+    }
+}
+
+#[cfg(test)]
+mod satuan_tests {
+    use super::*;
+
+    fn sj(n: &str, isi: &str, harga: &str, bc: &str) -> SatuanJual {
+        SatuanJual { satuan: n.into(), isi: isi.parse().unwrap(), harga: harga.parse().unwrap(), barcode: bc.into() }
+    }
+
+    #[test]
+    fn satuan_valid() {
+        assert!(validasi_satuan("PCS", &[sj("BOX", "12", "100000", "899"), sj("DUS", "48", "380000", "")]).is_ok());
+    }
+
+    #[test]
+    fn satuan_ditolak() {
+        assert!(validasi_satuan("PCS", &[sj("pcs", "12", "1", "")]).is_err(), "sama dengan dasar");
+        assert!(validasi_satuan("PCS", &[sj("BOX", "1", "1", "")]).is_err(), "isi harus > 1");
+        assert!(validasi_satuan("PCS", &[sj("BOX", "12", "0", "")]).is_err(), "harga > 0");
+        assert!(validasi_satuan("PCS", &[sj("BOX", "12", "1", "a"), sj("DUS", "24", "1", "a")]).is_err(), "barcode ganda");
+        assert!(validasi_satuan("PCS", &[sj("BOX", "12", "1", ""), sj("box", "24", "1", "")]).is_err(), "nama ganda");
     }
 }

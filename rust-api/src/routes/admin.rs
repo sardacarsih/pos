@@ -536,6 +536,59 @@ pub async fn produk_jejak(State(s): State<AppState>, a: Auth, Path(id): Path<i64
     })))
 }
 
+#[derive(serde::Deserialize)]
+pub struct SatuanBody {
+    pub satuan: String,
+    #[serde(with = "rust_decimal::serde::arbitrary_precision")]
+    pub isi: rust_decimal::Decimal,
+    #[serde(with = "rust_decimal::serde::arbitrary_precision")]
+    pub harga: rust_decimal::Decimal,
+    #[serde(default)]
+    pub barcode: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SatuanReq {
+    pub satuan: Vec<SatuanBody>,
+}
+
+fn satuan_json(v: &[katalog::SatuanJual]) -> Value {
+    json!({ "satuan": v.iter().map(|s| json!({
+        "satuan": s.satuan, "isi": s.isi.normalize().to_string(),
+        "harga": s.harga.normalize().to_string(), "barcode": s.barcode,
+    })).collect::<Vec<_>>() })
+}
+
+/// Satuan jual tambahan produk.
+pub async fn produk_satuan(State(s): State<AppState>, a: Auth, Path(id): Path<i64>) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let v = db::run(&s.pool, move |c| katalog::satuan_produk(c, id)).await?;
+    Ok(Json(satuan_json(&v)))
+}
+
+/// Ganti seluruh satuan jual tambahan produk (daftar kosong = hanya satuan dasar).
+pub async fn produk_satuan_ganti(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<i64>,
+    Json(req): Json<SatuanReq>,
+) -> AppResult<Json<Value>> {
+    let admin = a.peran(ADMIN)?.usr.clone();
+    let daftar: Vec<katalog::SatuanJual> = req
+        .satuan
+        .into_iter()
+        .map(|b| katalog::SatuanJual {
+            satuan: b.satuan,
+            isi: b.isi,
+            harga: b.harga,
+            barcode: b.barcode.unwrap_or_default(),
+        })
+        .collect();
+    let v = db::run(&s.pool, move |c| katalog::ganti_satuan(c, id, &daftar)).await?;
+    tracing::info!(admin = %admin, produk = id, jumlah = v.len(), "satuan jual produk diubah");
+    Ok(Json(satuan_json(&v)))
+}
+
 /// Hapus permanen produk tanpa riwayat (422 PRODUK_BERTRANSAKSI bila sudah dipakai).
 pub async fn produk_hapus(State(s): State<AppState>, a: Auth, Path(id): Path<i64>) -> AppResult<StatusCode> {
     let admin = a.peran(ADMIN)?.usr.clone();

@@ -8,13 +8,14 @@
   import type { User, Product, Line, Draft, Data } from './types';
   import Receipt from './Receipt.svelte';
   import Photo from './Photo.svelte';
+  import { infoSatuan, satuanKirim } from './satuan';
   export let user: User;
   let products: Product[] = [], categories: Data[] = [], cart: Line[] = [], customers: Data[] = [];
   let search = '', category = '', customerSearch = '', selected: Data | null = null, cash = '', tenor = 1, page = 1, more = false;
   let loading = false, busy = false, error = '', invoice: Data | null = null, pending: Draft | null = null, showCustomer = false, scan = false, video: HTMLVideoElement, customerPage = 1, customerMore = false;
   let controls: { stop(): void } | null = null, scanError = '', demo = false;
   const rp = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
-  $: estimate = cart.reduce((sum, line) => sum + Math.round(line.product.harga * line.qty), 0);
+  $: estimate = cart.reduce((sum, line) => sum + Math.round(infoSatuan(line).harga * line.qty), 0);
   $: isCash = user.role === 'KASIR' && (!selected || selected.tunai || selected.nik === user.default_nik);
   onMount(async () => { pending = readDraft(user); try { categories = await api('/kategori'); if (user.role === 'ANGGOTA') demo = (await api<Data>('/saya/dashboard')).belanja_demo; } catch (e) { error = String((e as Error).message); } await load(); });
   onDestroy(() => controls?.stop());
@@ -25,7 +26,7 @@
   async function pay(retry = false) { if (busy) return; error = ''; if (!navigator.onLine) { error = 'Tidak ada koneksi. Checkout memerlukan koneksi internet.'; return; }
     if (!retry && (!cart.length || cart.some(l => !Number.isFinite(l.qty) || l.qty <= 0 || l.qty > 1000 || Math.abs(Math.round(l.qty * 100) - l.qty * 100) > 1e-7))) { error = 'Jumlah harus antara 0,01 dan 1000, maksimal dua angka desimal.'; return; }
     if (!retry && isCash && (!cash || Number(cash) < 0 || !Number.isInteger(Number(cash)))) { error = 'Masukkan uang bayar dalam rupiah.'; return; }
-    busy = true; try { let draft = retry ? pending : null; if (!draft) { draft = { key: crypto.randomUUID(), userId: user.id, role: user.role, nik: user.role === 'ANGGOTA' ? '' : selected?.nik || user.default_nik, tenor: Number(tenor), ...(isCash ? { uang_bayar: Number(cash) } : {}), baris: cart.map(l => ({ product_id: l.product.id, qty: Number(l.qty) })) }; saveDraft(user, draft); pending = draft; } invoice = await submitDraft(user, draft); pending = null; cart = []; cash = ''; } catch (e) { pending = readDraft(user); error = (e as Error).message; } finally { busy = false; } }
+    busy = true; try { let draft = retry ? pending : null; if (!draft) { draft = { key: crypto.randomUUID(), userId: user.id, role: user.role, nik: user.role === 'ANGGOTA' ? '' : selected?.nik || user.default_nik, tenor: Number(tenor), ...(isCash ? { uang_bayar: Number(cash) } : {}), baris: cart.map(l => ({ product_id: l.product.id, qty: Number(l.qty), ...(satuanKirim(l) ? { satuan: satuanKirim(l) } : {}) })) }; saveDraft(user, draft); pending = draft; } invoice = await submitDraft(user, draft); pending = null; cart = []; cash = ''; } catch (e) { pending = readDraft(user); error = (e as Error).message; } finally { busy = false; } }
 </script>
 {#if demo}<div class="notice">MODE DEMO · Belanja anggota hanya simulasi dan tidak tersimpan.</div>{/if}
 {#if pending}<div class="notice"><strong>Checkout belum selesai.</strong> Pulihkan transaksi sebelum memulai checkout baru. <button on:click={() => pay(true)} disabled={busy}>Pulihkan checkout</button></div>{/if}
@@ -37,7 +38,7 @@
 {#if loading}<p class="muted">Memuat produk…</p>{:else if !products.length}<p class="empty">Tidak ada produk ditemukan.</p>{/if}{#if more}<button class="secondary wide" on:click={() => load(true)}>Muat lebih banyak</button>{/if}</section>
 <aside class="cart panel"><div class="section-heading"><div><p class="eyebrow">TRANSAKSI BARU</p><h2>Keranjang</h2></div><span class="badge">{cart.length}</span></div>
 {#if !cart.length}<div class="empty cart-empty">Keranjang masih kosong.<br/>Pilih produk untuk memulai.</div>{/if}
-{#each cart as line}<div class="cart-line"><div><strong>{line.product.nama}</strong><small>{rp(line.product.harga)} / {line.product.satuan}</small></div><div class="qty"><input type="number" min="0.01" max="1000" step="0.01" aria-label={'Jumlah ' + line.product.nama} bind:value={line.qty} disabled={!!pending}/><button class="icon" aria-label="Hapus" on:click={() => cart = cart.filter(x => x !== line)} disabled={!!pending}><X size={20} aria-hidden="true"/></button></div></div>{/each}
+{#each cart as line}<div class="cart-line"><div><strong>{line.product.nama}</strong><small>{rp(infoSatuan(line).harga)} / {infoSatuan(line).satuan}</small>{#if line.product.satuan_lain?.length}<select aria-label={'Satuan ' + line.product.nama} bind:value={line.satuan} disabled={!!pending}><option value={undefined}>{line.product.satuan}</option>{#each line.product.satuan_lain as s}<option value={s.satuan}>{s.satuan} (isi {s.isi})</option>{/each}</select>{/if}</div><div class="qty"><input type="number" min="0.01" max="1000" step="0.01" aria-label={'Jumlah ' + line.product.nama} bind:value={line.qty} disabled={!!pending}/><button class="icon" aria-label="Hapus" on:click={() => cart = cart.filter(x => x !== line)} disabled={!!pending}><X size={20} aria-hidden="true"/></button></div></div>{/each}
 {#if user.role === 'KASIR'}<div class="divider"></div><span class="label">Pelanggan</span><button class="select-customer" on:click={() => {showCustomer = true; findCustomers();}} disabled={!!pending}><span>{selected?.nama || 'Pelanggan tunai'}</span><span>Ubah <ChevronRight size={16} class="chev" aria-hidden="true"/></span></button>{/if}
 <div class="divider"></div><div class="receipt-line"><span>Perkiraan total</span><strong>{rp(estimate)}</strong></div><small class="muted">Total akhir dan potongan dihitung server.</small>
 {#if isCash}<label>Uang bayar (Rp)<input type="number" min="0" step="1" bind:value={cash} disabled={!!pending} placeholder="0"/></label>{:else}<label>Tenor (bulan)<input type="number" min="1" max="12" step="1" bind:value={tenor} disabled={!!pending}/></label>{/if}

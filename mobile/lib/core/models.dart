@@ -46,9 +46,20 @@ class Barang {
       stok = (j['stok'] as num?)?.toInt(),
       kategoriId = _s(j['kategori_id']),
       kategori = _s(j['kategori']),
-      fotoVersi = (j['foto'] as num?)?.toInt();
+      fotoVersi = (j['foto'] as num?)?.toInt(),
+      satuanLain = [
+        for (final s in (j['satuan_lain'] as List? ?? const []))
+          SatuanJual.fromJson(s as Map<String, dynamic>),
+      ],
+      satuanPilih = j['satuan_pilih'] as String?;
   final int id;
   final String kode, barcode, nama, satuan, kategoriId, kategori;
+
+  /// Satuan jual tambahan (box/dus); kosong = hanya satuan dasar.
+  final List<SatuanJual> satuanLain;
+
+  /// Hasil scan barcode satuan tambahan: nama satuan yang cocok (null = satuan dasar).
+  final String? satuanPilih;
   final int harga;
   final int? stok;
 
@@ -59,6 +70,18 @@ class Barang {
     final s = satuan.trim().toLowerCase();
     return s == 'l' || s == 'ltr' || s == 'liter' || s == 'litre';
   }
+}
+
+/// Satuan jual tambahan: [isi] = jumlah satuan dasar per satuan ini.
+class SatuanJual {
+  SatuanJual.fromJson(Map<String, dynamic> j)
+    : satuan = _s(j['satuan']),
+      isi = (j['isi'] as num?)?.toDouble() ?? 1,
+      harga = _i(j['harga']),
+      barcode = _s(j['barcode']);
+  final String satuan, barcode;
+  final double isi;
+  final int harga;
 }
 
 class Kategori {
@@ -189,7 +212,8 @@ class DashboardAnggota {
           TransaksiRingkas.fromJson(t as Map<String, dynamic>),
       ];
   final bool periodeTerbuka;
-  final bool belanjaDemo; // true = belanja mandiri hanya simulasi (tidak disimpan)
+  final bool
+  belanjaDemo; // true = belanja mandiri hanya simulasi (tidak disimpan)
   final String? pesan;
   final Ringkasan? ringkasan; // null = tanggal di luar semua periode
   final List<TransaksiRingkas> terakhir;

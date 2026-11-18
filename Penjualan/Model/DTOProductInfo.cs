@@ -14,5 +14,7 @@ namespace Penjualan.Model
         public string Satuan { get; set; }
         public decimal Price { get; set; }
         public decimal Hpp { get; set; }
+        /// <summary>Jumlah satuan dasar per satuan jual ini (1 = satuan dasar).</summary>
+        public decimal Isi { get; set; } = 1m;
     }
 }
