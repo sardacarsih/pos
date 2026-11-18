@@ -652,8 +652,8 @@ class ApiClient {
     );
   }
 
-  /// Simpan satu dokumen SO berisi beberapa barang. `idempotencyKey` dipakai ulang saat retry. Mengembalikan nomor SO.
-  Future<String> simpanSo(
+  /// Simpan satu dokumen SO. Kunci yang sama dipakai untuk mengirim ulang payload yang sama.
+  Future<SoDokumen> simpanSo(
     List<({int produkId, String qty})> items, {
     required String idempotencyKey,
   }) async {
@@ -667,7 +667,7 @@ class ApiClient {
       },
       headers: {'Idempotency-Key': idempotencyKey},
     ) as Map<String, dynamic>;
-    return j['nomor_so'] as String? ?? '';
+    return SoDokumen.fromJson(j);
   }
 
   Future<({List<SoRingkas> items, bool lagi})> daftarSo({
