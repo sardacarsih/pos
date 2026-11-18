@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api.dart';
 import '../../core/format.dart';
@@ -8,10 +9,10 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import 'admin_opname_baru_page.dart';
 
-String fmtQty(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+final _formatQty = NumberFormat('#,##0.####', 'id_ID');
+String fmtQty(double v) => _formatQty.format(v);
 
-/// Riwayat dokumen stock opname (dari desktop, mobile, dan web) + mulai opname baru.
+/// Riwayat tetap menggunakan tab Opname dari halaman Produk admin.
 class AdminOpnamePage extends ConsumerStatefulWidget {
   const AdminOpnamePage({super.key});
 
@@ -20,216 +21,341 @@ class AdminOpnamePage extends ConsumerStatefulWidget {
 }
 
 class _AdminOpnamePageState extends ConsumerState<AdminOpnamePage> {
-  final _scroll = ScrollController();
-  final List<SoRingkas> _items = [];
-  int _tahun = DateTime.now().year;
-  bool _loading = false;
-  bool _lagi = false;
-  String? _error;
-  int _page = 1;
-  int _requestId = 0;
+  final _items = <SoRingkas>[];
+  int _tahun = DateTime.now().year.clamp(2000, 2100);
+  int _page = 1, _requestId = 0;
+  bool _loading = true, _lagi = false;
+  String? _error, _tersimpan;
 
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(() {
-      if (_lagi &&
-          !_loading &&
-          _error == null &&
-          _scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
-        _muat(reset: false);
-      }
-    });
-    _muat(reset: true);
+    _muat();
   }
 
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _pesan(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-  Future<void> _muat({required bool reset}) async {
-    final requestId = ++_requestId;
-    final page = reset ? 1 : _page + 1;
+  Future<void> _muat({bool lanjut = false}) async {
+    if (lanjut && _loading) return;
+    final id = ++_requestId;
+    final page = lanjut ? _page + 1 : 1;
     setState(() {
       _loading = true;
       _error = null;
-      if (reset) {
+      if (!lanjut) {
         _items.clear();
+        _page = 1;
         _lagi = false;
       }
     });
     try {
-      final r = await ref
-          .read(apiProvider)
-          .daftarSo(tahun: _tahun, page: page);
-      if (!mounted || requestId != _requestId) return;
+      final r = await ref.read(apiProvider).daftarSo(tahun: _tahun, page: page);
+      if (!mounted || id != _requestId) return;
       setState(() {
         _items.addAll(r.items);
         _page = page;
         _lagi = r.lagi;
       });
     } on ApiException catch (e) {
-      if (mounted && requestId == _requestId) setState(() => _error = e.pesan);
+      if (mounted && id == _requestId) setState(() => _error = e.pesan);
     } finally {
-      if (mounted && requestId == _requestId) setState(() => _loading = false);
+      if (mounted && id == _requestId) setState(() => _loading = false);
     }
   }
 
-  void _ganti(int delta) {
-    setState(() => _tahun += delta);
-    _muat(reset: true);
+  Future<void> _gantiTahun() async {
+    final tahun = await showDialog<int>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Tahun dokumen'),
+        content: SizedBox(
+          width: 320,
+          height: 272,
+          child: YearPicker(
+            firstDate: DateTime(2000),
+            lastDate: DateTime(2100),
+            selectedDate: DateTime(_tahun),
+            onChanged: (tanggal) => Navigator.pop(c, tanggal.year),
+          ),
+        ),
+      ),
+    );
+    if (tahun == null || tahun == _tahun || !mounted) return;
+    setState(() => _tahun = tahun);
+    await _muat();
   }
 
   Future<void> _baru() async {
-    final nomor = await Navigator.of(context).push<String>(
+    final dokumen = await Navigator.of(context).push<SoDokumen>(
       MaterialPageRoute(builder: (_) => const AdminOpnameBaruPage()),
     );
-    if (nomor == null || !mounted) return;
-    _pesan('Dokumen $nomor tersimpan');
-    _muat(reset: true);
+    if (dokumen == null || !mounted) return;
+    final tanggal = DateTime.tryParse(dokumen.tanggal);
+    setState(() {
+      _tahun = tanggal?.year.clamp(2000, 2100) ?? _tahun;
+      _tersimpan = dokumen.nomor;
+    });
+    await _muat();
   }
 
-  Future<void> _detail(SoRingkas s) async {
-    try {
-      final d = await ref.read(apiProvider).detailSo(s.nomor);
-      if (!mounted) return;
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (c) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.7,
-          maxChildSize: 0.95,
-          builder: (c, ctrl) => ListView(
-            controller: ctrl,
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(d.nomor, style: Theme.of(c).textTheme.titleMedium),
-              Text('${d.tanggal} · ${d.items.length} barang'),
-              const SizedBox(height: 8),
-              for (final b in d.items)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(b.nama),
-                  subtitle: Text(
-                    '${b.kode} · sistem ${fmtQty(b.sistem)} → fisik ${fmtQty(b.fisik)}',
-                  ),
-                  trailing: Text(
-                    '${b.selisih > 0 ? '+' : ''}${fmtQty(b.selisih)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: b.selisih < 0
-                          ? const Color(0xFFB3261E)
-                          : b.selisih > 0
-                          ? const Color(0xFF2E7D32)
-                          : null,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    } on ApiException catch (e) {
-      if (mounted) _pesan(e.pesan);
-    }
+  void _detail(String nomor) {
+    Navigator.of(context)
+        .push<void>(MaterialPageRoute(builder: (_) => _OpnameDetail(nomor)));
   }
 
   @override
-  // Dipakai sebagai tab di AdminKatalogPage: header, profil, dan keluar ada di halaman induk.
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.transparent,
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _baru,
-      icon: const Icon(Icons.add),
-      label: const Text('Opname baru'),
-    ),
-    body: Column(
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              IconButton(
-                tooltip: 'Tahun sebelumnya',
-                icon: const Icon(Icons.chevron_left),
-                onPressed: _loading ? null : () => _ganti(-1),
+              OutlinedButton.icon(
+                onPressed: _gantiTahun,
+                icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                label: Text('Tahun $_tahun'),
               ),
-              Text('Tahun $_tahun'),
-              IconButton(
-                tooltip: 'Tahun berikutnya',
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _loading ? null : () => _ganti(1),
+              FilledButton.icon(
+                onPressed: _baru,
+                icon: const Icon(Icons.add),
+                label: const Text('Opname baru'),
               ),
             ],
           ),
         ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () => _muat(reset: true),
-            child: ListView(
-              controller: _scroll,
+            onRefresh: _muat,
+            child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
-              children: [
-                if (_error != null)
-                  Card(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Text(_error!),
-                          TextButton(
-                            onPressed: () => _muat(reset: true),
-                            child: const Text('Coba lagi'),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  sliver: SliverList.list(
+                    children: [
+                      if (_tersimpan case final nomor?)
+                        Card(
+                          color: tema.colorScheme.primaryContainer,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                    'Dokumen $nomor tersimpan.',
+                                    style: TextStyle(
+                                      color:
+                                          tema.colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _detail(nomor),
+                                  child: const Text('Buka dokumen'),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (!_loading && _error == null && _items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(36),
-                    child: Center(child: Text('Belum ada dokumen SO tahun ini.')),
-                  ),
-                for (final s in _items)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      onTap: () => _detail(s),
-                      title: Text(
-                        s.nomor,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text('${s.tanggal} · ${s.jumlahItem} barang'),
-                      trailing: Text(
-                        rupiah(s.nilaiSelisih.round()),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: s.nilaiSelisih < 0
-                              ? const Color(0xFFB3261E)
-                              : null,
                         ),
+                      Text(
+                        'Riwayat dokumen',
+                        style: tema.textTheme.titleMedium,
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      if (!_loading && _error == null && _items.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Text('Belum ada dokumen pada tahun $_tahun.'),
+                        ),
+                    ],
                   ),
-                if (_loading)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: LoadingKopkar(),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList.builder(
+                    itemCount: _items.length,
+                    itemBuilder: (context, i) {
+                      final s = _items[i];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text(
+                            s.nomor,
+                            style: tema.textTheme.titleSmall,
+                          ),
+                          subtitle: Text(
+                            '${s.tanggal} · ${s.jumlahItem} barang\n'
+                            'Nilai selisih ${rupiah(s.nilaiSelisih.round())}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _detail(s.nomor),
+                        ),
+                      );
+                    },
                   ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  sliver: SliverToBoxAdapter(
+                    child: _loading
+                        ? const LoadingKopkar()
+                        : _error != null
+                        ? _RiwayatGalat(
+                            pesan: _error!,
+                            ulang: () => _muat(lanjut: _items.isNotEmpty),
+                          )
+                        : _lagi
+                        ? OutlinedButton(
+                            onPressed: () => _muat(lanjut: true),
+                            child: const Text('Muat lebih banyak'),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RiwayatGalat extends StatelessWidget {
+  const _RiwayatGalat({required this.pesan, required this.ulang});
+  final String pesan;
+  final VoidCallback ulang;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: Theme.of(context).colorScheme.errorContainer,
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(liveRegion: true, child: Text(pesan)),
+          TextButton(onPressed: ulang, child: const Text('Coba lagi')),
+        ],
+      ),
     ),
   );
+}
+
+class _OpnameDetail extends ConsumerStatefulWidget {
+  const _OpnameDetail(this.nomor);
+  final String nomor;
+
+  @override
+  ConsumerState<_OpnameDetail> createState() => _OpnameDetailState();
+}
+
+class _OpnameDetailState extends ConsumerState<_OpnameDetail> {
+  late Future<SoDokumen> _detail = _muat();
+
+  Future<SoDokumen> _muat() => ref.read(apiProvider).detailSo(widget.nomor);
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.nomor)),
+    body: SafeArea(
+      child: FutureBuilder<SoDokumen>(
+        future: _detail,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: LoadingKopkar());
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: _RiwayatGalat(
+                pesan: snapshot.error.toString(),
+                ulang: () => setState(() => _detail = _muat()),
+              ),
+            );
+          }
+          final d = snapshot.requireData;
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: d.items.length + 1,
+            itemBuilder: (context, index) {
+              final tema = Theme.of(context);
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    '${d.tanggal} · ${d.items.length} barang',
+                    style: tema.textTheme.titleMedium,
+                  ),
+                );
+              }
+              final b = d.items[index - 1];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(b.nama, style: tema.textTheme.titleSmall),
+                      Text(b.kode),
+                      const SizedBox(height: 8),
+                      OpnameAngka(
+                        sistem: b.sistem,
+                        fisik: b.fisik,
+                        selisih: b.selisih,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    ),
+  );
+}
+
+class OpnameAngka extends StatelessWidget {
+  const OpnameAngka({
+    super.key,
+    required this.sistem,
+    required this.fisik,
+    required this.selisih,
+  });
+  final double sistem;
+  final double? fisik, selisih;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final beda = selisih;
+    final jumlahFisik = fisik;
+    final nilai = [
+      ('Sistem', fmtQty(sistem)),
+      ('Fisik', jumlahFisik == null ? 'Belum dihitung' : fmtQty(jumlahFisik)),
+      ('Selisih', beda == null ? '—' : '${beda > 0 ? '+' : ''}${fmtQty(beda)}'),
+    ];
+    return Wrap(
+      spacing: 18,
+      runSpacing: 6,
+      children: [
+        for (final (label, angka) in nilai)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: tema.textTheme.labelSmall),
+              Text(angka, style: tema.textTheme.titleSmall),
+            ],
+          ),
+      ],
+    );
+  }
 }
