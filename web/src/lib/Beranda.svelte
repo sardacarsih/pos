@@ -1,4 +1,7 @@
 <script lang="ts">
+  import ArrowRight from '@lucide/svelte/icons/arrow-right';
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
+  import IdCard from '@lucide/svelte/icons/id-card';
   import { createEventDispatcher, onMount } from 'svelte';
   import { api, query } from './api';
   import type { User, Data } from './types';
@@ -111,7 +114,7 @@
     {#if data.belanja_demo}<div class="bd-alert warn" role="status"><strong>Mode demo</strong><span>Belanja mandiri hanya simulasi dan tidak tersimpan.</span></div>{/if}
 
     {#if user.role === 'KASIR'}
-      <button class="bd-cta" disabled={!terbuka} on:click={() => dispatch('go', 'belanja')}>Mulai jual <span aria-hidden="true">→</span></button>
+      <button class="bd-cta" disabled={!terbuka} on:click={() => dispatch('go', 'belanja')}>Mulai jual <ArrowRight size={20} aria-hidden="true"/></button>
       <section class="bd-grid" aria-label="Ringkasan hari ini">
         <div class="bd-kpi hero"><span>Total penjualan hari ini</span><strong>{rp(r.total)}</strong></div>
         <div class="bd-kpi"><span>Transaksi</span><strong>{r.jumlah ?? 0}</strong></div>
@@ -141,8 +144,8 @@
         <div class="bd-alert warn" role="status"><strong>Data limit belum tersedia</strong><span>Tanggal hari ini di luar periode yang diatur.</span></div>
       {/if}
       <div class="bd-actions">
-        <button class="bd-cta" disabled={!terbuka} on:click={() => dispatch('go', 'belanja')}>Belanja mandiri <span aria-hidden="true">→</span></button>
-        <button class="bd-cta alt" on:click={() => dispatch('go', 'kartu')}>Kartu anggota <span aria-hidden="true">▣</span></button>
+        <button class="bd-cta" disabled={!terbuka} on:click={() => dispatch('go', 'belanja')}>Belanja mandiri <ArrowRight size={20} aria-hidden="true"/></button>
+        <button class="bd-cta alt" on:click={() => dispatch('go', 'kartu')}>Kartu anggota <IdCard size={20} aria-hidden="true"/></button>
       </div>
     {:else}
       <section aria-label="Perlu perhatian">
@@ -151,7 +154,7 @@
           <div class="bd-attn">
             {#each perhatian as p}
               {#if p.tuju}
-                <button class="bd-card attn {p.tingkat}" on:click={() => dispatch('go', p.tuju || '')}><strong>{p.judul}</strong><span>{p.teks}</span><b aria-hidden="true">→</b></button>
+                <button class="bd-card attn {p.tingkat}" on:click={() => dispatch('go', p.tuju || '')}><strong>{p.judul}</strong><span>{p.teks}</span><ChevronRight size={18} aria-hidden="true"/></button>
               {:else}
                 <div class="bd-card attn {p.tingkat}" role="status"><strong>{p.judul}</strong><span>{p.teks}</span></div>
               {/if}
@@ -270,11 +273,11 @@
       </div>
     {:else}
       <section class="bd-card">
-        <div class="bd-row-head"><h3 class="bd-h">Transaksi terakhir</h3>{#if user.role === 'ANGGOTA'}<button class="bd-link" on:click={() => dispatch('go', 'riwayat')}>Lihat semua →</button>{:else}<button class="bd-link" on:click={() => dispatch('go', 'riwayat')}>Riwayat →</button>{/if}</div>
+        <div class="bd-row-head"><h3 class="bd-h">Transaksi terakhir</h3>{#if user.role === 'ANGGOTA'}<button class="bd-link" on:click={() => dispatch('go', 'riwayat')}>Lihat semua <ArrowRight size={14} class="chev" aria-hidden="true"/></button>{:else}<button class="bd-link" on:click={() => dispatch('go', 'riwayat')}>Riwayat <ArrowRight size={14} class="chev" aria-hidden="true"/></button>{/if}</div>
         {#each data.terakhir || [] as t}
           <button class="bd-row btn" on:click={() => detail(t.no_transaksi)}>
             <span><strong>{t.nama_pelanggan || t.no_transaksi}</strong><small>{t.no_transaksi} · {t.tanggal ? `${tglPendek(t.tanggal)} ` : ''}{t.jam || ''}{t.jenis_bayar ? ` · ${t.jenis_bayar}` : ''}{t.tenor > 1 ? ` · ${t.tenor}x angsuran` : ''}</small></span>
-            <strong>{rp(t.total)} <b aria-hidden="true">→</b></strong>
+            <strong>{rp(t.total)} <ChevronRight size={18} aria-hidden="true"/></strong>
           </button>
         {:else}
           <p class="empty">{user.role === 'KASIR' ? 'Belum ada transaksi hari ini. Tekan "Mulai jual" untuk memulai.' : 'Belum ada transaksi pada periode ini.'}</p>

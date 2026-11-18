@@ -1,4 +1,5 @@
 <script lang="ts">
+  import X from '@lucide/svelte/icons/x';
   import { onMount } from 'svelte';
   import { api, query } from './api';
 
@@ -86,7 +87,7 @@
 
 {#if create}
 <div class="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title">
-  <div class="row"><h2 id="create-user-title">{tab === 'sistem' ? 'User sistem baru' : 'Akun anggota baru'}</h2><button class="icon" aria-label="Tutup" on:click={closeCreate} disabled={busy}>×</button></div>
+  <div class="row"><h2 id="create-user-title">{tab === 'sistem' ? 'User sistem baru' : 'Akun anggota baru'}</h2><button class="icon" aria-label="Tutup" on:click={closeCreate} disabled={busy}><X size={20} aria-hidden="true"/></button></div>
   {#if formError}<div class="error" role="alert">{formError}</div>{/if}
   {#if tab === 'sistem'}
     <form on:submit|preventDefault={addUser}><label>Peran<select bind:value={role}><option value="KASIR">KASIR</option><option value="ADMIN">ADMIN</option></select></label><label>Nama<input bind:value={name} required maxlength="100"/></label><label>Username<input bind:value={username} required minlength="3" maxlength="50"/></label><button class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Buat pengguna'}</button></form>

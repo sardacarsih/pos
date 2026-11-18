@@ -383,28 +383,47 @@ pub async fn penjualan_rincian(
 static STOK_HABIS_CACHE: std::sync::Mutex<Option<(std::time::Instant, i64)>> = std::sync::Mutex::new(None);
 const STOK_HABIS_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Jumlah produk aktif dengan stok sistem <= 0, dimuat terpisah agar Beranda tidak menunggu agregasi berat.
-pub async fn dashboard_stok_habis(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
-    a.peran(ADMIN)?;
+/// Jumlah produk aktif stok habis dengan cache 60 detik (dipakai Beranda dan lencana menu).
+async fn stok_habis_cached(pool: &db::DbPool) -> AppResult<i64> {
     let segar = STOK_HABIS_CACHE
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .filter(|(t, _)| t.elapsed() < STOK_HABIS_TTL)
         .map(|(_, n)| n);
-    let jumlah = match segar {
-        Some(n) => n,
-        None => {
-            let n = db::run(&s.pool, |c| {
-                let (hari, _) = db::faktur::sekarang(c)?;
-                let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
-                katalog::jumlah_stok_habis(c, awal, hari)
-            })
-            .await?;
-            *STOK_HABIS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), n));
-            n
-        }
-    };
-    Ok(Json(json!({ "jumlah": jumlah })))
+    if let Some(n) = segar {
+        return Ok(n);
+    }
+    let n = db::run(pool, |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
+        katalog::jumlah_stok_habis(c, awal, hari)
+    })
+    .await?;
+    *STOK_HABIS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), n));
+    Ok(n)
+}
+
+/// Jumlah produk aktif dengan stok sistem <= 0, dimuat terpisah agar Beranda tidak menunggu agregasi berat.
+pub async fn dashboard_stok_habis(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    Ok(Json(json!({ "jumlah": stok_habis_cached(&s.pool).await? })))
+}
+
+/// Lencana sidebar admin: stok habis (cache 60 detik) dan produk berharga jual <= HPP. Masing-masing `null`
+/// bila gagal dihitung (menu tetap tampil tanpa lencana, kegagalan dicatat di log).
+pub async fn menu_badge(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let (stok, harga) = tokio::join!(
+        stok_habis_cached(&s.pool),
+        db::run(&s.pool, |c| katalog::jumlah_harga_rendah(c))
+    );
+    if let Err(e) = &stok {
+        tracing::warn!(error = %e, "lencana stok habis gagal");
+    }
+    if let Err(e) = &harga {
+        tracing::warn!(error = %e, "lencana harga rendah gagal");
+    }
+    Ok(Json(json!({ "stok_habis": stok.ok(), "harga_rendah": harga.ok() })))
 }
 
 /// Field eksplisit (bukan `#[serde(flatten)]`): query string selalu string, flatten membuat angka gagal di-parse.
