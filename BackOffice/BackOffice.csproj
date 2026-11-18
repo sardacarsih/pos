@@ -22,14 +22,11 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.28" />
-    <PackageReference Include="DevExpress.Dashboard.Core" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Drawing" Version="24.1.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Chart.Win" Version="24.1.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Dashboards.Win" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Printing.Core" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Win" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Win.Design" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Win.Printing" Version="24.1.3" />
+    <PackageReference Include="DevExpress.Drawing" Version="25.2.6-pre-26075" />
+    <PackageReference Include="DevExpress.Printing.Core" Version="25.2.6-pre-26075" />
+    <PackageReference Include="DevExpress.Win" Version="25.2.6-pre-26075" />
+    <PackageReference Include="DevExpress.Win.Design" Version="25.2.6-pre-26075" />
+    <PackageReference Include="DevExpress.Win.Printing" Version="25.2.6-pre-26075" />
     <PackageReference Include="EPPlus" Version="7.0.9" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
