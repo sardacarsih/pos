@@ -7,7 +7,7 @@ use pos_api::{
     routes::{self, AppState},
 };
 
-const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN [--nik NIK]";
+const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN [--nik NIK]";
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
@@ -48,6 +48,20 @@ async fn run() -> Result<(), String> {
                 .await
                 .map_err(|e| e.to_string())?;
             println!("Migrasi selesai ({n} statement baru).");
+            Ok(())
+        }
+        "selftest" => {
+            let hasil = db::run(&pool, pos_api::selftest::jalankan)
+                .await
+                .map_err(|e| e.to_string())?;
+            for h in &hasil {
+                println!("{}", h.baris());
+            }
+            let (ok, gagal) = pos_api::selftest::ringkas(&hasil);
+            println!("RINGKAS: {ok} OK, {gagal} GAGAL");
+            if gagal > 0 {
+                return Err(format!("{gagal} pemeriksaan selftest GAGAL"));
+            }
             Ok(())
         }
         "user-add" => {

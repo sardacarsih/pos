@@ -25,7 +25,7 @@ Jalankan `cargo run -- migrate` sebelum menjalankan API versi ini. Migrasi memer
 
 ## Deploy produksi
 
-`.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema. Urutan lengkap (preflight, smoke test, rollback, web) ada di [`docs/deploy-produksi.md`](../docs/deploy-produksi.md); `-DryRun` melatih test + build tanpa SSH.
+`.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema. `pos-api selftest` menjalankan query baca saja terhadap database yang dikonfigurasi (dipanggil otomatis oleh deploy sebelum biner ditukar). Urutan lengkap (preflight, smoke test, rollback, web) ada di [`docs/deploy-produksi.md`](../docs/deploy-produksi.md); `-DryRun` melatih test + build tanpa SSH.
 
 ## Endpoint (`/api/v1`)
 auth: `login`, `refresh`, `logout`, `ganti-password`, `GET /me` · kasir: `periode/status`, `transaksi/nomor`, `barang`,

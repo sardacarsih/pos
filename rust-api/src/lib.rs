@@ -5,3 +5,4 @@ pub mod domain;
 pub mod error;
 pub mod push;
 pub mod routes;
+pub mod selftest;
