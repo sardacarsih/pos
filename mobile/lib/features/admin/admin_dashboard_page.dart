@@ -32,6 +32,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   bool _loading = true;
   String? _error;
 
+  // Rincian penjualan: rentang yang dipilih + hasilnya dimuat terpisah dari Beranda.
+  PresetRentang _preset = PresetRentang.hari;
+  Rentang? _bebas;
+  RincianPenjualan? _rincian;
+  bool _rincianLoading = false;
+  String? _rincianError;
+  int _rincianId = 0;
+
   @override
   void initState() {
     super.initState();
@@ -57,11 +65,160 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
       api.stokHabisJumlah().then((n) {
         if (mounted) setState(() => _stokHabis = n);
       }).catchError((_) {});
+      _muatRincian(_rentangAktif(d));
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.pesan);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Rentang untuk pilihan saat ini; cadangan "hari ini" bila periode berjalan tidak diketahui.
+  Rentang? _rentangAktif(DashboardAdmin d) {
+    if (_preset == PresetRentang.bebas) return _bebas ?? _rincian?.let((r) => Rentang(r.dari, r.sampai));
+    return rentangPreset(_preset, d.tanggal, periodeDari: d.periodeDari, periodeSampai: d.periodeSampai) ??
+        rentangPreset(PresetRentang.hari, d.tanggal);
+  }
+
+  Future<void> _muatRincian(Rentang? r) async {
+    if (r == null) return;
+    final id = ++_rincianId;
+    setState(() {
+      _rincianLoading = true;
+      _rincianError = null;
+    });
+    try {
+      final hasil = await ref.read(apiProvider).rincianPenjualan(r.dari, r.sampai);
+      if (mounted && id == _rincianId) setState(() => _rincian = hasil);
+    } on ApiException catch (e) {
+      if (mounted && id == _rincianId) setState(() => _rincianError = e.pesan);
+    } finally {
+      if (mounted && id == _rincianId) setState(() => _rincianLoading = false);
+    }
+  }
+
+  Future<void> _pilihPreset(PresetRentang p, DashboardAdmin d) async {
+    if (p == PresetRentang.bebas) {
+      final hariIni = DateTime.parse(d.tanggal);
+      final awal = _rentangAktif(d);
+      final dipilih = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: hariIni,
+        initialDateRange: awal == null
+            ? null
+            : DateTimeRange(start: DateTime.parse(awal.dari), end: DateTime.parse(awal.sampai)),
+        helpText: 'Pilih rentang penjualan',
+      );
+      if (dipilih == null || !mounted) return;
+      final r = Rentang(isoTanggal(dipilih.start), isoTanggal(dipilih.end));
+      final galat = validasiRentang(r, d.tanggal);
+      setState(() {
+        _preset = p;
+        _rincianError = galat;
+        if (galat == null) _bebas = r;
+      });
+      if (galat == null) await _muatRincian(r);
+      return;
+    }
+    setState(() => _preset = p);
+    await _muatRincian(_rentangAktif(d));
+  }
+
+  List<Widget> _bagianRincian(DashboardAdmin d) {
+    final adaPeriode = rentangPreset(PresetRentang.periode, d.tanggal, periodeDari: d.periodeDari, periodeSampai: d.periodeSampai) != null;
+    final rc = _rincian;
+    final cs = Theme.of(context).colorScheme;
+    String pendek(String iso) => '${iso.substring(8)}/${iso.substring(5, 7)}';
+    Widget chip(PresetRentang p, String label, {bool aktif = true}) => ChoiceChip(
+      label: Text(label),
+      selected: _preset == p,
+      onSelected: aktif ? (_) => _pilihPreset(p, d) : null,
+    );
+    return [
+      const JudulBagian('Rincian penjualan'),
+      Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          chip(PresetRentang.hari, 'Hari ini'),
+          chip(PresetRentang.tujuh, '7 hari'),
+          chip(PresetRentang.periode, 'Periode berjalan', aktif: adaPeriode),
+          chip(PresetRentang.bebas, 'Pilih tanggal'),
+        ],
+      ),
+      if (_rincianError != null) ...[
+        const SizedBox(height: 8),
+        BannerBeranda(tingkat: Tingkat.bahaya, judul: 'Rincian tidak dapat dimuat', pesan: _rincianError),
+      ],
+      if (_rincianLoading && rc == null)
+        const Padding(padding: EdgeInsets.all(24), child: LoadingKopkar()),
+      if (rc != null) ...[
+        const SizedBox(height: 10),
+        Text(
+          '${pendek(rc.dari)}${rc.hari > 1 ? ' – ${pendek(rc.sampai)}' : ''} · ${rc.hari} hari · ${rc.ringkasan.total.jumlah} transaksi'
+          '${_rincianLoading ? ' · memuat…' : ''}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        if (rc.ringkasan.total.jumlah == 0)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('Belum ada transaksi pada rentang ini.')),
+          )
+        else ...[
+          JenisKartu(
+            label: 'Tunai',
+            bagian: rc.ringkasan.tunai,
+            persen: persenJenis(rc.ringkasan.tunai.total, rc.ringkasan.total.total),
+            warna: cs.primary,
+          ),
+          const SizedBox(height: 8),
+          JenisKartu(
+            label: 'Kredit',
+            bagian: rc.ringkasan.kredit,
+            persen: persenJenis(rc.ringkasan.kredit.total, rc.ringkasan.total.total),
+            warna: const Color(0xFFE0A100),
+          ),
+          if (rc.ringkasan.lain.jumlah > 0 || rc.ringkasan.lain.total > 0) ...[
+            const SizedBox(height: 8),
+            JenisKartu(
+              label: 'Lainnya',
+              bagian: rc.ringkasan.lain,
+              persen: persenJenis(rc.ringkasan.lain.total, rc.ringkasan.total.total),
+              warna: cs.outline,
+            ),
+          ],
+          const SizedBox(height: 10),
+          ProporsiJenis(pecahan: rc.ringkasan),
+          if (rc.harian.length > 1 && rc.harian.length <= maksHariGrafik) ...[
+            const JudulBagian('Tren harian'),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
+                child: TrenBertumpuk(harian: rc.harian),
+              ),
+            ),
+          ] else if (rc.harian.length > maksHariGrafik)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Grafik harian ditampilkan untuk rentang ≤ $maksHariGrafik hari.', style: Theme.of(context).textTheme.bodySmall),
+            ),
+          const JudulBagian('Per kasir'),
+          for (final k in rc.perKasir) ...[
+            KasirRincianKartu(judul: k.nama.isEmpty ? k.kasir : k.nama, subjudul: k.nama.isEmpty ? null : k.kasir, pecahan: k.pecahan),
+            const SizedBox(height: 8),
+          ],
+          KasirRincianKartu(judul: 'Semua kasir', pecahan: rc.ringkasan, total: true),
+          if (rc.perKasir.length >= 50)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Menampilkan 50 kasir dengan penjualan terbesar.', style: Theme.of(context).textTheme.bodySmall),
+            ),
+        ],
+      ],
+    ];
   }
 
   void _buka(int tab, {int? subTabProduk}) {
@@ -188,8 +345,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ProporsiKartu(tunai: d.tunai, kredit: d.kredit),
               if (d.tren.isNotEmpty) ...[
                 const JudulBagian('Tren penjualan 7 hari'),
                 Card(
@@ -200,21 +355,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   ),
                 ),
               ],
-              const JudulBagian('Penjualan per kasir'),
-              if (d.perKasir.isEmpty)
-                const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Belum ada transaksi hari ini.'))),
-              for (final k in d.perKasir)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(
-                      k.nama.isEmpty ? k.kasir : '${k.nama} (${k.kasir})',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text('${k.jumlah} transaksi'),
-                    trailing: Text(rupiah(k.total), style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ),
+              ..._bagianRincian(d),
               const JudulBagian('Barang terlaris hari ini'),
               if (d.terlaris.isEmpty)
                 const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Belum ada penjualan hari ini.'))),
@@ -322,4 +463,8 @@ class _AdminShellState extends State<AdminShell> {
             ],
           ),
   );
+}
+
+extension _Let<T> on T {
+  R let<R>(R Function(T it) f) => f(this);
 }

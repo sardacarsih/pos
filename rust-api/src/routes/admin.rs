@@ -357,6 +357,28 @@ pub async fn dashboard(State(s): State<AppState>, a: Auth) -> AppResult<Json<Val
     Ok(Json(json!(d)))
 }
 
+#[derive(Deserialize)]
+pub struct RincianQuery {
+    dari: String,
+    sampai: String,
+}
+
+/// Rincian penjualan semua kasir pada rentang tanggal: tunai vs kredit, per kasir, dan per hari.
+pub async fn penjualan_rincian(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<RincianQuery>,
+) -> AppResult<Json<db::dashboard::Rincian>> {
+    a.peran(ADMIN)?;
+    let r = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        let (dari, sampai) = db::dashboard::validasi_rentang(&q.dari, &q.sampai, hari)?;
+        db::dashboard::rincian_penjualan(c, dari, sampai)
+    })
+    .await?;
+    Ok(Json(r))
+}
+
 /// Cache jumlah stok habis untuk Beranda admin: agregasinya berat, cukup diperbarui tiap 60 detik per proses.
 static STOK_HABIS_CACHE: std::sync::Mutex<Option<(std::time::Instant, i64)>> = std::sync::Mutex::new(None);
 const STOK_HABIS_TTL: std::time::Duration = std::time::Duration::from_secs(60);

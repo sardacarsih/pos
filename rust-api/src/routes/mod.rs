@@ -196,6 +196,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/admin/kategori", get(admin::semua_kategori))
         .route("/api/v1/admin/dashboard", get(admin::dashboard))
         .route("/api/v1/admin/dashboard/stok-habis", get(admin::dashboard_stok_habis))
+        .route("/api/v1/admin/penjualan/rincian", get(admin::penjualan_rincian))
         .route("/api/v1/admin/periode", get(admin::periode_list))
         .route("/api/v1/admin/rekap-anggota", get(admin::rekap_anggota))
         .route("/api/v1/admin/tagihan-vs-rekap", get(admin::tagihan_vs_rekap))

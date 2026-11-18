@@ -584,6 +584,13 @@ class ApiClient {
     );
   }
 
+  /// Rincian penjualan semua kasir pada rentang `dari`..`sampai` (YYYY-MM-DD, maks 92 hari, tidak melewati hari ini).
+  Future<RincianPenjualan> rincianPenjualan(String dari, String sampai) async =>
+      RincianPenjualan.fromJson(
+        await get('/api/v1/admin/penjualan/rincian', q: {'dari': dari, 'sampai': sampai})
+            as Map<String, dynamic>,
+      );
+
   /// Jumlah produk aktif stok habis untuk Beranda admin (dihitung berat di server, ada cache 60 detik).
   Future<int> stokHabisJumlah() async {
     final j = await get('/api/v1/admin/dashboard/stok-habis') as Map<String, dynamic>;
