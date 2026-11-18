@@ -17,3 +17,13 @@ function Send-File($Local, $Remote) {
         }
     } finally { $stream.Dispose() }
 }
+
+# Jalankan skrip PowerShell MULTI-BARIS di server (butuh $Server di pemanggil), mengembalikan keluarannya.
+# Catatan penting: `powershell -Command -` membaca stdin baris demi baris seperti konsol interaktif. Blok yang melintas
+# beberapa baris ({ ... } berbaris-baris, for/if/try) baru dieksekusi setelah ada BARIS KOSONG; tanpa itu seluruh sisa
+# skrip hilang diam-diam (tanpa galat dan tanpa keluaran). Maka skrip dikirim sebagai SATU baris base64 dan dijalankan
+# dengan Invoke-Expression, yang mem-parse skrip utuh.
+function Invoke-SshSkrip([string]$Skrip) {
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Skrip))
+    "Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$b64')))" | ssh $Server 'powershell -NoProfile -Command -'
+}
