@@ -535,6 +535,132 @@ pub async fn stok_opname(
     Ok(Json(h))
 }
 
+#[derive(Deserialize)]
+pub struct DokumenReq {
+    items: Vec<db::opname::BarisReq>,
+}
+
+/// Satu dokumen SO berisi beberapa barang (satu nomor SO). Semua-atau-tidak-sama-sekali.
+pub async fn stok_opname_dokumen(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<DokumenReq>,
+) -> AppResult<Json<db::opname::DokumenSo>> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    let key = super::idempotency_key(&headers)?;
+    db::opname::validasi_dokumen(&req.items)?;
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        db::opname::simpan_dokumen(c, uid, &key, &req.items, hari)
+    })
+    .await?;
+    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, baris = h.items.len(), ulang = h.ulang, "stok opname dokumen");
+    Ok(Json(h))
+}
+
+#[derive(Deserialize)]
+pub struct RiwayatQuery {
+    tahun: Option<i32>,
+    page: Option<u32>,
+    size: Option<u32>,
+}
+
+/// Riwayat dokumen SO (dari desktop, mobile, dan web) per tahun, terbaru dulu.
+pub async fn stok_opname_riwayat(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<RiwayatQuery>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let pg = super::Paging {
+        q: None,
+        page: q.page,
+        size: q.size,
+    };
+    let (page, size) = (pg.page(), pg.size());
+    let tahun = q.tahun;
+    if tahun.is_some_and(|t| !(2000..=2100).contains(&t)) {
+        return Err(AppError::validation("Tahun tidak valid"));
+    }
+    let (items, lagi, tahun) = db::run(&s.pool, move |c| {
+        let tahun = match tahun {
+            Some(t) => t,
+            None => chrono::Datelike::year(&db::faktur::sekarang(c)?.0),
+        };
+        let (items, lagi) = db::opname::daftar_so(c, tahun, page, size)?;
+        Ok((items, lagi, tahun))
+    })
+    .await?;
+    Ok(Json(json!({ "items": items, "ada_lagi": lagi, "page": page, "tahun": tahun })))
+}
+
+pub async fn stok_opname_detail(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(nomor): Path<String>,
+) -> AppResult<Json<db::opname::DokumenSo>> {
+    a.peran(ADMIN)?;
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor SO tidak valid"));
+    }
+    Ok(Json(db::run(&s.pool, move |c| db::opname::detail_so(c, &nomor)).await?))
+}
+
+#[derive(serde::Serialize)]
+struct StokCari {
+    id: i64,
+    kode: String,
+    barcode: String,
+    nama: String,
+    satuan: String,
+    kategori: String,
+    stok: rust_decimal::Decimal,
+}
+
+/// Cari barang aktif untuk dihitung (nama/kode/barcode), lengkap dengan stok sistem hari ini.
+pub async fn stok_cari(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<StokQuery>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let pg = super::Paging {
+        q: q.q,
+        page: q.page,
+        size: q.size,
+    };
+    let (page, size) = (pg.page(), pg.size());
+    let teks = pg.q;
+    let kategori = q.kategori;
+    let (items, lagi) = db::run(&s.pool, move |c| {
+        let h = katalog::daftar_produk_admin(c, teks.as_deref(), kategori.as_deref(), Some("Y"), false, page, size)?;
+        let (hari, _) = db::faktur::sekarang(c)?;
+        let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
+        let kodes: Vec<String> = h.items.iter().map(|p| p.kode.clone()).collect();
+        let stok = katalog::stok_map(c, &kodes, awal, hari)?;
+        let items: Vec<StokCari> = h
+            .items
+            .into_iter()
+            .map(|p| StokCari {
+                stok: stok.get(&p.kode).copied().unwrap_or_default(),
+                id: p.id,
+                kode: p.kode,
+                barcode: p.barcode,
+                nama: p.nama,
+                satuan: p.satuan,
+                kategori: p.kategori,
+            })
+            .collect();
+        Ok((items, h.ada_lagi))
+    })
+    .await?;
+    Ok(super::halaman(items, lagi, page))
+}
+
 #[cfg(test)]
 mod opname_tests {
     use super::*;
@@ -545,6 +671,16 @@ mod opname_tests {
         assert_eq!((r.produk_id, r.qty_fisik.to_string()), (7, "12.5".into()));
         let r: OpnameReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":0}"#).unwrap();
         assert!(r.qty_fisik.is_zero());
+    }
+
+    #[test]
+    fn dokumen_req_dan_riwayat_query_menerima_angka() {
+        let r: DokumenReq =
+            serde_json::from_str(r#"{"items":[{"produk_id":7,"qty_fisik":12.5},{"produk_id":8,"qty_fisik":0}]}"#).unwrap();
+        assert_eq!(r.items.len(), 2);
+        let uri: axum::http::Uri = "/api/v1/admin/stok-opname?tahun=2026&page=2&size=20".parse().unwrap();
+        let q = axum::extract::Query::<RiwayatQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!((q.0.tahun, q.0.page, q.0.size), (Some(2026), Some(2), Some(20)));
     }
 
     #[test]

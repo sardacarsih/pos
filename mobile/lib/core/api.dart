@@ -584,6 +584,64 @@ class ApiClient {
     );
   }
 
+  /// Cari barang aktif (nama/kode/barcode) beserta stok sistem, untuk dihitung di stock opname.
+  Future<({List<StokItem> items, bool lagi})> cariStok({
+    String? q,
+    int page = 1,
+    int size = 20,
+  }) async {
+    final j = await get(
+      '/api/v1/admin/stok',
+      q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': size},
+    ) as Map<String, dynamic>;
+    return (
+      items: [
+        for (final p in j['items'] as List)
+          StokItem.fromJson(p as Map<String, dynamic>),
+      ],
+      lagi: j['ada_lagi'] == true,
+    );
+  }
+
+  /// Simpan satu dokumen SO berisi beberapa barang. `idempotencyKey` dipakai ulang saat retry. Mengembalikan nomor SO.
+  Future<String> simpanSo(
+    List<({int produkId, String qty})> items, {
+    required String idempotencyKey,
+  }) async {
+    final j = await post(
+      '/api/v1/admin/stok-opname/dokumen',
+      body: {
+        'items': [
+          for (final i in items)
+            {'produk_id': i.produkId, 'qty_fisik': num.parse(i.qty)},
+        ],
+      },
+      headers: {'Idempotency-Key': idempotencyKey},
+    ) as Map<String, dynamic>;
+    return j['nomor_so'] as String? ?? '';
+  }
+
+  Future<({List<SoRingkas> items, bool lagi})> daftarSo({
+    required int tahun,
+    int page = 1,
+  }) async {
+    final j = await get(
+      '/api/v1/admin/stok-opname',
+      q: {'tahun': tahun, 'page': page, 'size': 30},
+    ) as Map<String, dynamic>;
+    return (
+      items: [
+        for (final s in j['items'] as List)
+          SoRingkas.fromJson(s as Map<String, dynamic>),
+      ],
+      lagi: j['ada_lagi'] == true,
+    );
+  }
+
+  Future<SoDokumen> detailSo(String nomor) async => SoDokumen.fromJson(
+    await get('/api/v1/admin/stok-opname/$nomor') as Map<String, dynamic>,
+  );
+
   /// Koreksi stok satu barang lewat dokumen SO. `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
   Future<String> opnameStok(
     int produkId,

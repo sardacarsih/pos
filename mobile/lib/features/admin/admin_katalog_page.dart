@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../profil/profil_aksi.dart';
 import 'admin_kategori_page.dart';
+import 'admin_opname_page.dart';
 import 'admin_produk_page.dart';
 import 'admin_stok_page.dart';
 
@@ -17,7 +18,7 @@ class AdminKatalogPage extends ConsumerStatefulWidget {
 
 class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 4, vsync: this)
+  late final TabController _tab = TabController(length: 5, vsync: this)
     ..addListener(() {
       if (!_tab.indexIsChanging) setState(() {});
     });
@@ -43,10 +44,13 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
       children: [
         TabBar(
           controller: _tab,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Produk'),
             Tab(text: 'Stok habis'),
             Tab(text: 'Harga ≤ HPP'),
+            Tab(text: 'Opname'),
             Tab(text: 'Kategori'),
           ],
         ),
@@ -58,6 +62,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
               AdminProdukPage(),
               AdminStokPage(),
               AdminProdukPage(hargaRendah: true),
+              AdminOpnamePage(),
               AdminKategoriPage(),
             ],
           ),

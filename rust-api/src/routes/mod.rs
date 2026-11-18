@@ -206,7 +206,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/admin/produk", get(admin::produk_list))
         .route("/api/v1/admin/produk/{id}", put(admin::produk_ubah))
         .route("/api/v1/admin/stok-habis", get(admin::stok_habis))
-        .route("/api/v1/admin/stok-opname", post(admin::stok_opname))
+        .route("/api/v1/admin/stok", get(admin::stok_cari))
+        .route(
+            "/api/v1/admin/stok-opname",
+            post(admin::stok_opname).get(admin::stok_opname_riwayat),
+        )
+        .route("/api/v1/admin/stok-opname/dokumen", post(admin::stok_opname_dokumen))
+        .route("/api/v1/admin/stok-opname/{nomor}", get(admin::stok_opname_detail))
         .route(
             "/api/v1/admin/produk/{id}/foto",
             put(admin::foto_ubah)

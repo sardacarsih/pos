@@ -324,10 +324,48 @@ class StokItem {
       nama = _s(j['nama']),
       satuan = _s(j['satuan']),
       kategori = _s(j['kategori']),
+      barcode = _s(j['barcode']),
       stok = (j['stok'] as num?)?.toDouble() ?? 0;
   final int id;
-  final String kode, nama, satuan, kategori;
+  final String kode, nama, satuan, kategori, barcode;
   final double stok;
+}
+
+double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
+
+/// Ringkasan dokumen stock opname (riwayat SO).
+class SoRingkas {
+  SoRingkas.fromJson(Map<String, dynamic> j)
+    : nomor = _s(j['nomor_so']),
+      tanggal = _s(j['tanggal']),
+      jumlahItem = _i(j['jumlah_item']),
+      nilaiSelisih = _d(j['nilai_selisih']);
+  final String nomor, tanggal;
+  final int jumlahItem;
+  final double nilaiSelisih;
+}
+
+class SoBaris {
+  SoBaris.fromJson(Map<String, dynamic> j)
+    : kode = _s(j['kode']),
+      nama = _s(j['nama']),
+      sistem = _d(j['jumlah_sistem']),
+      fisik = _d(j['qty_fisik']),
+      selisih = _d(j['selisih']);
+  final String kode, nama;
+  final double sistem, fisik, selisih;
+}
+
+class SoDokumen {
+  SoDokumen.fromJson(Map<String, dynamic> j)
+    : nomor = _s(j['nomor_so']),
+      tanggal = _s(j['tanggal']),
+      items = [
+        for (final b in (j['items'] as List? ?? []))
+          SoBaris.fromJson(b as Map<String, dynamic>),
+      ];
+  final String nomor, tanggal;
+  final List<SoBaris> items;
 }
 
 class UserInfo {
