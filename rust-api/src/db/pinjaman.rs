@@ -14,6 +14,9 @@ use crate::{
 };
 
 pub const BERJALAN: &str = "('DIAJUKAN','DIVERIFIKASI','DISETUJUI')";
+/// Pinjaman aktif (alias `p` = FIN_PINJAMAN) belum lunas dan memiliki jadwal yang masih berjalan.
+const AKTIF: &str = "NVL(p.ISLUNAS,'T')='T'
+  AND (SELECT MAX(d.TANGGALJATUHTEMPO) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI) >= TRUNC(SYSDATE)";
 const MAKS_RUPIAH: i64 = 9_000_000_000_000;
 
 pub fn migrate(c: &Connection) -> AppResult<usize> {
@@ -93,10 +96,8 @@ fn kelayakan(c: &Connection, nik: &str, jumlah: i64, tenor: i32, kecuali: Option
             format!("Jumlah pinjaman maksimal Rp {}", at.maks_pinjaman),
         ));
     }
-    // Pinjaman aktif = belum lunas DAN jadwalnya belum habis (ISLUNAS diisi di luar aplikasi ini).
     let aktif: i64 = c.query_row_as_named(
-        "SELECT COUNT(*) FROM FIN_PINJAMAN p WHERE p.NIK=:nik AND NVL(p.ISLUNAS,'T')='T'
-           AND (SELECT MAX(d.TANGGALJATUHTEMPO) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI) >= TRUNC(SYSDATE)",
+        &format!("SELECT COUNT(*) FROM FIN_PINJAMAN p WHERE p.NIK=:nik AND {AKTIF}"),
         &[("nik", &nik)],
     )?;
     if aktif > 0 {
@@ -223,11 +224,11 @@ pub fn saya(c: &Connection, nik: &str) -> AppResult<Value> {
     )?;
     let aktif = c
         .query_named(
-            "SELECT p.NO_TRANSAKSI,p.TANGGAL,p.PINJAMAN,p.TENOR,TO_CHAR(p.ANGSURAN,'TM9','NLS_NUMERIC_CHARACTERS=''.,'''),
-                    (SELECT COUNT(*) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI AND d.TANGGALJATUHTEMPO < TRUNC(SYSDATE))
-             FROM FIN_PINJAMAN p WHERE p.NIK=:nik AND NVL(p.ISLUNAS,'T')='T'
-               AND (SELECT MAX(d.TANGGALJATUHTEMPO) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI) >= TRUNC(SYSDATE)
-             ORDER BY p.TANGGAL DESC",
+            &format!(
+                "SELECT p.NO_TRANSAKSI,p.TANGGAL,p.PINJAMAN,p.TENOR,TO_CHAR(p.ANGSURAN,'TM9','NLS_NUMERIC_CHARACTERS=''.,'''),
+                        (SELECT COUNT(*) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI AND d.TANGGALJATUHTEMPO < TRUNC(SYSDATE))
+                 FROM FIN_PINJAMAN p WHERE p.NIK=:nik AND {AKTIF} ORDER BY p.TANGGAL DESC"
+            ),
             &[("nik", &nik)],
         )?
         .map(|r| -> AppResult<Value> {
@@ -241,6 +242,42 @@ pub fn saya(c: &Connection, nik: &str) -> AppResult<Value> {
         })
         .collect::<AppResult<Vec<_>>>()?;
     Ok(json!({ "aturan": aturan(c)?, "pengajuan": items, "pinjaman_aktif": aktif }))
+}
+
+/// Laporan pinjaman aktif semua anggota. Estimasi sisa pokok memakai saldo awal angsuran
+/// pertama dengan tanggal jatuh tempo hari ini atau sesudahnya.
+pub fn laporan(c: &Connection, q: Option<&str>) -> AppResult<Value> {
+    let q = q.map(str::trim).filter(|s| !s.is_empty()).map(super::like);
+    let tm = |kol: &str| format!("TO_CHAR({kol},'TM9','NLS_NUMERIC_CHARACTERS=''.,''')");
+    let sql = format!(
+        "SELECT p.NO_TRANSAKSI,p.TANGGAL,p.NIK,p.NAMA_PELANGGAN,p.UNIT_KERJA,p.PINJAMAN,p.TENOR,{},
+                (SELECT COUNT(*) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI AND d.TANGGALJATUHTEMPO < TRUNC(SYSDATE)),
+                (SELECT {} FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI AND d.TANGGALJATUHTEMPO >= TRUNC(SYSDATE)),
+                (SELECT MAX(d.TANGGALJATUHTEMPO) FROM FIN_PINJAMAN_DETAIL d WHERE d.NO_TRANSAKSI=p.NO_TRANSAKSI)
+         FROM FIN_PINJAMAN p
+         WHERE {AKTIF} AND (:q IS NULL OR UPPER(p.NAMA_PELANGGAN) LIKE :q ESCAPE '\\' OR UPPER(p.NIK) LIKE :q ESCAPE '\\')
+         ORDER BY p.NAMA_PELANGGAN, p.TANGGAL, p.NO_TRANSAKSI",
+        tm("p.ANGSURAN"),
+        tm("MIN(d.SALDOAWAL) KEEP (DENSE_RANK FIRST ORDER BY d.TANGGALJATUHTEMPO, d.ANGSURANKE)"),
+    );
+    let angka = |s: Option<String>| s.and_then(|v| v.parse::<f64>().ok()).unwrap_or_default();
+    let (mut total_pinjaman, mut total_sisa) = (0i64, 0f64);
+    let mut items = Vec::new();
+    for r in c.query_named(&sql, &[("q", &q)])? {
+        let r = r?;
+        let pinjaman: i64 = r.get(5)?;
+        let sisa = angka(r.get(9)?);
+        total_pinjaman += pinjaman;
+        total_sisa += sisa;
+        items.push(json!({
+            "no_transaksi": r.get::<_, String>(0)?, "tanggal": r.get::<_, NaiveDateTime>(1)?.date(),
+            "nik": r.get::<_, Option<String>>(2)?, "nama": r.get::<_, Option<String>>(3)?,
+            "unit_kerja": r.get::<_, Option<String>>(4)?, "pinjaman": pinjaman, "tenor": r.get::<_, i64>(6)?,
+            "angsuran": angka(r.get(7)?), "angsuran_lewat": r.get::<_, i64>(8)?, "sisa_pokok": sisa,
+            "jatuh_tempo_akhir": r.get::<_, Option<NaiveDateTime>>(10)?.map(|d| d.date()),
+        }));
+    }
+    Ok(json!({ "jumlah": items.len(), "items": items, "total_pinjaman": total_pinjaman, "total_sisa_pokok": total_sisa }))
 }
 
 #[derive(Deserialize)]

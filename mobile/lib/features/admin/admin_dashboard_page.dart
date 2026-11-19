@@ -11,7 +11,7 @@ import '../../core/widgets.dart';
 import 'admin_katalog_page.dart' show adminKatalogTab;
 
 /// Indeks tab di [AdminShell].
-const adminTabBeranda = 0, adminTabProduk = 1, adminTabRekap = 2, adminTabUser = 3;
+const adminTabBeranda = 0, adminTabProduk = 1, adminTabRekap = 2, adminTabUser = 3, adminTabPinjaman = 4;
 
 /// Beranda admin: perlu perhatian -> KPI hari ini (dengan pembanding kemarin) -> tren 7 hari -> detail.
 /// [aktif] berubah true saat tab dibuka -> data dimuat ulang.
@@ -400,17 +400,19 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   }
 }
 
-/// Shell admin: tab Beranda (awal), Produk (Produk | Stok habis | Harga ≤ HPP | Opname | Kategori), Rekap anggota, dan User.
+/// Shell admin: tab Beranda (awal), Produk (Produk | Stok habis | Harga ≤ HPP | Opname | Kategori), Rekap anggota, User, dan Pinjaman.
 class AdminShell extends StatefulWidget {
   const AdminShell({
     super.key,
     required this.produk,
     required this.rekap,
     required this.user,
+    required this.pinjaman,
   });
   final Widget produk;
   final Widget rekap;
   final Widget user;
+  final Widget pinjaman;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -418,6 +420,12 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _i = adminTabBeranda;
+  bool _pernahBukaPinjaman = false;
+
+  void _buka(int tab) => setState(() {
+    _i = tab;
+    if (tab == adminTabPinjaman) _pernahBukaPinjaman = true;
+  });
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -432,11 +440,12 @@ class _AdminShellState extends State<AdminShell> {
         children: [
           AdminDashboardPage(
             aktif: _i == adminTabBeranda,
-            onBuka: (tab) => setState(() => _i = tab),
+            onBuka: _buka,
           ),
           widget.produk,
           widget.rekap,
           widget.user,
+          _pernahBukaPinjaman ? widget.pinjaman : const SizedBox.shrink(),
         ],
       ),
     ),
@@ -445,7 +454,7 @@ class _AdminShellState extends State<AdminShell> {
         ? null
         : NavigationBar(
             selectedIndex: _i,
-            onDestinationSelected: (v) => setState(() => _i = v),
+            onDestinationSelected: _buka,
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
@@ -466,6 +475,11 @@ class _AdminShellState extends State<AdminShell> {
                 icon: Icon(Icons.group_outlined),
                 selectedIcon: Icon(Icons.group),
                 label: 'User',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                selectedIcon: Icon(Icons.account_balance_wallet),
+                label: 'Pinjaman',
               ),
             ],
           ),

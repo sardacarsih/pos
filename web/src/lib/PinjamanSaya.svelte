@@ -18,6 +18,7 @@
   let keperluan = '';
   let jadwal: BarisJadwal[] = [];
   let kunci = crypto.randomUUID();
+  let tanyaBatal = false;
 
   const rp = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
   $: berjalan = pengajuan.find(p => LANGKAH.slice(0, 3).includes(p.status));
@@ -60,7 +61,7 @@
   }
 
   function batal(p: Pengajuan) {
-    if (!confirm(`Batalkan pengajuan ${rp(p.jumlah)}?`)) return;
+    tanyaBatal = false;
     void jalan(async () => {
       await api(`/saya/pinjaman/${p.id}/batal`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, userId: user.id });
       pesan = 'Pengajuan dibatalkan.';
@@ -83,7 +84,13 @@
     {/each}</ol>
     {#if berjalan.antrian}<p>Nomor antrian pencairan: <strong>{berjalan.antrian}</strong></p>{/if}
     <p class="muted">Perkiraan angsuran {rp(Math.round(berjalan.angsuran))}/bulan. {berjalan.keperluan}</p>
-    {#if berjalan.status === 'DIAJUKAN'}<button class="secondary" disabled={sibuk} on:click={() => batal(berjalan)}>Batalkan pengajuan</button>{/if}
+    {#if berjalan.status === 'DIAJUKAN'}
+      {#if tanyaBatal}
+        <p role="alert"><strong>Batalkan pengajuan {rp(berjalan.jumlah)}?</strong> Pengajuan yang dibatalkan tidak dapat dilanjutkan.</p>
+        <button class="primary" disabled={sibuk} on:click={() => berjalan && batal(berjalan)}>Ya, batalkan</button>
+        <button class="secondary" disabled={sibuk} on:click={() => tanyaBatal = false}>Tidak</button>
+      {:else}<button class="secondary" disabled={sibuk} on:click={() => tanyaBatal = true}>Batalkan pengajuan</button>{/if}
+    {/if}
   </section>
 {/if}
 

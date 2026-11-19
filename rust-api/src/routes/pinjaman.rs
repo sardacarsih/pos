@@ -88,6 +88,15 @@ pub async fn proses(
     pengurus(s, a, move |c, u| Ok(json!({ "hasil": p::proses(c, u, id, aksi, &key, &r)? }))).await
 }
 
+#[derive(Deserialize)]
+pub struct LaporanQuery {
+    q: Option<String>,
+}
+
+pub async fn laporan(State(s): State<AppState>, a: Auth, Query(f): Query<LaporanQuery>) -> AppResult<Json<Value>> {
+    pengurus(s, a, move |c, _| p::laporan(c, f.q.as_deref())).await
+}
+
 pub async fn antrian(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
     pengurus(s, a, |c, _| p::antrian(c)).await
 }

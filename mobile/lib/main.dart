@@ -12,6 +12,7 @@ import 'core/widgets.dart';
 import 'features/admin/admin_dashboard_page.dart';
 import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
+import 'features/admin/admin_pinjaman_page.dart';
 import 'features/admin/admin_rekap_page.dart';
 import 'features/anggota/anggota_shell.dart';
 import 'features/anggota/pinjaman_page.dart';
@@ -84,6 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               produk: AdminKatalogPage(),
               rekap: AdminRekapPage(),
               user: AdminPage(),
+              pinjaman: AdminPinjamanPage(),
             ),
       ),
     ],

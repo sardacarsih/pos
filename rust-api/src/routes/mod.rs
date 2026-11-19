@@ -206,6 +206,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/saya/pinjaman/{id}/batal", post(pinjaman::batal))
         .route("/api/v1/pinjaman", get(pinjaman::daftar))
         .route("/api/v1/pinjaman/antrian", get(pinjaman::antrian))
+        .route("/api/v1/pinjaman/laporan", get(pinjaman::laporan))
         .route("/api/v1/pinjaman/pengaturan", get(pinjaman::pengaturan))
         .route("/api/v1/pinjaman/pengaturan/hak", put(pinjaman::hak))
         .route("/api/v1/pinjaman/pengaturan/maks", put(pinjaman::maks))

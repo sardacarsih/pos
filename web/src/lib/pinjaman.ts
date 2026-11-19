@@ -16,6 +16,12 @@ export interface Aturan { bunga: number; maks_tenor: number; maks_pinjaman: numb
 export interface BarisJadwal { ke: number; periode: number; jatuh_tempo: string; saldo_awal: number; pokok: number; bunga: number; angsuran: number; saldo_akhir: number }
 export interface Antrian { periode: number; dari: string; sampai: string; plafon: number | null; terpakai: number; sisa: number | null; items: Pengajuan[] }
 
+export interface BarisLaporan {
+  no_transaksi: string; tanggal: string; nik: string | null; nama: string | null; unit_kerja: string | null;
+  pinjaman: number; tenor: number; angsuran: number; angsuran_lewat: number; sisa_pokok: number; jatuh_tempo_akhir: string | null;
+}
+export interface LaporanPinjaman { jumlah: number; total_pinjaman: number; total_sisa_pokok: number; items: BarisLaporan[] }
+
 export const labelStatus: Record<Status, string> = {
   DIAJUKAN: 'Diajukan', DIVERIFIKASI: 'Diverifikasi', DISETUJUI: 'Disetujui — antre dana', DICAIRKAN: 'Dicairkan',
   DITOLAK: 'Ditolak', DIBATALKAN: 'Dibatalkan'

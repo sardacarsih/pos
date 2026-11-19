@@ -133,6 +133,11 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
     let saya = p::saya(&c, "N1").unwrap();
     assert_eq!(saya["pengajuan"][0]["status"], "DICAIRKAN");
     assert_eq!(saya["pinjaman_aktif"].as_array().unwrap().len(), 1);
+    // Laporan: dua pinjaman web aktif (N1, N2); belum ada angsuran jatuh tempo -> sisa pokok = pinjaman.
+    let lap = p::laporan(&c, Some("ani")).unwrap();
+    assert_eq!(lap["jumlah"], 1);
+    assert_eq!(lap["items"][0]["sisa_pokok"].as_f64().unwrap(), 3_000_000.0);
+    assert_eq!(p::laporan(&c, None).unwrap()["total_pinjaman"], 5_000_000);
 
     // Pengurus yang memverifikasi tidak boleh menyetujui; tolak wajib alasan.
     let a4 = ang(buat("dodi", Role::Anggota, Some("N4")));
@@ -142,4 +147,33 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
     assert!(matches!(jalan(&ketua, id4, Tolak), Err(AppError::Validation(_))));
     p::proses(&c, &ketua, id4, Tolak, &key(), &p::ProsesReq { catatan: Some("Dokumen kurang".into()) }).unwrap();
     assert_eq!(p::saya(&c, "N4").unwrap()["pengajuan"][0]["status"], "DITOLAK");
+
+    // Jadwal BackOffice mencakup angsuran yang sudah lewat dan jatuh tempo hari ini.
+    for (no, lunas, jatuh_tempo) in [("LEGACY-AKTIF", "T", 0), ("LEGACY-LUNAS", "Y", 1), ("LEGACY-HABIS", "T", -1)] {
+        c.execute(
+            "INSERT INTO FIN_PINJAMAN (NO_TRANSAKSI,TANGGAL,NIK,NAMA_PELANGGAN,PINJAMAN,TENOR,ANGSURAN,ISLUNAS)
+             VALUES (:1,TRUNC(SYSDATE)-50,'LEGACY','Anggota Legacy',2000,2,1050,:2)",
+            &[&no, &lunas],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO FIN_PINJAMAN_DETAIL (NO_TRANSAKSI,TANGGALJATUHTEMPO,ANGSURANKE,SALDOAWAL)
+             VALUES (:1,TRUNC(SYSDATE)-30,1,2000)",
+            &[&no],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO FIN_PINJAMAN_DETAIL (NO_TRANSAKSI,TANGGALJATUHTEMPO,ANGSURANKE,SALDOAWAL)
+             VALUES (:1,TRUNC(SYSDATE)+:2,2,1000.25)",
+            &[&no, &jatuh_tempo],
+        )
+        .unwrap();
+    }
+    let legacy = p::laporan(&c, Some("  LEGACY  ")).unwrap();
+    assert_eq!(legacy["jumlah"], 1);
+    assert_eq!(legacy["total_pinjaman"], 2_000);
+    assert_eq!(legacy["total_sisa_pokok"].as_f64(), Some(1_000.25));
+    assert_eq!(legacy["items"][0]["no_transaksi"], "LEGACY-AKTIF");
+    assert_eq!(legacy["items"][0]["angsuran_lewat"], 1);
+    assert_eq!(p::laporan(&c, Some("%")).unwrap()["jumlah"], 0);
 }

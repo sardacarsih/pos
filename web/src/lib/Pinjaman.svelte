@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, ApiError, query } from './api';
   import { rpBeli } from './pembelian';
-  import { aksiTersedia, labelStatus, labelTahap, TAHAP, type Aksi, type Antrian, type Aturan, type BarisJadwal, type Pengajuan, type Status, type Tahap } from './pinjaman';
+  import { aksiTersedia, labelStatus, labelTahap, TAHAP, type Aksi, type Antrian, type Aturan, type BarisJadwal, type LaporanPinjaman, type Pengajuan, type Status, type Tahap } from './pinjaman';
   import type { User } from './types';
   import './pembelian.css';
 
@@ -10,7 +10,7 @@
   type Detail = Pengajuan & { jadwal: BarisJadwal[]; jumlah_pinjaman_lalu: number };
   type HakUser = { id: number; username: string; nama: string; tahap: Tahap[] };
 
-  let tab: 'pengajuan' | 'antrian' | 'pengaturan' = 'pengajuan';
+  let tab: 'pengajuan' | 'antrian' | 'laporan' | 'pengaturan' = 'pengajuan';
   let galat = '';
   let pesan = '';
   let sibuk = false;
@@ -25,6 +25,10 @@
   let aturan: Aturan | undefined;
   let plafonBaru: number | undefined;
   let maksBaru: number | undefined;
+  let laporan: LaporanPinjaman | undefined;
+  let cariLaporan = '';
+  let konfirmasi: { p: Pengajuan; aksi: Aksi; catatan: string; galat: string } | null = null;
+  let dialogKonfirmasi: HTMLDialogElement;
 
   $: kepala = antrian?.items[0]?.id;
   const label: Record<Aksi, string> = { verifikasi: 'Verifikasi', setujui: 'Setujui', tolak: 'Tolak', cairkan: 'Cairkan' };
@@ -55,11 +59,27 @@
     void jalan(async () => { detail = await api<Detail>(`/pinjaman/${p.id}`, { userId: user.id }); });
   }
 
+  function bukaDialog(dialog: HTMLDialogElement) {
+    dialog.showModal();
+  }
+
+  function tutupKonfirmasi() {
+    dialogKonfirmasi.close();
+    konfirmasi = null;
+  }
+
   function proses(p: Pengajuan, aksi: Aksi) {
-    const tanya = aksi === 'tolak' ? 'Alasan penolakan (wajib):' : `${label[aksi]} pengajuan #${p.id} ${p.nama} Rp ${p.jumlah.toLocaleString('id-ID')}?\nCatatan (opsional):`;
-    const isi = prompt(tanya);
-    if (isi === null) return;
-    if (aksi === 'tolak' && !isi.trim()) { galat = 'Alasan penolakan wajib diisi.'; return; }
+    konfirmasi = { p, aksi, catatan: '', galat: '' };
+  }
+
+  function kirim() {
+    const k = konfirmasi;
+    if (!k) return;
+    const { p, aksi } = k;
+    const isi = k.catatan;
+    if (aksi === 'tolak' && !isi.trim()) { k.galat = 'Alasan penolakan wajib diisi.'; konfirmasi = k; return; }
+    if (isi.trim().length > 200) { k.galat = 'Maksimal 200 karakter.'; konfirmasi = k; return; }
+    tutupKonfirmasi();
     void jalan(async () => {
       const r = await api<{ hasil: string }>(`/pinjaman/${p.id}/${aksi}`, {
         method: 'POST', body: { catatan: isi.trim() || null }, headers: { 'Idempotency-Key': crypto.randomUUID() }, userId: user.id
@@ -98,9 +118,15 @@
     });
   }
 
+  async function muatLaporan() {
+    laporan = undefined;
+    laporan = await api<LaporanPinjaman>('/pinjaman/laporan' + query({ q: cariLaporan.trim() || undefined }), { userId: user.id });
+  }
+
   function pindah(t: typeof tab) {
     tab = t;
     if (t === 'pengaturan') void jalan(muatPengaturan);
+    if (t === 'laporan') void jalan(muatLaporan);
   }
 </script>
 
@@ -109,8 +135,8 @@
   {#if pesan}<p class="success" role="status">{pesan}</p>{/if}
 
   <div class="beli-filter" role="tablist">
-    {#each [['pengajuan', 'Pengajuan'], ['antrian', 'Antrian dana'], ['pengaturan', 'Pengaturan']] as [id, nama]}
-      <button type="button" role="tab" aria-selected={tab === id} class:primary={tab === id} class:secondary={tab !== id} on:click={() => pindah(id as typeof tab)}>{nama}</button>
+    {#each [['pengajuan', 'Pengajuan'], ['antrian', 'Antrian dana'], ['laporan', 'Laporan'], ['pengaturan', 'Pengaturan']] as [id, nama]}
+      <button type="button" role="tab" aria-selected={tab === id} aria-disabled={sibuk} class:primary={tab === id} class:secondary={tab !== id} on:click={() => !sibuk && pindah(id as typeof tab)}>{nama}</button>
     {/each}
   </div>
 
@@ -132,7 +158,7 @@
             <td><span class="beli-status" class:gagal={p.status === 'DITOLAK' || p.status === 'DIBATALKAN'}>{labelStatus[p.status]}{p.antrian ? ` #${p.antrian}` : ''}</span>
               {#if p.no_transaksi}<small> {p.no_transaksi}</small>{/if}</td>
             <td>{#each aksiTersedia(p, hak, user.id, p.id === kepala) as a}
-              <button class:primary={a !== 'tolak'} class:secondary={a === 'tolak'} type="button" disabled={sibuk} on:click={() => proses(p, a)}>{label[a]}</button>
+              <button class:primary={a !== 'tolak'} class:secondary={a === 'tolak'} type="button" disabled={sibuk || (a === 'cairkan' && (antrian?.sisa == null || p.jumlah > antrian.sisa))} on:click={() => proses(p, a)}>{label[a]}</button>
             {/each}</td></tr>
         {:else}<tr><td colspan="7">Tidak ada pengajuan.</td></tr>{/each}</tbody>
       </table></div>
@@ -187,6 +213,30 @@
       {/if}
     </section>
 
+  {:else if tab === 'laporan'}
+    <section class="panel beli-panel" aria-busy={sibuk}>
+      <h2>Pinjaman aktif</h2>
+      <form class="beli-filter" on:submit|preventDefault={() => jalan(muatLaporan)}>
+        <label>Cari <input placeholder="Nama / NIK" bind:value={cariLaporan} /></label>
+        <button class="secondary" type="submit" disabled={sibuk}>Tampilkan</button>
+      </form>
+      {#if laporan}
+        <p>{laporan.jumlah} pinjaman · total pinjaman {rpBeli(laporan.total_pinjaman)} · sisa pokok <strong>{rpBeli(Math.round(laporan.total_sisa_pokok))}</strong>
+          <small>Sisa pokok mengikuti jadwal angsuran dan mencakup pinjaman dari BackOffice.</small></p>
+        <div class="beli-gulir"><table class="beli-tabel" aria-busy={sibuk}>
+          <thead><tr><th>No.</th><th>Anggota</th><th>Pinjaman</th><th>Angsuran</th><th>Jatuh tempo akhir</th><th>Sisa pokok</th></tr></thead>
+          <tbody>{#each laporan.items as l (l.no_transaksi)}
+            <tr><th scope="row">{l.no_transaksi}<small>{l.tanggal}</small></th>
+              <td>{l.nama ?? '—'}<small>{l.nik ?? ''}{l.unit_kerja ? ` · ${l.unit_kerja}` : ''}</small></td>
+              <td class="beli-angka">{rpBeli(l.pinjaman)}<small>{l.tenor} bln</small></td>
+              <td class="beli-angka">{rpBeli(Math.round(l.angsuran))}<small>{l.angsuran_lewat}/{l.tenor} jatuh tempo</small></td>
+              <td>{l.jatuh_tempo_akhir ?? '—'}</td>
+              <td class="beli-angka">{rpBeli(Math.round(l.sisa_pokok))}</td></tr>
+          {:else}<tr><td colspan="6">Tidak ada pinjaman aktif.</td></tr>{/each}</tbody>
+        </table></div>
+      {:else if sibuk}<p role="status">Memuat pinjaman aktif…</p>{/if}
+    </section>
+
   {:else}
     <section class="panel beli-panel">
       <h2>Aturan pinjaman</h2>
@@ -212,3 +262,26 @@
     </section>
   {/if}
 </div>
+
+{#if konfirmasi}
+  <dialog class="modal" aria-labelledby="judul-konfirmasi" bind:this={dialogKonfirmasi} use:bukaDialog on:cancel|preventDefault={tutupKonfirmasi}>
+    <form on:submit|preventDefault={kirim}>
+      <h2 id="judul-konfirmasi">{label[konfirmasi.aksi]} pengajuan #{konfirmasi.p.id}</h2>
+      <p>{konfirmasi.p.nama} · {rpBeli(konfirmasi.p.jumlah)} · {konfirmasi.p.tenor} bulan</p>
+      {#if konfirmasi.aksi === 'cairkan'}<p><small>Pencairan akan mencatat pinjaman di BackOffice.</small></p>{/if}
+      <label>{konfirmasi.aksi === 'tolak' ? 'Alasan penolakan (wajib)' : 'Catatan (opsional)'}
+        <textarea rows="3" maxlength="200" bind:value={konfirmasi.catatan}></textarea></label>
+      {#if konfirmasi.galat}<p class="error" role="alert">{konfirmasi.galat}</p>{/if}
+      <div class="beli-filter">
+        <button class:primary={konfirmasi.aksi !== 'tolak'} class:secondary={konfirmasi.aksi === 'tolak'} type="submit" disabled={sibuk}>{label[konfirmasi.aksi]}</button>
+        <button class="secondary" type="button" on:click={tutupKonfirmasi}>Batal</button>
+      </div>
+    </form>
+  </dialog>
+{/if}
+
+<style>
+  dialog.modal { border: 0; width: min(calc(100% - 40px), 520px); }
+  dialog::backdrop { background: #071f13a8; }
+  textarea { width: 100%; background: #f4f6f5; border: 1px solid #dce6de; border-radius: 10px; padding: 12px 14px; font: inherit; resize: vertical; margin-top: 7px; }
+</style>
