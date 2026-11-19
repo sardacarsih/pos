@@ -1,7 +1,7 @@
 <script lang="ts">
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import QRCode from 'qrcode';
-  import { api, query } from './api';
+  import { api, query, clearSession } from './api';
   import type { User, Data } from './types';
   import Receipt from './Receipt.svelte';
   import Beranda from './Beranda.svelte';
@@ -20,7 +20,7 @@
   async function detail(no: string) { try { invoice = await api((user.role === 'KASIR' ? '/faktur/' : user.role === 'ADMIN' ? '/admin/faktur/' : '/saya/transaksi/') + encodeURIComponent(no)); } catch (e) { error = (e as Error).message; } }
   async function saveProfile() { try { await api('/profil', { method: 'PUT', body: { nama: profile.nama, telepon: profile.telepon || '', email: profile.email || '' } }); msg = 'Profil berhasil disimpan.'; } catch (e) { error = (e as Error).message; } }
   async function photo(e: Event) { const file = (e.currentTarget as HTMLInputElement).files?.[0]; if (!file) return; try { await api('/profil/foto', { method: 'PUT', body: file, headers: { 'Content-Type': 'application/octet-stream' } }); msg = 'Foto profil diperbarui.'; } catch (e) { error = (e as Error).message; } }
-  async function password() { try { await api('/auth/ganti-password', { method: 'POST', body: { password_lama: oldPassword, password_baru: newPassword } }); localStorage.removeItem('kopkar_web_tokens'); location.reload(); } catch (e) { error = (e as Error).message; } }
+  async function password() { try { await api('/auth/ganti-password', { method: 'POST', body: { password_lama: oldPassword, password_baru: newPassword } }); clearSession(); location.reload(); } catch (e) { error = (e as Error).message; } }
 </script>
 {#if error}<div class="error" role="alert">{error}</div>{/if}{#if msg}<div class="notice">{msg}</div>{/if}{#if loading}<p class="muted">Memuat data…</p>{/if}
 {#if view === 'dashboard'}<Beranda {user} on:go={(e) => dispatch('go', e.detail)}/>{:else if view === 'riwayat'}<div class="panel"><div class="section-heading"><div><p class="eyebrow">TRANSAKSI</p><h2>Riwayat belanja</h2></div></div><form class="search" on:submit|preventDefault={() => load()}>{#if user.role === 'KASIR'}<input type="date" bind:value={date} aria-label="Tanggal"/>{:else}<input type="number" bind:value={period} placeholder="Periode, contoh 202611" aria-label="Periode"/>{/if}<button>Cari</button></form>{#each items as t}<button class="list-button horizontal" on:click={() => detail(t.no_transaksi)}><span><strong>{t.nama_pelanggan || t.no_transaksi}</strong><small>{t.no_transaksi} · {t.tanggal || ''} {t.jam || ''}</small></span><strong>{rp(t.total)} <ChevronRight size={16} class="chev" aria-hidden="true"/></strong></button>{:else}<p class="empty">Belum ada transaksi.</p>{/each}{#if more}<button class="secondary wide" on:click={() => load(true)}>Muat lebih banyak</button>{/if}</div>

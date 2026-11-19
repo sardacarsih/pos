@@ -30,11 +30,16 @@ abstract class TokenStore {
 }
 
 class SecureTokenStore implements TokenStore {
-  const SecureTokenStore([this._s = const FlutterSecureStorage()]);
+  SecureTokenStore([this._s = const FlutterSecureStorage()]);
   final FlutterSecureStorage _s;
+
+  /// false (tanpa "Ingat saya"): token hanya di memori, hilang saat aplikasi ditutup.
+  bool ingat = true;
+  ({String access, String refresh})? _mem;
 
   @override
   Future<({String access, String refresh})?> read() async {
+    if (_mem != null) return _mem;
     final a = await _s.read(key: 'access');
     final r = await _s.read(key: 'refresh');
     return (a == null || r == null) ? null : (access: a, refresh: r);
@@ -42,12 +47,20 @@ class SecureTokenStore implements TokenStore {
 
   @override
   Future<void> write(String access, String refresh) async {
+    if (!ingat) {
+      _mem = (access: access, refresh: refresh);
+      await _s.delete(key: 'access');
+      await _s.delete(key: 'refresh');
+      return;
+    }
+    _mem = null;
     await _s.write(key: 'access', value: access);
     await _s.write(key: 'refresh', value: refresh);
   }
 
   @override
   Future<void> clear() async {
+    _mem = null;
     await _s.delete(key: 'access');
     await _s.delete(key: 'refresh');
   }
@@ -196,20 +209,30 @@ class ApiClient {
       _call(() => _dio.put<dynamic>(p, data: body));
 
   Future<void> daftarPush(String token) async {
-    await put('/api/v1/push/device', body: {
-      'device_id': await store.deviceId(),
-      'token': token,
-    });
+    await put(
+      '/api/v1/push/device',
+      body: {'device_id': await store.deviceId(), 'token': token},
+    );
   }
 
   Future<void> hapusPush() async {
     final deviceId = await store.deviceId();
-    await _call(() => _dio.delete<dynamic>('/api/v1/push/device',
-        data: {'device_id': deviceId}));
+    await _call(
+      () => _dio.delete<dynamic>(
+        '/api/v1/push/device',
+        data: {'device_id': deviceId},
+      ),
+    );
   }
 
   // ---- auth ----
-  Future<Profil> login(String username, String password) async {
+  Future<Profil> login(
+    String username,
+    String password, {
+    bool ingat = false,
+  }) async {
+    final s = store;
+    if (s is SecureTokenStore) s.ingat = ingat;
     final j = await post(
       '/api/v1/auth/login',
       auth: false,
@@ -217,6 +240,7 @@ class ApiClient {
         'username': username,
         'password': password,
         'device_id': await store.deviceId(),
+        'ingat': ingat,
       },
     ) as Map<String, dynamic>;
     await store.write(
@@ -536,7 +560,16 @@ class ApiClient {
 
   /// aktif: 'Y' | 'N' | null (semua).
   /// hargaRendah: produk aktif rugi/impas (harga jual <= harga beli) lalu yang belum punya harga beli; `jumlah`, `rugi`, `tanpaHpp` ada di halaman 1.
-  Future<({List<ProdukAdmin> items, bool lagi, int? jumlah, int? rugi, int? tanpaHpp})> produkAdmin({
+  Future<
+    ({
+      List<ProdukAdmin> items,
+      bool lagi,
+      int? jumlah,
+      int? rugi,
+      int? tanpaHpp,
+    })
+  >
+  produkAdmin({
     String? q,
     String? kategori,
     String? aktif,
@@ -567,10 +600,8 @@ class ApiClient {
   }
 
   /// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
-  Future<({List<StokItem> items, bool lagi, int? jumlah, bool kontrolStok})> stokHabis({
-    String? q,
-    int page = 1,
-  }) async {
+  Future<({List<StokItem> items, bool lagi, int? jumlah, bool kontrolStok})>
+  stokHabis({String? q, int page = 1}) async {
     final j = await get(
       '/api/v1/admin/stok-habis',
       q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': 30},
@@ -589,13 +620,16 @@ class ApiClient {
   /// Rincian penjualan semua kasir pada rentang `dari`..`sampai` (YYYY-MM-DD, maks 92 hari, tidak melewati hari ini).
   Future<RincianPenjualan> rincianPenjualan(String dari, String sampai) async =>
       RincianPenjualan.fromJson(
-        await get('/api/v1/admin/penjualan/rincian', q: {'dari': dari, 'sampai': sampai})
-            as Map<String, dynamic>,
+        await get(
+          '/api/v1/admin/penjualan/rincian',
+          q: {'dari': dari, 'sampai': sampai},
+        ) as Map<String, dynamic>,
       );
 
   /// Jumlah produk aktif stok habis untuk Beranda admin (dihitung berat di server, ada cache 60 detik).
   Future<int> stokHabisJumlah() async {
-    final j = await get('/api/v1/admin/dashboard/stok-habis') as Map<String, dynamic>;
+    final j =
+        await get('/api/v1/admin/dashboard/stok-habis') as Map<String, dynamic>;
     return (j['jumlah'] as num?)?.toInt() ?? 0;
   }
 
@@ -728,8 +762,12 @@ class ApiClient {
 
   /// Riwayat pemakaian produk: `bisa_hapus`, `rincian` (mis. "penjualan (3)").
   Future<({bool bisaHapus, String rincian})> jejakProduk(int id) async {
-    final j = await get('/api/v1/admin/produk/$id/jejak') as Map<String, dynamic>;
-    return (bisaHapus: j['bisa_hapus'] == true, rincian: (j['rincian'] as String?) ?? '');
+    final j =
+        await get('/api/v1/admin/produk/$id/jejak') as Map<String, dynamic>;
+    return (
+      bisaHapus: j['bisa_hapus'] == true,
+      rincian: (j['rincian'] as String?) ?? '',
+    );
   }
 
   /// Hapus permanen produk tanpa riwayat (server menolak dengan 422 PRODUK_BERTRANSAKSI bila sudah dipakai).

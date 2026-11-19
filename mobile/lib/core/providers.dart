@@ -15,9 +15,7 @@ const apiUrl = String.fromEnvironment(
   defaultValue: 'https://api.example.com',
 );
 
-final tokenStoreProvider = Provider<TokenStore>(
-  (_) => const SecureTokenStore(),
-);
+final tokenStoreProvider = Provider<TokenStore>((_) => SecureTokenStore());
 
 final checkoutStoreProvider = Provider<CheckoutStore>(
   (_) => const SecureCheckoutStore(),
@@ -56,9 +54,13 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<void> login(String username, String password) async {
+  Future<void> login(
+    String username,
+    String password, {
+    bool ingat = false,
+  }) async {
     final api = ref.read(apiProvider);
-    final p = await api.login(username.trim(), password);
+    final p = await api.login(username.trim(), password, ingat: ingat);
     state = AuthState(profil: await api.me(p));
   }
 
@@ -171,7 +173,10 @@ final profilSayaProvider = FutureProvider<Map<String, dynamic>>((ref) {
 });
 
 /// Foto profil sendiri; kunci = versi foto (ganti foto = versi baru = unduh ulang, selain itu dari cache sesi).
-final fotoProfilProvider = FutureProvider.family<Uint8List?, int>((ref, versi) async {
+final fotoProfilProvider = FutureProvider.family<Uint8List?, int>((
+  ref,
+  versi,
+) async {
   try {
     return await ref.read(apiProvider).fotoProfil();
   } on ApiException {
@@ -180,7 +185,10 @@ final fotoProfilProvider = FutureProvider.family<Uint8List?, int>((ref, versi) a
 });
 
 /// Foto anggota untuk verifikasi di kasir (null = tidak ada foto -> inisial).
-final fotoAnggotaProvider = FutureProvider.family<Uint8List?, String>((ref, nik) async {
+final fotoAnggotaProvider = FutureProvider.family<Uint8List?, String>((
+  ref,
+  nik,
+) async {
   try {
     return await ref.read(apiProvider).fotoAnggota(nik);
   } on ApiException {
@@ -189,10 +197,11 @@ final fotoAnggotaProvider = FutureProvider.family<Uint8List?, String>((ref, nik)
 });
 
 /// Foto akun lain untuk daftar admin; kunci memuat versi (ganti foto = versi baru = unduh ulang).
-final fotoUserProvider = FutureProvider.family<Uint8List?, ({int id, int versi})>((ref, k) async {
-  try {
-    return await ref.read(apiProvider).fotoUser(k.id);
-  } on ApiException {
-    return null;
-  }
-});
+final fotoUserProvider =
+    FutureProvider.family<Uint8List?, ({int id, int versi})>((ref, k) async {
+      try {
+        return await ref.read(apiProvider).fotoUser(k.id);
+      } on ApiException {
+        return null;
+      }
+    });

@@ -112,6 +112,8 @@ pub struct SessionRow {
     pub revoked: bool,
     pub expired: bool,
     pub device: Option<String>,
+    /// Lama sesi asli (hari), diwariskan saat rotasi refresh agar pilihan "ingat saya" tetap.
+    pub ttl_hari: i64,
 }
 
 pub fn create_session(
@@ -143,7 +145,7 @@ pub fn find_session(conn: &Connection, token_hash: &str) -> AppResult<Option<Ses
     let r = opt(conn.query_row_named(
         "SELECT SESSION_ID, FAMILY_ID, USER_ID, \
          CASE WHEN USED_AT IS NULL THEN 0 ELSE 1 END, CASE WHEN REVOKED_AT IS NULL THEN 0 ELSE 1 END, \
-         CASE WHEN EXPIRES_AT < SYSTIMESTAMP THEN 1 ELSE 0 END, DEVICE_ID FROM MOB_SESSION WHERE TOKEN_HASH = :h",
+         CASE WHEN EXPIRES_AT < SYSTIMESTAMP THEN 1 ELSE 0 END, DEVICE_ID, EXTRACT(DAY FROM (EXPIRES_AT - CREATED_AT)) FROM MOB_SESSION WHERE TOKEN_HASH = :h",
         &[("h", &token_hash)],
     ))?;
     match r {
@@ -155,6 +157,7 @@ pub fn find_session(conn: &Connection, token_hash: &str) -> AppResult<Option<Ses
             revoked: r.get::<_, i64>(4)? == 1,
             expired: r.get::<_, i64>(5)? == 1,
             device: r.get(6)?,
+            ttl_hari: r.get::<_, i64>(7)?.max(1),
         })),
         None => Ok(None),
     }
