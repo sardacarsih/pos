@@ -195,9 +195,15 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         }));
     }
     h.push(cek("jumlah stok habis", || Ok(katalog::jumlah_stok_habis(conn, awal, hari)?.to_string())));
-    h.push(cek("daftar stok habis (cari + paginasi)", || {
-        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5)?;
-        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5)?;
+    h.push(cek("daftar stok habis (cari + paginasi + urut qty)", || {
+        use katalog::UrutanStokHabis::{Nama, Qty};
+
+        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, Nama)?;
+        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5, Nama)?;
+        let (urut, _) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, Qty)?;
+        if urut.items.windows(2).any(|pasang| pasang[0].stok > pasang[1].stok) {
+            return Err(AppError::Internal("Urutan qty stok habis tidak menaik".into()));
+        }
         Ok(format!("{} baris, total {:?}, dengan filter {} baris", a.items.len(), jumlah, b.items.len()))
     }));
     h.push(cek("harga jual <= HPP (hitung + daftar)", || {

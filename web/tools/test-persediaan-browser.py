@@ -22,6 +22,10 @@ BARANG = [
 def test_persediaan(url):
     tulis = []
     kartu_params = []
+    habis_params = []
+    stok_habis = [dict(BARANG[0], stok="-10"),
+                  dict(BARANG[0], id=103, kode="BRG-103", nama="Tepung", stok="-2.5"),
+                  dict(BARANG[1], stok="0")]
     valuasi_item_params = []
     valuasi_items = [
         dict(BARANG[0], stok="5", hpp="30000", nilai="150000", tanpa_hpp=False),
@@ -51,7 +55,13 @@ def test_persediaan(url):
             items = [b for b in BARANG if not q or q in b["nama"].lower() or q in b["kode"].lower()]
             route.fulfill(json={"items": items, "ada_lagi": False, "page": 1})
         elif path == "/admin/stok-habis":
-            route.fulfill(json={"items": [dict(BARANG[1])], "ada_lagi": False, "page": 1, "jumlah": 1, "kontrol_stok": True})
+            habis_params.append(qs)
+            page = int(qs["page"])
+            text = qs.get("q", "").lower()
+            hasil = [b for b in stok_habis if text in b["nama"].lower()]
+            awal = (page - 1) * 2
+            route.fulfill(json={"items": hasil[awal:awal + 2], "ada_lagi": len(hasil) > awal + 2,
+                                "page": page, "jumlah": len(hasil) if page == 1 else None, "kontrol_stok": True})
         elif path == "/admin/stok-opname" and method == "GET":
             route.fulfill(json={"items": [], "ada_lagi": False, "tahun": int(HARI[:4])})
         elif path == "/admin/stok-opname" and method == "POST":
@@ -209,15 +219,34 @@ def test_persediaan(url):
 
         # Stok habis + opname cepat ber-Idempotency-Key UUID (perilaku lama dipindah utuh).
         habis.click()
-        expect(page.get_by_text("1 produk aktif dengan stok sistem ≤ 0")).to_be_visible()
-        page.get_by_role("button", name="Opname", exact=True).click()
+        expect(page.get_by_text("3 produk aktif dengan stok sistem ≤ 0")).to_be_visible()
+        tabel_habis = page.get_by_role("table", name="Daftar stok habis")
+        expect(tabel_habis.get_by_role("columnheader", name="Qty Stok")).to_have_attribute("aria-sort", "ascending")
+        qty_habis = tabel_habis.locator("tbody tr > td:nth-child(3)")
+        expect(qty_habis).to_have_text(["-10 kg", "-2,5 kg"])
+        cari_habis = page.get_by_label("Cari produk", exact=True)
+        cari_habis.fill("belum dikirim")
+        page.get_by_role("button", name="Muat lebih banyak").click()
+        expect(qty_habis).to_have_text(["-10 kg", "-2,5 kg", "0 pcs"])
+        assert habis_params[-2:] == [{"page": str(p), "size": "100", "urut": "qty"} for p in (1, 2)], habis_params
+        cari_habis.fill("Kopi")
+        cari_habis.press("Enter")
+        expect(qty_habis).to_have_text(["0 pcs"])
+        filter_kopi = {"q": "Kopi", "page": "1", "size": "100", "urut": "qty"}
+        assert habis_params[-1] == filter_kopi, habis_params
+        cari_habis.fill("belum dikirim")
+        tabel_habis.get_by_role("row", name=re.compile("Kopi Bubuk")).get_by_role("button", name="Opname", exact=True).click()
         dlg = page.get_by_role("dialog", name="Opname stok")
+        expect(dlg.get_by_text("Kopi Bubuk", exact=True)).to_be_visible()
         dlg.get_by_label("Qty fisik").fill("4")
         dlg.get_by_role("button", name="Simpan opname").click()
         expect(page.get_by_text("Opname SO-UJI-1 tersimpan (selisih 4).")).to_be_visible()
         opname_tulis = [t for t in tulis if t[0] == "OPNAME"]
         assert len(opname_tulis) == 1 and UUID.match(opname_tulis[0][1]), tulis
         assert opname_tulis[0][2] == {"produk_id": 102, "qty_fisik": 4}, tulis
+        expect(cari_habis).to_be_visible()
+        expect(page.get_by_role("button", name="Cari", exact=True)).to_be_enabled()
+        assert habis_params[-2:] == [filter_kopi, filter_kopi], habis_params
 
         # Penyesuaian: tanpa alasan ditolak klien; valid tercatat dengan kunci UUID.
         tablist.get_by_role("tab", name="Penyesuaian", exact=True).click()

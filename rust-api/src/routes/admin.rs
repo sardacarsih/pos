@@ -746,9 +746,11 @@ pub struct StokQuery {
     kategori: Option<String>,
     page: Option<u32>,
     size: Option<u32>,
+    urut: Option<String>,
 }
 
-/// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
+/// Produk aktif dengan stok sistem <= 0. `urut=qty` mengurutkan dari stok terendah.
+/// `jumlah` (total seluruh halaman) hanya ada di halaman 1.
 pub async fn stok_habis(
     State(s): State<AppState>,
     a: Auth,
@@ -763,10 +765,14 @@ pub async fn stok_habis(
     let (page, size) = (pg.page(), pg.size());
     let teks = pg.q;
     let kategori = q.kategori;
+    let urutan = match q.urut.as_deref() {
+        Some("qty") => katalog::UrutanStokHabis::Qty,
+        _ => katalog::UrutanStokHabis::Nama,
+    };
     let (h, jumlah, kontrol) = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
         let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
-        let (h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size)?;
+        let (h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size, urutan)?;
         // Kontrol stok kasir mati = kasir menjual tanpa cek stok; daftar ini lalu bisa memuat barang yang tidak dilacak.
         let kontrol = katalog::setting(c, "KONTROL_SALDO_QTY")?
             .is_some_and(|v| v.trunc() > rust_decimal::Decimal::ZERO);
@@ -956,6 +962,11 @@ mod opname_tests {
         let uri: axum::http::Uri = "/api/v1/admin/stok-habis?q=gula&page=2&size=30&kategori=14".parse().unwrap();
         let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
         assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+        assert_eq!(q.0.urut, None);
+
+        let uri = "/api/v1/admin/stok-habis?urut=qty".parse().unwrap();
+        let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!(q.0.urut.as_deref(), Some("qty"));
     }
 }
 

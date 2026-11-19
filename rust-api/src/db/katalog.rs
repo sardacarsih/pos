@@ -311,7 +311,13 @@ pub struct StokHabis {
     pub stok: Decimal,
 }
 
-/// Produk aktif dengan stok sistem <= 0 (1 Jan tahun berjalan s/d `sampai`), urut nama.
+#[derive(Clone, Copy)]
+pub enum UrutanStokHabis {
+    Nama,
+    Qty,
+}
+
+/// Produk aktif dengan stok sistem <= 0 (1 Jan tahun berjalan s/d `sampai`).
 /// `jumlah` (total seluruh halaman) hanya dihitung pada halaman pertama.
 pub fn stok_habis(
     conn: &Connection,
@@ -321,6 +327,7 @@ pub fn stok_habis(
     sampai: NaiveDate,
     page: u32,
     size: u32,
+    urutan: UrutanStokHabis,
 ) -> AppResult<(Halaman<StokHabis>, Option<i64>)> {
     let mut b = Binds::default();
     b.add("dari", dari.format("%Y-%m-%d"));
@@ -335,13 +342,17 @@ pub fn stok_habis(
         b.add("kat", k.trim());
         where_sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
     }
-    b.add("off", (page.saturating_sub(1) * size).to_string());
+    b.add("off", (u64::from(page.saturating_sub(1)) * u64::from(size)).to_string());
     b.add("lim", (size + 1).to_string());
+    let urutan_qty = match urutan {
+        UrutanStokHabis::Nama => String::new(),
+        UrutanStokHabis::Qty => format!("({STOK_EXPR}) ASC, "),
+    };
     // COUNT(*) OVER () memberi total seluruh hasil dari agregasi yang sama (satu pemindaian, bukan dua).
     let sql = format!(
         "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, p.SATUAN, k.KATEGORI, {}, COUNT(*) OVER () \
          FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
-         ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
+         ORDER BY {urutan_qty}p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
         tm(STOK_EXPR),
         stok_join(None)
     );

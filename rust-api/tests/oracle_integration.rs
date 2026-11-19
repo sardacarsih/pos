@@ -166,6 +166,7 @@ impl Drop for SkemaPos<'_> {
 #[test]
 fn stok_habis_dan_opname_idempoten() {
     use pos_api::{db::{faktur, katalog, opname}, error::AppError};
+    use katalog::UrutanStokHabis::{Nama, Qty};
     use rust_decimal::Decimal;
 
     let Some(c) = koneksi() else {
@@ -194,10 +195,34 @@ fn stok_habis_dan_opname_idempoten() {
     c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
     c.commit().unwrap();
 
-    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10).unwrap();
+    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, Nama).unwrap();
     assert_eq!((h.items.len(), jumlah), (2, Some(2)));
-    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10).unwrap();
+    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10, Nama).unwrap();
     assert_eq!(h.items.len(), 1);
+
+    for (id, kode, nama) in [(3, "IT-C", "IT-C"), (4, "IT-D", "IT-D"), (5, "IT-E", "IT-D")] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, AKTIF) VALUES (:i, :k, :n, 'Y')",
+            &[("i", &id), ("k", &kode), ("n", &nama)],
+        ).unwrap();
+    }
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-C', 2.5)", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-D', 10)", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-E', 10)", &[]).unwrap();
+    c.commit().unwrap();
+
+    let (p1, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 2, Qty).unwrap();
+    let (p2, jumlah_lanjutan) = katalog::stok_habis(&c, None, None, awal, hari, 2, 2, Qty).unwrap();
+    let (p3, _) = katalog::stok_habis(&c, None, None, awal, hari, 3, 2, Qty).unwrap();
+    assert_eq!((jumlah, jumlah_lanjutan), (Some(5), None));
+    assert!(p1.ada_lagi && p2.ada_lagi && !p3.ada_lagi);
+    let hasil: Vec<_> = p1.items.into_iter().chain(p2.items).chain(p3.items).map(|p| (p.id, p.stok)).collect();
+    assert_eq!(hasil, [(4, rust_decimal::dec!(-10)), (5, rust_decimal::dec!(-10)), (3, rust_decimal::dec!(-2.5)), (1, Decimal::ZERO), (2, Decimal::ZERO)]);
+    let (nama, _) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, Nama).unwrap();
+    assert_eq!(nama.items.iter().map(|p| p.id).collect::<Vec<_>>(), [1, 2, 3, 4, 5]);
+    let (cari, jumlah) = katalog::stok_habis(&c, Some("it-d"), None, awal, hari, 1, 10, Qty).unwrap();
+    assert_eq!(jumlah, Some(2));
+    assert_eq!(cari.items.iter().map(|p| p.id).collect::<Vec<_>>(), [4, 5]);
 
     let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
     let uid = user::create_user(&c, &nama, "Uji Opname", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
