@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.0.143" />
-    <PackageReference Include="DevExpress.Win" Version="24.1.3" />
-    <PackageReference Include="DevExpress.Win.Design" Version="24.1.3" />
+    <PackageReference Include="DevExpress.Win" Version="25.2.6-pre-26075" />
+    <PackageReference Include="DevExpress.Win.Design" Version="25.2.6-pre-26075" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.100" />
