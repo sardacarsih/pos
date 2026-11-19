@@ -125,6 +125,11 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
 
     // Pinjaman aktif memblok pengajuan baru; status anggota terlihat.
     assert_eq!(kode(p::ajukan(&c, &a1, "N1", &key(), &aju(1_000_000, 6)).unwrap_err()), "PINJAMAN_AKTIF");
+    // Notifikasi antre per perubahan status (verifikasi, setuju, cair), pesan terisi.
+    let notif: i64 = c
+        .query_row_as("SELECT COUNT(*) FROM MOB_PUSH_QUEUE WHERE NIK='N1' AND NO_TRANSAKSI LIKE 'PJ-%' AND PESAN IS NOT NULL", &[])
+        .unwrap();
+    assert_eq!(notif, 3);
     let saya = p::saya(&c, "N1").unwrap();
     assert_eq!(saya["pengajuan"][0]["status"], "DICAIRKAN");
     assert_eq!(saya["pinjaman_aktif"].as_array().unwrap().len(), 1);

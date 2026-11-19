@@ -23,7 +23,10 @@ struct Assertion<'a> {
 }
 
 /// Tag = nomor transaksi: kirim ulang (retry) mengganti notifikasi yang sama, bukan menumpuk dobel.
-fn message(token: &str, no: &str) -> serde_json::Value {
+fn message(token: &str, no: &str, pesan: Option<&str>) -> serde_json::Value {
+    if let Some(pesan) = pesan {
+        return json!({"message": {"token": token, "notification": {"title": "Pinjaman", "body": pesan}, "data": {"type": "pinjaman", "no": no, "pesan": pesan}, "android": {"priority": "high", "ttl": "604800s", "notification": {"tag": no, "channel_id": "transaksi_suara2", "sound": "notif_transaksi"}}}});
+    }
     json!({"message": {"token": token, "notification": {"title": "Kopkar Kusuma Lestari", "body": "Ada transaksi baru pada akun Anda."}, "data": {"type": "transaction", "no": no}, "android": {"priority": "high", "ttl": "86400s", "notification": {"tag": no, "channel_id": "transaksi_suara2", "sound": "notif_transaksi"}}}})
 }
 
@@ -86,7 +89,7 @@ pub fn start(pool: DbPool) -> Result<(), String> {
                         let mut retry = false;
                         for token in devices {
                             let response = client.post(format!("https://fcm.googleapis.com/v1/projects/{project}/messages:send"))
-                                .bearer_auth(&bearer).json(&message(&token, &event.number))
+                                .bearer_auth(&bearer).json(&message(&token, &event.number, event.pesan.as_deref()))
                                 .send().await;
                             match response {
                                 Ok(r) if r.status().is_success() => {
@@ -144,9 +147,17 @@ mod tests {
 
     #[test]
     fn pesan_memakai_tag_nomor_transaksi() {
-        let m = message("tok", "TRX-1");
+        let m = message("tok", "TRX-1", None);
         assert_eq!(m["message"]["android"]["notification"]["tag"], "TRX-1");
         assert_eq!(m["message"]["data"]["no"], "TRX-1");
+    }
+
+    #[test]
+    fn pesan_pinjaman_berjenis_pinjaman() {
+        let m = message("tok", "PJ-7", Some("Pinjaman disetujui"));
+        assert_eq!(m["message"]["data"]["type"], "pinjaman");
+        assert_eq!(m["message"]["notification"]["body"], "Pinjaman disetujui");
+        assert_eq!(m["message"]["android"]["notification"]["tag"], "PJ-7");
     }
 
     #[test]

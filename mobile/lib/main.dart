@@ -14,6 +14,7 @@ import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
 import 'features/admin/admin_rekap_page.dart';
 import 'features/anggota/anggota_shell.dart';
+import 'features/anggota/pinjaman_page.dart';
 import 'features/anggota/transaksi_saya_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/kasir/dashboard_page.dart';
@@ -73,6 +74,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'kartu-anggota',
             builder: (_, _) => const KartuAnggotaPage(),
           ),
+          GoRoute(path: 'pinjaman', builder: (_, _) => const PinjamanPage(kembali: true)),
         ],
       ),
       GoRoute(
@@ -146,7 +148,9 @@ class _KopkarAppState extends ConsumerState<KopkarApp>
     _pushPending = null;
     if (state.profil!.role != 'ANGGOTA') return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(routerProvider).go('/saya/faktur/${Uri.encodeComponent(no)}');
+      if (!mounted) return;
+      // Payload "PJ-<id>" = notifikasi status pinjaman; selain itu nomor faktur belanja.
+      ref.read(routerProvider).go(no.startsWith('PJ-') ? '/saya/pinjaman' : '/saya/faktur/${Uri.encodeComponent(no)}');
     });
   }
 

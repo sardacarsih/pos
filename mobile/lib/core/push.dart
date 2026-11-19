@@ -47,13 +47,17 @@ class PushService {
           );
       _subscriptions.add(
         FirebaseMessaging.onMessage.listen((message) async {
-          if (_user == null || message.data['type'] != 'transaction') return;
+          final jenis = message.data['type'];
+          if (_user == null || (jenis != 'transaction' && jenis != 'pinjaman')) return;
           final no = message.data['no'];
           if (no is! String || no.isEmpty) return;
+          final pinjaman = jenis == 'pinjaman';
           await _local.show(
             id: no.hashCode & 0x7fffffff,
-            title: 'Kopkar Kusuma Lestari',
-            body: 'Ada transaksi baru pada akun Anda.',
+            title: pinjaman ? 'Pinjaman' : 'Kopkar Kusuma Lestari',
+            body: pinjaman
+                ? (message.notification?.body ?? message.data['pesan'] as String? ?? 'Status pinjaman Anda berubah.')
+                : 'Ada transaksi baru pada akun Anda.',
             notificationDetails: const NotificationDetails(
               android: AndroidNotificationDetails(
                 _channelId,
@@ -87,7 +91,7 @@ class PushService {
   }
 
   void _messageTap(RemoteMessage message) {
-    if (message.data['type'] == 'transaction')
+    if (message.data['type'] == 'transaction' || message.data['type'] == 'pinjaman')
       _tap(message.data['no'] as String?);
   }
 

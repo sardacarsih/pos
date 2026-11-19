@@ -35,11 +35,13 @@ pub struct Event {
     pub id: i64,
     pub number: String,
     pub nik: String,
+    /// Isi notifikasi pinjaman; None = notifikasi transaksi belanja.
+    pub pesan: Option<String>,
     pub lease: String,
 }
 
 pub fn claim(conn: &Connection) -> AppResult<Option<Event>> {
-    let candidate = super::opt(conn.query_row("SELECT SALE_ID, NO_TRANSAKSI, NIK FROM MOB_PUSH_QUEUE WHERE SENT_AT IS NULL AND NEXT_ATTEMPT <= SYSTIMESTAMP AND (LEASE_UNTIL IS NULL OR LEASE_UNTIL < SYSTIMESTAMP) ORDER BY CREATED_AT FETCH FIRST 1 ROW ONLY", &[]))?;
+    let candidate = super::opt(conn.query_row("SELECT SALE_ID, NO_TRANSAKSI, NIK, PESAN FROM MOB_PUSH_QUEUE WHERE SENT_AT IS NULL AND NEXT_ATTEMPT <= SYSTIMESTAMP AND (LEASE_UNTIL IS NULL OR LEASE_UNTIL < SYSTIMESTAMP) ORDER BY CREATED_AT FETCH FIRST 1 ROW ONLY", &[]))?;
     let Some(row) = candidate else {
         return Ok(None);
     };
@@ -54,6 +56,7 @@ pub fn claim(conn: &Connection) -> AppResult<Option<Event>> {
         id,
         number: row.get(1)?,
         nik: row.get(2)?,
+        pesan: row.get(3)?,
         lease,
     }))
 }
