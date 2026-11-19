@@ -169,7 +169,7 @@ namespace BackOffice.DataLayer
 
             try
             {
-                PeriodeGuard.Pastikan(conn, transaction, header.TANGGAL);
+                PeriodeGuard.Pastikan(conn, transaction, header.TANGGAL, creditCheck?.STATUS);
                 if (creditCheck != null)
                 {
                     ValidateCreditLimit(conn, transaction, creditCheck, gantiFaktur ? header.NO_TRANSAKSI : null);

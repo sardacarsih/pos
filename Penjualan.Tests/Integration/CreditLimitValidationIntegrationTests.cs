@@ -1,4 +1,5 @@
 using Oracle.ManagedDataAccess.Client;
+using Kopkar.Shared;
 using Penjualan.DataLayer;
 using Penjualan.Model;
 using Xunit;
@@ -109,6 +110,18 @@ namespace Penjualan.Tests.Integration
             var ex = Assert.IsType<CreditLimitExceededException>(RunValidation(Check(25_000), "W-99-000001"));
             Assert.Equal(400_001m, ex.CurrentDebt);
             Assert.Equal(600_000m, ex.InvoiceAmount);
+        }
+
+        [SkippableFact]
+        public void PeriodeBulananTutup_MenolakAnggotaBulananWalauRemiseTerbuka()
+        {
+            Skip.IfNot(_fx.Available, _fx.SkipReason);
+            _fx.ClearData();
+            _fx.SeedPeriode(Periode, DecFrom, DecTo, DecFrom, DecTo, tutupBulanan: "Y");
+            using var conn = _fx.Open();
+
+            Assert.Equal(PeriodeKode.Tutup, PeriodeGuard.Cek(conn, null, TxnDate, "BULANAN").Kode);
+            Assert.True(PeriodeGuard.Cek(conn, null, TxnDate, "REMISE").Terbuka);
         }
 
         [SkippableFact]

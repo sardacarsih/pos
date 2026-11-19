@@ -102,7 +102,7 @@ namespace Penjualan.DataLayer
             try
             {
                 // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
-                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL, creditCheck?.STATUS);
 
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)
@@ -158,7 +158,7 @@ namespace Penjualan.DataLayer
             try
             {
                 // Periode harus terbuka (limit hutang bergantung pada periode); cek di transaksi yang sama.
-                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL, creditCheck?.STATUS);
 
                 // Validate credit limit inside the same transaction
                 if (creditCheck != null)

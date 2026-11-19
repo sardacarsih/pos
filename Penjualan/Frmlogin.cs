@@ -152,30 +152,28 @@ public partial class Frmlogin : XtraForm
         txtpwd.SelectionStart = txtpwd.Text.Length;
     }
 
-    private void txtuserid_KeyDown(object sender, KeyEventArgs e)
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (e.KeyCode == Keys.Enter)
+        if (keyData == Keys.Enter)
         {
-            e.SuppressKeyPress = true;
-
-            // Jangan pindah ke password kalau username masih kosong.
             if (string.IsNullOrWhiteSpace(txtuserid.Text))
             {
                 txtuserid.Focus();
-                return;
+                return true;
             }
-
-            txtpwd.Focus();
+            // Editor DevExpress menaruh fokus pada kontrol input di dalamnya.
+            if (txtuserid.ContainsFocus)
+            {
+                txtpwd.Focus();
+                return true;
+            }
+            if (txtpwd.ContainsFocus)
+            {
+                Login.PerformClick();
+                return true;
+            }
         }
-    }
-
-    private void txtpwd_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.KeyCode == Keys.Enter)
-        {
-            Login.PerformClick();
-            e.SuppressKeyPress = true;
-        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void Login_Click(object sender, EventArgs e)

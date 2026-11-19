@@ -33,6 +33,7 @@ namespace BackOffice.UC
             ConfigurePageLayout();
             gridView1.CellValueChanged += GridView1_CellValueChanged;
             gridView1.ValidateRow += GridView1_ValidateRow;
+            gridView1.ShowingEditor += GridView1_ShowingEditor;
             setahun.EditValueChanged += Setahun_EditValueChanged;
         }
 
@@ -134,43 +135,56 @@ namespace BackOffice.UC
         {
             try
             {
-                var view = sender as ColumnView;
-                var rowHandle = e.RowHandle;
-
-                if (rowHandle < 0 || rowHandle >= periodeList.Count)
+                if (sender is not GridView view || view.GetRow(e.RowHandle) is not PeriodeDTO periode)
+                {
                     return;
+                }
+                string kolom = e.Column.FieldName.ToUpperInvariant();
+                if (!BisaUbahTanggal(periode, kolom))
+                {
+                    LoadList_Periode();
+                    return;
+                }
 
-                var periode = periodeList[rowHandle];
-                var columnName = e.Column.FieldName;
-                var newValue = e.Value;
-
-                // Update the DTO based on the column changed
-                UpdatePeriodeDTO(periode, columnName, newValue);
-
-                // Validate the changes
+                DateTime? tanggal = ConvertToNullableDateTime(e.Value);
+                UpdatePeriodeDTO(periode, kolom, tanggal);
                 var validationErrors = periode.Validate();
-                if (validationErrors.Any())
+                if (validationErrors.Count > 0)
                 {
-                    MessageBox.Show(string.Join("\n", validationErrors), "Validation Error",
-                                  MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    view.RefreshData();
+                    MessageBox.Show(string.Join("\n", validationErrors), "Tanggal periode tidak valid",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    LoadList_Periode();
                     return;
                 }
 
-                // Update database
-                using (var dal = new PeriodeDAL())
+                using var dal = new PeriodeDAL();
+                DateTime bulan = new(periode.Periode / 100, periode.Periode % 100, 1);
+                PeriodeDTO? Tetangga(int offset)
                 {
-                    if (dal.UpdatePeriode(periode))
-                    {
-                        // Success - refresh the specific row
-                        view.RefreshRow(rowHandle);
-                    }
-                    else
-                    {
-                        MessageBox.Show("Tidak ada data yang diupdate.", "Info",
-                                      MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
+                    DateTime target = bulan.AddMonths(offset);
+                    return dal.GetPeriode(target.Year * 100 + target.Month);
                 }
+
+                var peringatan = PeriodeDTO.PeriksaKesinambungan(periode, Tetangga(-1), Tetangga(1));
+                if (peringatan.Count > 0 &&
+                    MessageBox.Show(string.Join("\n", peringatan) + "\n\nTetap simpan?",
+                        "Jadwal periode tidak tersambung", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                {
+                    LoadList_Periode();
+                    return;
+                }
+
+                if (!dal.UpdateTanggal(periode.Periode, kolom, tanggal))
+                {
+                    MessageBox.Show("Tanggal tidak disimpan. Periksa apakah periode sudah ditutup atau rentang tanggal berubah.",
+                        "Setting Periode", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    LoadList_Periode();
+                    return;
+                }
+
+                Log.Information("Tanggal {Kolom} periode {Periode} diubah menjadi {Tanggal} oleh {User}",
+                    kolom, periode.Periode, tanggal, LoginInfo.userID);
+                view.RefreshRow(e.RowHandle);
             }
             catch (Exception ex)
             {
@@ -182,36 +196,47 @@ namespace BackOffice.UC
             }
         }
 
-        private void UpdatePeriodeDTO(PeriodeDTO periode, string columnName, object newValue)
+        private void GridView1_ShowingEditor(object? sender, CancelEventArgs e)
         {
-            switch (columnName.ToUpper())
+            if (sender is GridView view && view.FocusedColumn != null && view.GetFocusedRow() is PeriodeDTO periode)
             {
-                case "REMISE1":
-                    periode.Remise1 = newValue?.ToString() ?? "";
-                    break;
+                e.Cancel = !BisaUbahTanggal(periode, view.FocusedColumn.FieldName.ToUpperInvariant());
+            }
+        }
+
+        private static bool BisaUbahTanggal(PeriodeDTO periode, string kolom)
+        {
+            string? status = kolom switch
+            {
+                "R1DARI" or "R1SAMPAI" => periode.Remise1 ?? "",
+                "R2DARI" or "R2SAMPAI" => periode.Remise2 ?? "",
+                "BDARI" or "BSAMPAI" => periode.Bulanan ?? "",
+                _ => null
+            };
+            return status != null && !string.Equals(status.Trim(), "Y", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void UpdatePeriodeDTO(PeriodeDTO periode, string kolom, DateTime? tanggal)
+        {
+            switch (kolom)
+            {
                 case "R1DARI":
-                    periode.R1Dari = ConvertToNullableDateTime(newValue);
+                    periode.R1Dari = tanggal;
                     break;
                 case "R1SAMPAI":
-                    periode.R1Sampai = ConvertToNullableDateTime(newValue);
-                    break;
-                case "REMISE2":
-                    periode.Remise2 = newValue?.ToString() ?? "";
+                    periode.R1Sampai = tanggal;
                     break;
                 case "R2DARI":
-                    periode.R2Dari = ConvertToNullableDateTime(newValue);
+                    periode.R2Dari = tanggal;
                     break;
                 case "R2SAMPAI":
-                    periode.R2Sampai = ConvertToNullableDateTime(newValue);
-                    break;
-                case "BULANAN":
-                    periode.Bulanan = newValue?.ToString() ?? "";
+                    periode.R2Sampai = tanggal;
                     break;
                 case "BDARI":
-                    periode.BDari = ConvertToNullableDateTime(newValue);
+                    periode.BDari = tanggal;
                     break;
                 case "BSAMPAI":
-                    periode.BSampai = ConvertToNullableDateTime(newValue);
+                    periode.BSampai = tanggal;
                     break;
             }
         }
@@ -542,6 +567,33 @@ namespace BackOffice.UC
 
             return errors;
         }
+
+        public static List<string> PeriksaKesinambungan(PeriodeDTO cur, PeriodeDTO? prev, PeriodeDTO? next)
+        {
+            var errors = new List<string>();
+
+            if (cur.R1Sampai.HasValue && cur.R2Dari.HasValue && cur.R2Dari.Value.Date != cur.R1Sampai.Value.Date.AddDays(1))
+                errors.Add($"Periode {cur.Periode}: R2 Dari seharusnya {cur.R1Sampai.Value.AddDays(1):dd MMM yyyy} (sehari setelah R1 Sampai)");
+
+            void Sambung(DateTime? akhirSebelum, DateTime? awalSesudah, string label, int pSebelum, int pSesudah)
+            {
+                if (akhirSebelum.HasValue && awalSesudah.HasValue && awalSesudah.Value.Date != akhirSebelum.Value.Date.AddDays(1))
+                    errors.Add($"{label}: periode {pSesudah} seharusnya mulai {akhirSebelum.Value.AddDays(1):dd MMM yyyy} " +
+                               $"(sehari setelah akhir periode {pSebelum})");
+            }
+
+            if (prev != null)
+            {
+                Sambung(prev.R2Sampai, cur.R1Dari, "Remise", prev.Periode, cur.Periode);
+                Sambung(prev.BSampai, cur.BDari, "Bulanan", prev.Periode, cur.Periode);
+            }
+            if (next != null)
+            {
+                Sambung(cur.R2Sampai, next.R1Dari, "Remise", cur.Periode, next.Periode);
+                Sambung(cur.BSampai, next.BDari, "Bulanan", cur.Periode, next.Periode);
+            }
+            return errors;
+        }
     }
     // Data Access Layer for Periode
     public class PeriodeDAL : IDisposable
@@ -571,14 +623,7 @@ namespace BackOffice.UC
             }
         }
 
-        public List<PeriodeDTO> GetPeriodeByTahun(int tahun)
-        {
-            var periodeList = new List<PeriodeDTO>();
-
-            // Ensure all 12 months exist
-            EnsurePeriodesExist(tahun);
-
-            string query = @"
+        private const string SelectPeriodeSql = @"
             SELECT 
                 PERIODE,
                 BULAN,
@@ -591,76 +636,77 @@ namespace BackOffice.UC
                 BULANAN,
                 TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BDARI,
                 TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH') AS BSAMPAI
-            FROM POS_PERIODE 
-            WHERE TAHUN = :tahun 
-            ORDER BY PERIODE";
+            FROM POS_PERIODE ";
 
+        private static PeriodeDTO MapPeriode(OracleDataReader reader) => new PeriodeDTO
+        {
+            Periode = reader.GetInt32("PERIODE"),
+            Bulan = reader.IsDBNull("BULAN") ? "" : reader.GetString("BULAN"),
+            Remise1 = reader.IsDBNull("REMISE1") ? "" : reader.GetString("REMISE1"),
+            R1Dari = reader.IsDBNull("R1DARI") ? null : reader.GetDateTime("R1DARI"),
+            R1Sampai = reader.IsDBNull("R1SAMPAI") ? null : reader.GetDateTime("R1SAMPAI"),
+            Remise2 = reader.IsDBNull("REMISE2") ? "" : reader.GetString("REMISE2"),
+            R2Dari = reader.IsDBNull("R2DARI") ? null : reader.GetDateTime("R2DARI"),
+            R2Sampai = reader.IsDBNull("R2SAMPAI") ? null : reader.GetDateTime("R2SAMPAI"),
+            Bulanan = reader.IsDBNull("BULANAN") ? "" : reader.GetString("BULANAN"),
+            BDari = reader.IsDBNull("BDARI") ? null : reader.GetDateTime("BDARI"),
+            BSampai = reader.IsDBNull("BSAMPAI") ? null : reader.GetDateTime("BSAMPAI")
+        };
 
-            using (var cmd = new OracleCommand(query, connection))
+        public List<PeriodeDTO> GetPeriodeByTahun(int tahun)
+        {
+            var periodeList = new List<PeriodeDTO>();
+
+            // Ensure all 12 months exist
+            EnsurePeriodesExist(tahun);
+
+            using (var cmd = new OracleCommand(SelectPeriodeSql + "WHERE TAHUN = :tahun ORDER BY PERIODE", connection))
             {
                 cmd.Parameters.Add(":tahun", OracleDbType.Int32).Value = tahun;
 
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        var periode = new PeriodeDTO
-                        {
-                            Periode = reader.GetInt32("PERIODE"),
-                            Bulan = reader.IsDBNull("BULAN") ? "" : reader.GetString("BULAN"),
-                            Remise1 = reader.IsDBNull("REMISE1") ? "" : reader.GetString("REMISE1"),
-                            R1Dari = reader.IsDBNull("R1DARI") ? null : reader.GetDateTime("R1DARI"),
-                            R1Sampai = reader.IsDBNull("R1SAMPAI") ? null : reader.GetDateTime("R1SAMPAI"),
-                            Remise2 = reader.IsDBNull("REMISE2") ? "" : reader.GetString("REMISE2"),
-                            R2Dari = reader.IsDBNull("R2DARI") ? null : reader.GetDateTime("R2DARI"),
-                            R2Sampai = reader.IsDBNull("R2SAMPAI") ? null : reader.GetDateTime("R2SAMPAI"),
-                            Bulanan = reader.IsDBNull("BULANAN") ? "" : reader.GetString("BULANAN"),
-                            BDari = reader.IsDBNull("BDARI") ? null : reader.GetDateTime("BDARI"),
-                            BSampai = reader.IsDBNull("BSAMPAI") ? null : reader.GetDateTime("BSAMPAI")
-                        };
-                        periodeList.Add(periode);
-                    }
-                }
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    periodeList.Add(MapPeriode(reader));
             }
 
             return periodeList;
         }
 
-        public bool UpdatePeriode(PeriodeDTO periode)
+        /// <summary>Single period row, or null when it does not exist (no auto-create).</summary>
+        public PeriodeDTO? GetPeriode(int periode)
         {
-            // Validate before update
-            var validationErrors = periode.Validate();
-            if (validationErrors.Any())
-                throw new ValidationException(string.Join("; ", validationErrors));
+            using var cmd = new OracleCommand(SelectPeriodeSql + "WHERE PERIODE = :periode", connection);
+            cmd.Parameters.Add(":periode", OracleDbType.Int32).Value = periode;
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? MapPeriode(reader) : null;
+        }
 
-            string updateQuery = @"
-                UPDATE POS_PERIODE SET 
-                    REMISE1 = :remise1,
-                    R1DARI = :r1dari,
-                    R1SAMPAI = :r1sampai,
-                    REMISE2 = :remise2,
-                    R2DARI = :r2dari,
-                    R2SAMPAI = :r2sampai,
-                    BULANAN = :bulanan,
-                    BDARI = :bdari,
-                    BSAMPAI = :bsampai
-                WHERE PERIODE = :periode";
-
-            using (var cmd = new OracleCommand(updateQuery, connection))
+        public bool UpdateTanggal(int periode, string kolom, DateTime? tanggal)
+        {
+            var (flag, pasangan, pembanding) = kolom switch
             {
-                cmd.Parameters.Add(":remise1", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(periode.Remise1) ? DBNull.Value : periode.Remise1;
-                cmd.Parameters.Add(":r1dari", OracleDbType.Date).Value = periode.R1Dari ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":r1sampai", OracleDbType.Date).Value = periode.R1Sampai ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":remise2", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(periode.Remise2) ? DBNull.Value : periode.Remise2;
-                cmd.Parameters.Add(":r2dari", OracleDbType.Date).Value = periode.R2Dari ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":r2sampai", OracleDbType.Date).Value = periode.R2Sampai ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":bulanan", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(periode.Bulanan) ? DBNull.Value : periode.Bulanan;
-                cmd.Parameters.Add(":bdari", OracleDbType.Date).Value = periode.BDari ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":bsampai", OracleDbType.Date).Value = periode.BSampai ?? (object)DBNull.Value;
-                cmd.Parameters.Add(":periode", OracleDbType.Int32).Value = periode.Periode;
+                "R1DARI" => ("REMISE1", "R1SAMPAI", "<="),
+                "R1SAMPAI" => ("REMISE1", "R1DARI", ">="),
+                "R2DARI" => ("REMISE2", "R2SAMPAI", "<="),
+                "R2SAMPAI" => ("REMISE2", "R2DARI", ">="),
+                "BDARI" => ("BULANAN", "BSAMPAI", "<="),
+                "BSAMPAI" => ("BULANAN", "BDARI", ">="),
+                _ => throw new ArgumentOutOfRangeException(nameof(kolom))
+            };
 
-                return cmd.ExecuteNonQuery() > 0;
-            }
+            // Penutupan berjalan di aplikasi lain. Periksa flag dan tanggal pasangannya di
+            // database saat UPDATE agar tampilan yang sudah lama terbuka tidak menimpa periode.
+            string sql = $"""
+                UPDATE POS_PERIODE
+                SET {kolom} = TO_CHAR(:tanggal, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE=ENGLISH')
+                WHERE PERIODE = :periode AND NVL(UPPER(TRIM({flag})), 'T') <> 'Y'
+                  AND (:tanggal IS NULL OR {pasangan} IS NULL OR :tanggal {pembanding}
+                       TO_DATE({pasangan}, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE=ENGLISH'))
+                """;
+            using var cmd = new OracleCommand(sql, connection) { BindByName = true };
+            cmd.Parameters.Add("tanggal", OracleDbType.Date).Value = (object?)tanggal?.Date ?? DBNull.Value;
+            cmd.Parameters.Add("periode", OracleDbType.Int32).Value = periode;
+            return cmd.ExecuteNonQuery() == 1;
         }
 
         private void EnsurePeriodesExist(int tahun)

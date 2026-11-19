@@ -72,16 +72,17 @@ namespace Penjualan.Tests.Integration
         }
 
         /// <summary>Seeds a POS_PERIODE row. Dates are stored as 'DD-MON-YYYY' strings, as in production.</summary>
-        public void SeedPeriode(int periode, DateTime remiseFrom, DateTime remiseTo, DateTime bulananFrom, DateTime bulananTo)
+        public void SeedPeriode(int periode, DateTime remiseFrom, DateTime remiseTo, DateTime bulananFrom, DateTime bulananTo,
+            string tutupBulanan = "T")
         {
             using var conn = Open();
             Exec(conn,
-                @"INSERT INTO POS_PERIODE (PERIODE, R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI)
-                  VALUES (:p, :r1d, :r1s, :r2d, :r2s, :bd, :bs)",
+                @"INSERT INTO POS_PERIODE (PERIODE, R1DARI, R1SAMPAI, R2DARI, R2SAMPAI, BDARI, BSAMPAI, BULANAN)
+                  VALUES (:p, :r1d, :r1s, :r2d, :r2s, :bd, :bs, :bulanan)",
                 ("p", periode),
                 ("r1d", Fmt(remiseFrom)), ("r1s", Fmt(remiseTo)),
                 ("r2d", Fmt(remiseFrom)), ("r2s", Fmt(remiseTo)),
-                ("bd", Fmt(bulananFrom)), ("bs", Fmt(bulananTo)));
+                ("bd", Fmt(bulananFrom)), ("bs", Fmt(bulananTo)), ("bulanan", tutupBulanan));
         }
 
         public void SeedSale(string nik, DateTime tanggal, decimal total, string? nomor = null)
@@ -106,7 +107,8 @@ namespace Penjualan.Tests.Integration
                 PERIODE NUMBER PRIMARY KEY,
                 R1DARI VARCHAR2(20), R1SAMPAI VARCHAR2(20),
                 R2DARI VARCHAR2(20), R2SAMPAI VARCHAR2(20),
-                BDARI VARCHAR2(20), BSAMPAI VARCHAR2(20))");
+                BDARI VARCHAR2(20), BSAMPAI VARCHAR2(20),
+                REMISE1 CHAR(1), REMISE2 CHAR(1), BULANAN CHAR(1))");
             Exec(conn, "CREATE TABLE POS_PENJUALAN (NIK VARCHAR2(20), TANGGAL DATE, TOTAL NUMBER, NO_TRANSAKSI VARCHAR2(30) UNIQUE)");
         }
 
