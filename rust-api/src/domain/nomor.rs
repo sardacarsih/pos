@@ -24,9 +24,29 @@ pub fn kode_produk_berikutnya(terakhir: Option<&str>, tahun: i32) -> String {
     }
 }
 
+/// Nomor pinjaman `P-yy-nnnnnn` (ucPinjaman.GenerateTransactionNumber). `terakhir` = kandidat nomor terakhir
+/// (NOMOR_TRANSAKSI baris PINJAMAN dan MAX FIN_PINJAMAN); urutan terbesar tahun berjalan + 1, agar tidak bentrok dengan BackOffice.
+pub fn pinjaman_berikutnya(terakhir: &[Option<&str>], tahun: i32) -> String {
+    let prefix = format!("P-{:02}-", tahun % 100);
+    let seq = terakhir
+        .iter()
+        .flatten()
+        .filter_map(|t| t.strip_prefix(&prefix)?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    format!("{prefix}{:06}", seq + 1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nomor_pinjaman_ambil_terbesar() {
+        assert_eq!(pinjaman_berikutnya(&[None, None], 2026), "P-26-000001");
+        assert_eq!(pinjaman_berikutnya(&[Some("P-26-000007"), Some("P-26-000012")], 2026), "P-26-000013");
+        assert_eq!(pinjaman_berikutnya(&[Some("P-25-000099"), None], 2026), "P-26-000001");
+    }
 
     #[test]
     fn kode_produk_naik_dan_reset_tahun() {

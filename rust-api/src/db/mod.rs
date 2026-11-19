@@ -8,6 +8,7 @@ pub mod kas;
 pub mod katalog;
 pub mod opname;
 pub mod pembelian;
+pub mod pinjaman;
 pub mod profil;
 pub mod push;
 pub mod rekap;
@@ -86,6 +87,7 @@ pub fn migrate(conn: &Connection) -> AppResult<usize> {
     conn.commit()?;
     done += pembelian::migrate(conn)?;
     done += kas::migrate(conn)?;
+    done += pinjaman::migrate(conn)?;
     Ok(done)
 }
 

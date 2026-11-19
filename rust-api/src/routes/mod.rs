@@ -4,6 +4,7 @@ pub mod auth;
 pub mod kasir;
 pub mod kas;
 pub mod pembelian;
+pub mod pinjaman;
 pub mod profil;
 pub mod push;
 
@@ -200,6 +201,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/kas/mutasi/{id}/batal", post(kas::batal))
         .route("/api/v1/kas/transfer", post(kas::transfer))
         .route("/api/v1/kas/tarik", post(kas::tarik))
+        .route("/api/v1/saya/pinjaman", get(pinjaman::saya).post(pinjaman::ajukan))
+        .route("/api/v1/saya/pinjaman/simulasi", post(pinjaman::simulasi))
+        .route("/api/v1/saya/pinjaman/{id}/batal", post(pinjaman::batal))
+        .route("/api/v1/pinjaman", get(pinjaman::daftar))
+        .route("/api/v1/pinjaman/antrian", get(pinjaman::antrian))
+        .route("/api/v1/pinjaman/pengaturan", get(pinjaman::pengaturan))
+        .route("/api/v1/pinjaman/pengaturan/hak", put(pinjaman::hak))
+        .route("/api/v1/pinjaman/pengaturan/maks", put(pinjaman::maks))
+        .route("/api/v1/pinjaman/plafon/{periode}", put(pinjaman::plafon))
+        .route("/api/v1/pinjaman/{id}", get(pinjaman::detail))
+        .route("/api/v1/pinjaman/{id}/{aksi}", post(pinjaman::proses))
         .route("/api/v1/hutang-supplier/{no}/pembayaran", post(pembelian::bayar))
         .route("/api/v1/hutang-supplier/{no}/pembayaran/{id}/balik", post(pembelian::balik))
         .route(

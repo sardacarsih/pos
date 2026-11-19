@@ -445,6 +445,33 @@ class ApiClient {
           ) as Map<String, dynamic>)['no_transaksi']
           as String;
 
+  // ---- pinjaman anggota (NIK dari token) ----
+  Future<PinjamanSaya> pinjamanSaya() async => PinjamanSaya.fromJson(
+    await get('/api/v1/saya/pinjaman') as Map<String, dynamic>,
+  );
+
+  Future<List<BarisAngsuran>> simulasiPinjaman(int jumlah, int tenor) async {
+    final j = await post('/api/v1/saya/pinjaman/simulasi', body: {'jumlah': jumlah, 'tenor': tenor})
+        as Map<String, dynamic>;
+    return [for (final b in j['jadwal'] as List) BarisAngsuran.fromJson(b as Map<String, dynamic>)];
+  }
+
+  Future<void> ajukanPinjaman({
+    required String idempotencyKey,
+    required int jumlah,
+    required int tenor,
+    required String keperluan,
+  }) => post(
+    '/api/v1/saya/pinjaman',
+    headers: {'Idempotency-Key': idempotencyKey},
+    body: {'jumlah': jumlah, 'tenor': tenor, 'keperluan': keperluan},
+  );
+
+  Future<void> batalPinjaman(int id, {required String idempotencyKey}) => post(
+    '/api/v1/saya/pinjaman/$id/batal',
+    headers: {'Idempotency-Key': idempotencyKey},
+  );
+
   /// Belanja mandiri: NIK diambil server dari token; selalu kredit.
   Future<Faktur> simpanSaya({
     required String idempotencyKey,
