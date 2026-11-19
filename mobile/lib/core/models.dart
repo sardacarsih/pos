@@ -285,7 +285,16 @@ class DashboardAdmin {
       userKasir = _i((j['user'] as Map)['kasir']),
       userAnggota = _i((j['user'] as Map)['anggota']),
       userNonaktif = _i((j['user'] as Map)['nonaktif']),
-      userTerkunci = _i((j['user'] as Map)['terkunci']);
+      userTerkunci = _i((j['user'] as Map)['terkunci']),
+      // Server lama belum mengirim bagian ini: tampil tanpa pembanding/tren/peringatan.
+      kemarin = j['kemarin'] == null
+          ? null
+          : HariJual.fromJson(j['kemarin'] as Map<String, dynamic>),
+      tren = [
+        for (final h in (j['tren'] as List? ?? []))
+          HariJual.fromJson(h as Map<String, dynamic>),
+      ],
+      hargaRendah = _i((j['perhatian'] as Map?)?['harga_rendah']);
   final String tanggal;
   final bool periodeTerbuka;
   final String? periodePesan, periodeKode;
@@ -295,6 +304,25 @@ class DashboardAdmin {
   final List<PerKasir> perKasir;
   final List<Terlaris> terlaris;
   final int userAdmin, userKasir, userAnggota, userNonaktif, userTerkunci;
+
+  /// Penjualan kemarin (pembanding KPI); null bila server belum mengirim.
+  final HariJual? kemarin;
+
+  /// 7 hari terakhir termasuk hari ini (lama -> baru); kosong bila server belum mengirim.
+  final List<HariJual> tren;
+
+  /// Jumlah produk aktif dengan harga jual <= harga beli.
+  final int hargaRendah;
+}
+
+/// Penjualan satu hari (semua kasir).
+class HariJual {
+  HariJual.fromJson(Map<String, dynamic> j)
+    : tanggal = _s(j['tanggal']),
+      jumlah = _i(j['jumlah']),
+      total = _i(j['total']);
+  final String tanggal;
+  final int jumlah, total;
 }
 
 class ProdukAdmin {
@@ -431,4 +459,64 @@ class RekapAnggota {
   final int periode, jumlahAnggota, jumlahTransaksi, total, tunai, kredit;
   final String dari, sampai;
   final List<RekapItem> items;
+}
+
+/// Jumlah transaksi dan nilai rupiahnya.
+class BagianJual {
+  BagianJual.fromJson(Map<String, dynamic>? j)
+    : jumlah = _i(j?['jumlah']),
+      total = _i(j?['total']);
+  final int jumlah, total;
+}
+
+/// Penjualan dipecah menurut jenis bayar; `lain` = selain TUNAI/KREDIT.
+class PecahanJual {
+  PecahanJual.fromJson(Map<String, dynamic> j)
+    : tunai = BagianJual.fromJson(j['tunai'] as Map<String, dynamic>?),
+      kredit = BagianJual.fromJson(j['kredit'] as Map<String, dynamic>?),
+      lain = BagianJual.fromJson(j['lain'] as Map<String, dynamic>?),
+      total = BagianJual.fromJson(j['total'] as Map<String, dynamic>?);
+  final BagianJual tunai, kredit, lain, total;
+}
+
+class RincianKasir {
+  RincianKasir.fromJson(Map<String, dynamic> j)
+    : kasir = _s(j['kasir']),
+      nama = _s(j['nama']),
+      pecahan = PecahanJual.fromJson(j);
+  final String kasir, nama;
+  final PecahanJual pecahan;
+}
+
+class RincianHari {
+  RincianHari.fromJson(Map<String, dynamic> j)
+    : tanggal = _s(j['tanggal']),
+      tunai = _i(j['tunai']),
+      kredit = _i(j['kredit']),
+      lain = _i(j['lain']),
+      jumlah = _i(j['jumlah']);
+  final String tanggal;
+  final int tunai, kredit, lain, jumlah;
+}
+
+/// Rincian penjualan semua kasir pada satu rentang tanggal (tunai vs kredit, per kasir, per hari).
+class RincianPenjualan {
+  RincianPenjualan.fromJson(Map<String, dynamic> j)
+    : dari = _s(j['dari']),
+      sampai = _s(j['sampai']),
+      hari = _i(j['hari']),
+      ringkasan = PecahanJual.fromJson(j['ringkasan'] as Map<String, dynamic>),
+      perKasir = [
+        for (final k in (j['per_kasir'] as List? ?? []))
+          RincianKasir.fromJson(k as Map<String, dynamic>),
+      ],
+      harian = [
+        for (final h in (j['harian'] as List? ?? []))
+          RincianHari.fromJson(h as Map<String, dynamic>),
+      ];
+  final String dari, sampai;
+  final int hari;
+  final PecahanJual ringkasan;
+  final List<RincianKasir> perKasir;
+  final List<RincianHari> harian;
 }

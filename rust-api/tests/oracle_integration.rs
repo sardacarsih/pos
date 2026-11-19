@@ -110,7 +110,7 @@ impl<'a> SkemaPos<'a> {
             "CREATE TABLE POS_STOCK (KODE_BARANG VARCHAR2(30), TANGGAL DATE, QUANTITY NUMBER, HPP NUMBER)",
             "CREATE TABLE POS_PEMBELIAN (PURCHASE_ID NUMBER, TANGGAL DATE)",
             "CREATE TABLE POS_PEMBELIANDETAIL (PURCHASE_ID NUMBER, KODE_BARANG VARCHAR2(30), QUANTITY NUMBER, HARGA_BELI NUMBER)",
-            "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30), TANGGAL DATE)",
+            "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30), TANGGAL DATE, TOTAL NUMBER, JENIS_BAYAR VARCHAR2(10), KASIR VARCHAR2(30), NAMA_KASIR VARCHAR2(60))",
             "CREATE TABLE POS_PENJUALAN_DETAIL (NO_TRANSAKSI VARCHAR2(30), KODE_BARANG VARCHAR2(30), JUMLAH_BARANG NUMBER)",
             "CREATE TABLE POS_BARANGRUSAK (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHFISIK NUMBER)",
             "CREATE TABLE POS_STOCKOPNAME (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHSISTEM NUMBER, JUMLAHFISIK NUMBER, SELISIH NUMBER, HPP NUMBER, TOTAL NUMBER)",
@@ -157,7 +157,7 @@ fn stok_habis_dan_opname_idempoten() {
         &[("d", &awal.format("%Y-%m-%d").to_string())],
     )
     .unwrap();
-    c.execute("INSERT INTO POS_PENJUALAN VALUES ('J1', TRUNC(SYSDATE))", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL) VALUES ('J1', TRUNC(SYSDATE))", &[]).unwrap();
     c.execute("INSERT INTO POS_PENJUALAN_DETAIL VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
     c.commit().unwrap();
 
@@ -316,4 +316,102 @@ fn dokumen_so_multi_barang_riwayat_dan_idempotensi() {
     c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&uid]).unwrap();
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();
     c.commit().unwrap();
+}
+
+#[test]
+fn tren_penjualan_dan_jumlah_stok_habis() {
+    use pos_api::db::{dashboard, faktur, katalog};
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    let (hari, _) = faktur::sekarang(&c).unwrap();
+    let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).unwrap();
+    // Hari ini: 2 transaksi (300 + 200); kemarin: 1 (100); 10 hari lalu: di luar jendela 7 hari.
+    for (no, hari_lalu, total, bayar) in [("T1", 0, 300, "TUNAI"), ("T2", 0, 200, "KREDIT"), ("T3", 1, 100, "TUNAI"), ("T4", 10, 999, "TUNAI")] {
+        c.execute_named(
+            "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, TOTAL, JENIS_BAYAR, KASIR) VALUES (:n, TRUNC(SYSDATE) - :h + 0.5, :t, :b, 'k')",
+            &[("n", &no), ("h", &hari_lalu), ("t", &total), ("b", &bayar)],
+        )
+        .unwrap();
+    }
+    // Dua produk aktif: satu dengan stok 0, satu dengan stok 3; satu produk nonaktif tanpa stok.
+    for (id, kode, aktif) in [(1, "R-A", "Y"), (2, "R-B", "Y"), (3, "R-OFF", "N")] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', 100, 50, 1, :a)",
+            &[("i", &id), ("k", &kode), ("a", &aktif)],
+        )
+        .unwrap();
+    }
+    c.execute_named(
+        "INSERT INTO POS_STOCK VALUES ('R-B', TO_DATE(:d,'YYYY-MM-DD'), 3, 50)",
+        &[("d", &awal.format("%Y-%m-%d").to_string())],
+    )
+    .unwrap();
+    c.commit().unwrap();
+
+    let t = dashboard::tren_penjualan(&c, hari, 7).unwrap();
+    assert_eq!(t.len(), 7);
+    assert_eq!((t[6].jumlah, t[6].total), (2, 500));
+    assert_eq!((t[5].jumlah, t[5].total), (1, 100));
+    assert_eq!(t[..5].iter().map(|h| h.total).sum::<i64>(), 0); // T4 (10 hari lalu) tidak ikut
+    assert_eq!(katalog::jumlah_stok_habis(&c, awal, hari).unwrap(), 1);
+}
+
+#[test]
+fn rincian_penjualan_tunai_kredit_per_kasir() {
+    use pos_api::db::{dashboard, faktur};
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    let (hari, _) = faktur::sekarang(&c).unwrap();
+    let dari = hari - chrono::Duration::days(2);
+    // (no, hari_lalu, total, jenis, kasir, nama): k1 tunai+kredit hari ini, k2 tanpa nama + jenis lain kemarin,
+    // satu baris 5 hari lalu di luar rentang.
+    for (no, lalu, total, jenis, kasir, nama) in [
+        ("R1", 0, 300, "TUNAI", "k1", "Rina"),
+        ("R2", 0, 200, "KREDIT", "k1", "Rina"),
+        ("R3", 2, 100, "TUNAI", "k1", "Rina"),
+        ("R4", 1, 50, "TRANSFER", "k2", ""),
+        ("R5", 1, 70, "KREDIT", "k2", ""),
+        ("R6", 5, 999, "TUNAI", "k1", "Rina"),
+    ] {
+        c.execute_named(
+            "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, TOTAL, JENIS_BAYAR, KASIR, NAMA_KASIR) \
+             VALUES (:n, TRUNC(SYSDATE) - :l + 0.5, :t, :j, :k, NULLIF(:m, ''))",
+            &[("n", &no), ("l", &lalu), ("t", &total), ("j", &jenis), ("k", &kasir), ("m", &nama)],
+        )
+        .unwrap();
+    }
+    c.commit().unwrap();
+
+    let r = dashboard::rincian_penjualan(&c, dari, hari).unwrap();
+    assert_eq!(r.hari, 3);
+    assert_eq!((r.ringkasan.total.jumlah, r.ringkasan.total.total), (5, 720));
+    assert_eq!((r.ringkasan.tunai.jumlah, r.ringkasan.tunai.total), (2, 400));
+    assert_eq!((r.ringkasan.kredit.jumlah, r.ringkasan.kredit.total), (2, 270));
+    assert_eq!((r.ringkasan.lain.jumlah, r.ringkasan.lain.total), (1, 50));
+    // Per hari: lama -> baru, hari kosong tidak ada karena semua hari punya transaksi.
+    assert_eq!(r.harian.len(), 3);
+    assert_eq!((r.harian[2].tunai, r.harian[2].kredit), (300, 200)); // hari ini
+    assert_eq!((r.harian[1].kredit, r.harian[1].lain), (70, 50)); // kemarin
+    // Per kasir: urut total menurun, tanpa baris di luar rentang, dan jumlahnya cocok dengan ringkasan.
+    assert_eq!(r.per_kasir.len(), 2);
+    assert_eq!((r.per_kasir[0].kasir.as_str(), r.per_kasir[0].nama.as_str()), ("k1", "Rina"));
+    assert_eq!(r.per_kasir[0].pecahan.total.total, 600);
+    assert_eq!((r.per_kasir[1].kasir.as_str(), r.per_kasir[1].nama.as_str()), ("k2", ""));
+    let jumlah: i64 = r.per_kasir.iter().map(|k| k.pecahan.total.total).sum();
+    assert_eq!(jumlah, r.ringkasan.total.total);
+
+    // Rentang satu hari tanpa transaksi: semua nol, satu baris harian.
+    let kosong = dashboard::rincian_penjualan(&c, hari - chrono::Duration::days(20), hari - chrono::Duration::days(20)).unwrap();
+    assert_eq!((kosong.hari, kosong.harian.len(), kosong.per_kasir.len()), (1, 1, 0));
+    assert_eq!(kosong.ringkasan.total.total, 0);
 }
