@@ -24,6 +24,7 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
         eprintln!("POS_TEST_ORACLE_PINJAMAN belum diset; uji Oracle dilewati");
         return;
     };
+    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     let (credentials, connect) = dsn.split_once('@').expect("format skema uji");
     let (username, password) = credentials.split_once('/').expect("login skema uji");
     let c = Connection::connect(username, password, connect).expect("koneksi skema uji");
@@ -35,7 +36,8 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
     for ddl in [
         "CREATE TABLE POS_PERIODE (PERIODE NUMBER PRIMARY KEY,BDARI VARCHAR2(12),BSAMPAI VARCHAR2(12),
             R1DARI VARCHAR2(12),R1SAMPAI VARCHAR2(12),R2DARI VARCHAR2(12),R2SAMPAI VARCHAR2(12),REMISE1 CHAR(1),REMISE2 CHAR(1))",
-        "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30),TANGGAL DATE,TOTAL NUMBER,JENIS_BAYAR VARCHAR2(10))",
+        "CREATE TABLE POS_PENJUALAN (ID_PENJUALAN NUMBER,NO_TRANSAKSI VARCHAR2(30),NIK VARCHAR2(30),
+            TANGGAL DATE,TOTAL NUMBER,JENIS_BAYAR VARCHAR2(10))",
         "CREATE TABLE FIN_ANGGOTA (ID_PELANGGAN NUMBER,NIK VARCHAR2(30),NAMA_PELANGGAN VARCHAR2(100),STATUS VARCHAR2(20),
             UNIT_KERJA VARCHAR2(20),AKTIF CHAR(1),ANGGOTA CHAR(1))",
         "CREATE TABLE FIN_SETTINGS (CONFIG VARCHAR2(50),JUMLAH NUMBER)",
@@ -81,8 +83,13 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
     let ver = b::operator(&c, buat("ver", Role::Admin, None), true).unwrap();
     let ketua = b::operator(&c, buat("ketua", Role::Admin, None), true).unwrap();
     let bend = b::operator(&c, buat("bend", Role::Admin, None), true).unwrap();
-    for (u, t) in [(&ver, p::Tahap::Verifikasi), (&ketua, p::Tahap::Setuju), (&bend, p::Tahap::Cair)] {
-        p::simpan_hak(&c, &p::HakReq { user_id: u.id, tahap: vec![t, p::Tahap::Verifikasi] }).unwrap();
+    use p::Tahap::{Cair, Setuju, Verifikasi as HakVerifikasi};
+    for (u, tahap) in [
+        (&ver, vec![HakVerifikasi]),
+        (&ketua, vec![Setuju, HakVerifikasi]),
+        (&bend, vec![Cair]),
+    ] {
+        p::simpan_hak(&c, &p::HakReq { user_id: u.id, tahap }).unwrap();
     }
 
     // Pengajuan: kelayakan.
@@ -169,6 +176,7 @@ fn pinjaman_oracle_alur_antrian_dan_pencairan() {
         )
         .unwrap();
     }
+    c.commit().unwrap();
     let legacy = p::laporan(&c, Some("  LEGACY  ")).unwrap();
     assert_eq!(legacy["jumlah"], 1);
     assert_eq!(legacy["total_pinjaman"], 2_000);
