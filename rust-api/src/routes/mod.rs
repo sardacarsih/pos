@@ -195,6 +195,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/pembelian", get(pembelian::riwayat).post(pembelian::posting))
         .route("/api/v1/pembelian/{no}", get(pembelian::detail))
         .route("/api/v1/pembelian/{no}/batal", post(pembelian::batal))
+        .route("/api/v1/pembelian/{no}/saldo-awal", post(pembelian::saldo_awal).patch(pembelian::koreksi_saldo))
         .route("/api/v1/hutang-supplier", get(pembelian::hutang))
         .route("/api/v1/kas/akun", get(kas::akun).post(kas::akun_buat))
         .route("/api/v1/kas/akun/{id}", put(kas::akun_ubah))

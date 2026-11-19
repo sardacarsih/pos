@@ -7,7 +7,7 @@ use pos_api::{
     routes::{self, AppState},
 };
 
-const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN|PEMBELIAN [--nik NIK]\n  pos-api user-add-anggota --xlsx FILE.xlsx | --dry-run   (akun semua anggota aktif yang belum punya akun)";
+const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api migrate-pembelian\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN|PEMBELIAN [--nik NIK]\n  pos-api user-add-anggota --xlsx FILE.xlsx | --dry-run   (akun semua anggota aktif yang belum punya akun)";
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
@@ -80,6 +80,13 @@ async fn run() -> Result<(), String> {
                     println!("Password admin acak (tampil sekali): {pwd}");
                 }
             }
+            Ok(())
+        }
+        "migrate-pembelian" => {
+            let jumlah = db::run(&pool, db::pembelian::migrate_khusus)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("Migrasi pembelian selesai ({jumlah} perubahan).");
             Ok(())
         }
         "selftest" => {

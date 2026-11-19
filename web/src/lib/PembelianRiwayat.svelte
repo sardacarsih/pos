@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { api, ApiError, query } from './api';
-  import { formatJumlahBeli, labelFaktur, metodeBayar, rpBeli, type DetailBeli, type FakturBeli,
+  import { bacaRupiahPecahan, formatJumlahBeli, labelFaktur, metodeBayar, rpBeli, type DetailBeli, type FakturBeli,
     type Metode, type Pembayaran, type SaldoSupplier } from './pembelian';
   import type { User } from './types';
   import { inputAngkaPembelian } from './inputAngkaPembelian';
@@ -19,6 +19,7 @@
   let sampai = '';
   let kodeSupplier = '';
   let terlambat = false;
+  let perluRekonsiliasi = false;
   let page = 1;
   let lebih = false;
   let loading = false;
@@ -30,10 +31,15 @@
   let galatDetail = '';
   let galatAksi = '';
   let pesanDetail = '';
-  let aksi: 'bayar' | 'balik' | 'batal' = 'bayar';
+  let aksi: 'bayar' | 'balik' | 'batal' | 'awal' | 'koreksi' = 'bayar';
   let balikBayar: Pembayaran | undefined;
   let sibuk = false;
   let nominal: number | undefined;
+  let nominalPecahan = '';
+  let tanggalRekonsiliasi = '';
+  let jatuhTempo = '';
+  let identitasDibuka: string | undefined;
+  let revisiDibuka: number | undefined;
   let sesiAksi = 0;
   let tanggalBayar = '';
   let metode: Metode = 'TUNAI';
@@ -42,7 +48,13 @@
   let versiDaftar = 0;
   let versiDetail = 0;
   let sudahBuka = '';
-  let filter = { q: '', supplier: '', dari: '', sampai: '', terlambat: '' };
+  let filter = { q: '', supplier: '', dari: '', sampai: '', terlambat: '', rekonsiliasi: '' };
+
+  const judulAksi = { bayar: 'Catat pembayaran', balik: 'Balik pembayaran', batal: 'Batalkan faktur',
+    awal: 'Tetapkan saldo awal', koreksi: 'Koreksi saldo awal' };
+  const pesanAksi = { bayar: 'Pembayaran dicatat.', balik: 'Pembayaran dibalik.', batal: 'Faktur dibatalkan.',
+    awal: 'Saldo awal ditetapkan.', koreksi: 'Koreksi saldo awal dicatat.' };
+  $: saldoAwal = pilihan?.revisi_saldo?.[0];
 
   $: if (online) void muat(1);
   $: if (online && nomorAwal && nomorAwal !== sudahBuka && dialog) {
@@ -68,7 +80,8 @@
   }
 
   function cari() {
-    filter = { q: pencarian, supplier: kodeSupplier, dari, sampai, terlambat: terlambat ? 'true' : '' };
+    filter = { q: pencarian, supplier: kodeSupplier, dari, sampai, terlambat: terlambat ? 'true' : '',
+      rekonsiliasi: perluRekonsiliasi ? 'true' : '' };
     void muat(1);
   }
 
@@ -94,18 +107,25 @@
     kembaliKe = null;
   }
 
-  function mulaiAksi(mode: typeof aksi, p?: Pembayaran) {
+  async function mulaiAksi(mode: typeof aksi, p?: Pembayaran) {
     if (!pilihan || !online) return;
     aksi = mode;
     sesiAksi += 1;
     balikBayar = p;
-    nominal = pilihan.sisa ?? undefined;
+    nominal = typeof pilihan.sisa === 'number' ? pilihan.sisa : undefined;
+    nominalPecahan = formatJumlahBeli(mode === 'koreksi' ? saldoAwal?.saldo_awal : mode === 'bayar' ? pilihan.sisa : null);
+    if (nominalPecahan === '—') nominalPecahan = '';
+    identitasDibuka = pilihan.purchase_id;
+    revisiDibuka = saldoAwal?.revisi;
+    tanggalRekonsiliasi = pilihan.tanggal_rekonsiliasi ?? pilihan.tanggal_server;
+    jatuhTempo = pilihan.jatuh_tempo ?? '';
     tanggalBayar = pilihan.tanggal_server;
     metode = 'TUNAI';
     referensi = '';
     alasan = '';
     galatAksi = '';
-    aksiDialog.showModal();
+    await tick();
+    if (!aksiDialog.open) aksiDialog.showModal();
   }
 
   async function simpanAksi() {
@@ -113,13 +133,33 @@
     const no = pilihan.no_transaksi;
     let path: string;
     let body: object;
-    if (aksi === 'bayar') {
-      if (!Number.isSafeInteger(nominal) || !nominal || nominal <= 0 || nominal > (pilihan.sisa ?? 0) || !tanggalBayar) {
+    let method = 'POST';
+    if (aksi === 'awal' || aksi === 'koreksi') {
+      const jumlah = bacaRupiahPecahan(nominalPecahan);
+      if (jumlah === null || !referensi.trim() || (aksi === 'awal' && (!identitasDibuka || !tanggalRekonsiliasi))
+        || (aksi === 'koreksi' && (!revisiDibuka || !alasan.trim()))) {
+        galatAksi = 'Isi nominal dengan maksimal dua desimal, tanggal, dan keterangan yang diminta.';
+        return;
+      }
+      path = '/pembelian/' + encodeURIComponent(no) + '/saldo-awal';
+      const data = { saldo_awal: jumlah, jatuh_tempo: jatuhTempo || null, referensi: referensi.trim() };
+      if (aksi === 'awal') {
+        body = { ...data, purchase_id: identitasDibuka, tanggal_rekonsiliasi: tanggalRekonsiliasi };
+      } else {
+        method = 'PATCH';
+        body = { ...data, revisi: revisiDibuka, alasan: alasan.trim() };
+      }
+    } else if (aksi === 'bayar') {
+      const max = typeof pilihan.sisa === 'number' ? pilihan.sisa : 0;
+      const pecahan = bacaRupiahPecahan(nominalPecahan);
+      const jumlah = pilihan.asal === 'BACKOFFICE' ? (pecahan === '0' ? null : pecahan) :
+        Number.isSafeInteger(nominal) && nominal && nominal > 0 && nominal <= max ? nominal : null;
+      if (jumlah === null || !tanggalBayar) {
         galatAksi = 'Periksa tanggal dan nominal pembayaran.';
         return;
       }
       path = '/hutang-supplier/' + encodeURIComponent(no) + '/pembayaran';
-      body = { tanggal: tanggalBayar, metode, referensi: referensi.trim() || null, nominal };
+      body = { tanggal: tanggalBayar, metode, referensi: referensi.trim() || null, nominal: jumlah };
     } else {
       if (!alasan.trim()) { galatAksi = 'Alasan wajib diisi.'; return; }
       path = aksi === 'balik'
@@ -133,15 +173,15 @@
     let simpanKey: string | undefined;
     try {
       // Retry a lost response using the same key, including after a page reload.
-      const bytes = new TextEncoder().encode(path + JSON.stringify(body));
+      const bytes = new TextEncoder().encode((method === 'POST' ? '' : method) + path + JSON.stringify(body));
       const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
       simpanKey = 'kopkar-beli-aksi-' + user.id + '-' + Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
       const key = sessionStorage.getItem(simpanKey) ?? crypto.randomUUID();
       sessionStorage.setItem(simpanKey, key);
-      await api(path, { method: 'POST', body, headers: { 'Idempotency-Key': key }, userId: user.id });
+      await api(path, { method, body, headers: { 'Idempotency-Key': key }, userId: user.id });
       sessionStorage.removeItem(simpanKey);
       aksiDialog.close();
-      pesanDetail = aksi === 'bayar' ? 'Pembayaran dicatat.' : aksi === 'balik' ? 'Pembayaran dibalik.' : 'Faktur dibatalkan.';
+      pesanDetail = pesanAksi[aksi];
       await Promise.all([detail(no, false), muat(1)]);
     } catch (e) {
       if (e instanceof ApiError && [400, 404, 409, 422].includes(e.status)) {
@@ -186,6 +226,7 @@
         {:else}
           <label>Diterima dari <input type="date" bind:value={dari} /></label>
           <label>Sampai <input type="date" min={dari} bind:value={sampai} /></label>
+          {#if user.role === 'ADMIN'}<label class="check"><input type="checkbox" bind:checked={perluRekonsiliasi} /> Perlu rekonsiliasi</label>{/if}
         {/if}
         <button class="secondary" type="submit" disabled={loading}>Cari</button>
       </form>
@@ -200,7 +241,7 @@
               <td>{f.supplier_nama ?? '—'}</td><td>{(hutang ? f.jatuh_tempo : f.tanggal_terima) ?? '—'}</td>
               <td class="beli-angka">{rpBeli(hutang ? f.sisa : f.total)}</td>
               <td><span class="beli-status" class:gagal={f.status === 'TERLAMBAT' || f.status === 'BATAL'}
-                class:waspada={f.status === 'TERBUKA'}>{labelFaktur[f.status]}</span></td>
+                class:waspada={f.status === 'TERBUKA' || f.status === 'SALDO_BELUM_DILACAK'}>{labelFaktur[f.status]}</span></td>
             </tr>
           {:else}<tr><td colspan="5" class="beli-kosong">{loading ? 'Memuat faktur…' : 'Tidak ada faktur yang cocok.'}</td></tr>{/each}
         </tbody>
@@ -239,9 +280,34 @@
         {#if pilihan.asal === 'WEB'}
           <div><dt>Sudah dibayar</dt><dd>{rpBeli(pilihan.sudah_bayar)}</dd></div>
           <div class="beli-total-utama"><dt>Sisa hutang</dt><dd>{rpBeli(pilihan.sisa)}</dd></div>
+        {:else if saldoAwal}
+          <div><dt>Saldo awal</dt><dd>{rpBeli(saldoAwal.saldo_awal)}</dd></div>
+          <div><dt>Dibayar sejak rekonsiliasi</dt><dd>{rpBeli(pilihan.sudah_bayar)}</dd></div>
+          <div class="beli-total-utama"><dt>Sisa hutang</dt><dd>{rpBeli(pilihan.sisa)}</dd></div>
+        {:else}
+          <div><dt>Sisa hutang</dt><dd>Belum terverifikasi</dd></div>
         {/if}
       </dl>
-      {#if user.role === 'ADMIN' && pilihan.asal === 'WEB'}
+      {#if pilihan.status === 'SALDO_BELUM_DILACAK'}
+        <p class="beli-petunjuk">Cocokkan faktur dengan bukti pembayaran atau tagihan supplier. Faktur masuk ringkasan hutang setelah saldo positif diverifikasi.</p>
+        {#if user.role === 'ADMIN' && pilihan.purchase_id}
+          <div class="beli-aksi"><button type="button" class="primary" disabled={!online} on:click={() => mulaiAksi('awal')}>Tetapkan saldo awal</button></div>
+        {/if}
+      {/if}
+      {#if user.role === 'ADMIN' && saldoAwal}
+        <h3>Riwayat saldo awal</h3>
+        <p>Tanggal rekonsiliasi {pilihan.tanggal_rekonsiliasi}</p>
+        <div class="beli-gulir"><table class="beli-tabel">
+          <thead><tr><th>Revisi</th><th>Petugas dan waktu</th><th>Bukti dan alasan</th><th class="beli-angka">Saldo awal</th></tr></thead>
+          <tbody>{#each pilihan.revisi_saldo ?? [] as r (r.revisi)}
+            <tr><th scope="row">{r.revisi}</th><td>{r.operator}<small>{r.created_at}</small></td>
+              <td>{r.referensi}{#if r.alasan}<small>{r.alasan}</small>{/if}
+                {#if r.jatuh_tempo}<small>Jatuh tempo {r.jatuh_tempo}</small>{/if}</td>
+              <td class="beli-angka">{rpBeli(r.saldo_awal)}</td></tr>
+          {/each}</tbody>
+        </table></div>
+      {/if}
+      {#if user.role === 'ADMIN' && (pilihan.asal === 'WEB' || saldoAwal)}
         <h3>Riwayat pembayaran</h3>
         {#if pilihan.pembayaran.length}
           <div class="beli-gulir"><table class="beli-tabel">
@@ -261,10 +327,16 @@
         {:else}<p>Belum ada pembayaran.</p>{/if}
         {#if pilihan.status !== 'BATAL'}
           <div class="beli-aksi">
-            <button type="button" class="secondary" disabled={!online || pilihan.sudah_bayar !== 0} on:click={() => mulaiAksi('batal')}>Batalkan faktur</button>
-            {#if (pilihan.sisa ?? 0) > 0}<button type="button" class="primary" disabled={!online} on:click={() => mulaiAksi('bayar')}>Catat pembayaran</button>{/if}
+            {#if pilihan.asal === 'WEB'}
+              <button type="button" class="secondary" disabled={!online || pilihan.sudah_bayar !== 0} on:click={() => mulaiAksi('batal')}>Batalkan faktur</button>
+            {:else}
+              <button type="button" class="secondary" disabled={!online} on:click={() => mulaiAksi('koreksi')}>Koreksi saldo awal</button>
+            {/if}
+            {#if pilihan.status === 'TERBUKA' || pilihan.status === 'TERLAMBAT'}
+              <button type="button" class="primary" disabled={!online} on:click={() => mulaiAksi('bayar')}>Catat pembayaran</button>
+            {/if}
           </div>
-          {#if pilihan.sudah_bayar !== 0}<p class="beli-petunjuk">Balik seluruh pembayaran sebelum membatalkan faktur.</p>{/if}
+          {#if pilihan.asal === 'WEB' && pilihan.sudah_bayar !== 0}<p class="beli-petunjuk">Balik seluruh pembayaran sebelum membatalkan faktur.</p>{/if}
         {/if}
       {/if}
     {:else if !galatDetail}
@@ -273,22 +345,38 @@
   </dialog>
 
   <dialog class="modal beli-dialog" bind:this={aksiDialog} aria-labelledby="beli-aksi-judul" on:cancel={(e) => { if (sibuk) e.preventDefault(); }}>
-    <h2 id="beli-aksi-judul">{aksi === 'bayar' ? 'Catat pembayaran' : aksi === 'balik' ? 'Balik pembayaran' : 'Batalkan faktur'}</h2>
+    <h2 id="beli-aksi-judul">{judulAksi[aksi]}</h2>
     <form class="beli-form" on:submit|preventDefault={simpanAksi}>
       {#if aksi === 'bayar'}
         <p>Sisa hutang {rpBeli(pilihan?.sisa)}</p>
-        <label>Tanggal pembayaran <input type="date" min={pilihan?.tanggal_faktur ?? undefined} max={pilihan?.tanggal_server} bind:value={tanggalBayar} required /></label>
+        <label>Tanggal pembayaran <input type="date" min={pilihan?.tanggal_rekonsiliasi ?? pilihan?.tanggal_faktur ?? undefined} max={pilihan?.tanggal_server} bind:value={tanggalBayar} required /></label>
         <label>Nominal
+          {#if pilihan?.asal === 'BACKOFFICE'}
+            <input class="beli-angka" inputmode="decimal" maxlength="26" bind:value={nominalPecahan} required />
+          {:else}
           {#key sesiAksi}
             <input class="beli-angka" inputmode="numeric" required use:inputAngkaPembelian={{
-              jenis: 'rupiah', nilai: nominal, min: 1, max: pilihan?.sisa ?? undefined, ubah: nilai => nominal = nilai
+              jenis: 'rupiah', nilai: nominal, min: 1, max: typeof pilihan?.sisa === 'number' ? pilihan.sisa : undefined, ubah: nilai => nominal = nilai
             }} />
           {/key}
+          {/if}
         </label>
         <label>Metode pembayaran
           <select aria-label="Metode pembayaran" bind:value={metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
         </label>
         <label>Referensi pembayaran <input maxlength="100" bind:value={referensi} /></label>
+      {:else if aksi === 'awal' || aksi === 'koreksi'}
+        <p>Total faktur {rpBeli(pilihan?.total)}</p>
+        <label>Saldo awal <input class="beli-angka" inputmode="decimal" maxlength="26" bind:value={nominalPecahan} required /></label>
+        {#if aksi === 'awal'}
+          <label>Tanggal rekonsiliasi <input type="date" min={pilihan?.tanggal_terima} max={pilihan?.tanggal_server} bind:value={tanggalRekonsiliasi} required /></label>
+          <p class="beli-petunjuk">Masukkan sisa hutang pada tanggal tersebut. Pembayaran setelah rekonsiliasi dicatat secara terpisah.</p>
+        {:else}
+          <label>Tanggal rekonsiliasi <input type="date" value={tanggalRekonsiliasi} readonly /></label>
+        {/if}
+        <label>Jatuh tempo <input type="date" min={pilihan?.tanggal_terima} bind:value={jatuhTempo} /></label>
+        <label>Referensi bukti <input maxlength="250" bind:value={referensi} required /></label>
+        {#if aksi === 'koreksi'}<label>Alasan koreksi <input maxlength="250" bind:value={alasan} required /></label>{/if}
       {:else}
         <p>{aksi === 'batal' ? 'Stok yang masuk dari faktur ini akan dikoreksi.' : 'Saldo faktur akan disesuaikan sebesar ' + rpBeli(balikBayar?.nominal) + '.'}</p>
         <label>Alasan <input maxlength="250" bind:value={alasan} required /></label>

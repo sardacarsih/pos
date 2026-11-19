@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, cariBarang, formatJumlahBeli, payloadBeli, rpBeli, totalBeli,
+import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, bacaRupiahPecahan, cariBarang, formatJumlahBeli, payloadBeli, rpBeli, totalBeli,
   type BarangBeli, type DrafBeli } from './pembelian';
 
 const barang: BarangBeli[] = [
@@ -23,6 +23,13 @@ function draf(): DrafBeli {
 }
 
 describe('pembelian web', () => {
+  it('mempertahankan presisi saldo faktur Backoffice dan menerima nol', () => {
+    expect(bacaRupiahPecahan('1.975.000,25')).toBe('1975000.25');
+    expect(bacaRupiahPecahan('0,00')).toBe('0');
+    expect(bacaRupiahPecahan('9.000.000.000.000.000,01')).toBe('9000000000000000.01');
+    expect(bacaRupiahPecahan('10,000')).toBeNull();
+    expect(bacaRupiahPecahan('-1')).toBeNull();
+  });
   it('membedakan titik ribuan di input dari titik desimal pada draf lama', () => {
     expect(bacaJumlahBeli('1.234')).toBe('1234');
     expect(bacaJumlahBeli('1.234,5')).toBe('1234.5');

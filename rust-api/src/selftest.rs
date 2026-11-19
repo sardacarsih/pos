@@ -101,6 +101,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     }
     h.push(cek("proteksi dan seri pembelian web", || {
         pembelian::cek_guard(conn)?;
+        pembelian::legacy::cek_guard(conn)?;
         let lebar: i64 = conn.query_row_as(
             "SELECT NVL(MIN(CHAR_LENGTH), 0) FROM USER_TAB_COLUMNS
              WHERE TABLE_NAME IN ('POS_PEMBELIAN','POS_PEMBELIANDETAIL') AND COLUMN_NAME='NO_TRANSAKSI'", &[],
@@ -136,16 +137,22 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
             .ok_or_else(|| AppError::Internal("Detail faktur backoffice tidak lengkap".into()))?;
         Ok(format!("{nomor}, {} baris", baris.len()))
     }));
+    let filter = pembelian::Filter {
+        q: None,
+        supplier: None,
+        dari: None,
+        sampai: None,
+        page: None,
+        terlambat: None,
+        rekonsiliasi: None,
+    };
+    h.push(cek("ringkasan hutang termasuk faktur Backoffice", || {
+        let hasil = pembelian::hutang(conn, &admin, &filter)?;
+        let jumlah = hasil["supplier"].as_array().map_or(0, Vec::len);
+        Ok(format!("{jumlah} supplier dengan saldo"))
+    }));
     h.push(cek("riwayat petugas pembelian", || {
         let petugas = pembelian::Operator { role: Role::Pembelian, ..admin };
-        let filter = pembelian::Filter {
-            q: None,
-            supplier: None,
-            dari: None,
-            sampai: None,
-            page: None,
-            terlambat: None,
-        };
         pembelian::riwayat(conn, &petugas, &filter)?;
         Ok("Kueri dengan filter petugas berhasil".into())
     }));

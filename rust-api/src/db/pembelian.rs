@@ -16,6 +16,9 @@ use crate::{
 const MAKS_RUPIAH: i64 = 9_000_000_000_000_000;
 const MAKS_BARIS: usize = 100;
 
+#[path = "pembelian_legacy.rs"]
+pub mod legacy;
+
 pub fn migrate(c: &Connection) -> AppResult<usize> {
     let mut n = 0;
     let schema = include_str!("pembelian.sql").replace("\r\n", "\n");
@@ -42,9 +45,7 @@ pub fn migrate(c: &Connection) -> AppResult<usize> {
         c.execute("ALTER TABLE MOB_USER DROP CONSTRAINT CK_MOB_USER_ROLE", &[])?;
         n += 1;
     }
-    let tabel: i64 = c.query_row_as(
-        "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME IN ('POS_PEMBELIAN','POS_PEMBELIANDETAIL')", &[],
-    )?;
+    let tabel = jumlah_tabel_asal(c)?;
     if tabel == 1 {
         return Err(AppError::Internal(
             "Tabel pembelian Oracle belum lengkap".into(),
@@ -69,8 +70,23 @@ pub fn migrate(c: &Connection) -> AppResult<usize> {
             }
             n += 1;
         }
+        n += legacy::migrate(c)?;
     }
     Ok(n)
+}
+
+fn jumlah_tabel_asal(c: &Connection) -> AppResult<i64> {
+    Ok(c.query_row_as(
+        "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME IN ('POS_PEMBELIAN','POS_PEMBELIANDETAIL')",
+        &[],
+    )?)
+}
+
+pub fn migrate_khusus(c: &Connection) -> AppResult<usize> {
+    if jumlah_tabel_asal(c)? != 2 {
+        return Err(AppError::Internal("Kedua tabel pembelian harus dimiliki oleh skema API".into()));
+    }
+    migrate(c)
 }
 
 #[derive(Clone)]
@@ -818,14 +834,21 @@ const WEB: &str = "SELECT b.NO_TRANSAKSI,b.SUPPLIER_ID,b.SUPPLIER_NAMA,b.NO_FAKT
     b.TANGGAL_TERIMA,b.JATUH_TEMPO,b.JENIS,b.BRUTO,b.POTONGAN,b.TOTAL,b.USER_NAMA,b.USER_ID,
     TO_CHAR(b.POSTED_AT,'YYYY-MM-DD HH24:MI:SS') POSTED,
     TO_CHAR(b.BATAL_AT,'YYYY-MM-DD HH24:MI:SS') BATAL,b.BATAL_NAMA,b.BATAL_ALASAN,
-    NVL(p.BAYAR,0) BAYAR,'WEB' ASAL
+    NVL(p.BAYAR,0) BAYAR,'WEB' ASAL,b.TOTAL-NVL(p.BAYAR,0) SISA_HUTANG,
+    CAST(NULL AS NUMBER) AWAL_SEN,CAST(NULL AS NUMBER) BAYAR_SEN,CAST(NULL AS NUMBER) REVISI,
+    CAST(NULL AS DATE) TANGGAL_REKONSILIASI,CAST(NULL AS NUMBER) PURCHASE_KEY,CAST(NULL AS NUMBER) PEMBAYARAN_TERAKHIR
     FROM MOB_BELI b LEFT JOIN (SELECT NO_TRANSAKSI,SUM(NOMINAL) BAYAR FROM MOB_BELI_BAYAR GROUP BY NO_TRANSAKSI) p
     ON p.NO_TRANSAKSI=b.NO_TRANSAKSI";
 
 const LAMA: &str = "SELECT b.NO_TRANSAKSI,b.SUPPLIER_ID,NVL(s.NAMA,b.SUPPLIER_ID),NULL,NULL,
-    b.TANGGAL,NULL,NULL,NVL(b.BRUTO,0),NVL(b.POTONGAN,0),NVL(b.TOTAL,0),b.NAMA_USER,NULL,
-    NULL,NULL,NULL,NULL,NULL,'BACKOFFICE'
+    b.TANGGAL,sa.JATUH_TEMPO,NULL,NVL(b.BRUTO,0),NVL(b.POTONGAN,0),NVL(b.TOTAL,0),b.NAMA_USER,NULL,
+    NULL,NULL,NULL,NULL,NULL,'BACKOFFICE',(sa.SEN-NVL(p.SEN,0))/100,
+    sa.SEN,NVL(p.SEN,0),l.REVISI,l.TANGGAL_REKONSILIASI,b.PURCHASE_ID,NVL(p.ID_TERAKHIR,0)
     FROM POS_PEMBELIAN b LEFT JOIN POS_SUPPLIER s ON s.KODE=b.SUPPLIER_ID
+    LEFT JOIN MOB_BELI_LAMA l ON l.PURCHASE_ID=b.PURCHASE_ID
+    LEFT JOIN MOB_BELI_LAMA_SALDO sa ON sa.NO_TRANSAKSI=l.NO_TRANSAKSI AND sa.REVISI=l.REVISI
+    LEFT JOIN (SELECT NO_TRANSAKSI,SUM(SEN) SEN,MAX(ID) ID_TERAKHIR FROM MOB_BELI_LAMA_BAYAR GROUP BY NO_TRANSAKSI) p
+      ON p.NO_TRANSAKSI=l.NO_TRANSAKSI
     WHERE b.NO_TRANSAKSI IS NOT NULL AND b.TANGGAL IS NOT NULL AND NOT EXISTS
     (SELECT 1 FROM MOB_BELI w WHERE w.PURCHASE_ID=b.PURCHASE_ID)";
 
@@ -834,14 +857,17 @@ fn faktur_json(r: &Row, hari: NaiveDate) -> AppResult<Value> {
     let tempo: Option<NaiveDate> = r.get(6)?;
     let batal: Option<String> = r.get(14)?;
     let bayar: Option<i64> = r.get(17)?;
-    let sisa = bayar.map(|n| {
+    let sisa_web = bayar.map(|n| {
         if batal.is_some() {
             0
         } else {
             total.to_i64().unwrap_or(0) - n
         }
     });
-    let status = match (batal.is_some(), sisa) {
+    let awal: Option<i64> = r.get(19)?;
+    let bayar_lama = r.get::<_, Option<i64>>(20)?.unwrap_or(0);
+    let sisa_lama = awal.map(|n| n - bayar_lama);
+    let status = match (batal.is_some(), sisa_web.or(sisa_lama)) {
         (true, _) => "BATAL",
         (_, None) => "SALDO_BELUM_DILACAK",
         (_, Some(0)) => "LUNAS",
@@ -855,7 +881,10 @@ fn faktur_json(r: &Row, hari: NaiveDate) -> AppResult<Value> {
         "jatuh_tempo":tempo, "jenis":r.get::<_, Option<String>>(7)?, "bruto":r.get::<_, String>(8)?,
         "potongan":r.get::<_, String>(9)?, "total":total.normalize().to_string(), "operator":r.get::<_, Option<String>>(11)?,
         "posted_at":r.get::<_, Option<String>>(13)?, "batal_at":batal, "batal_nama":r.get::<_, Option<String>>(15)?,
-        "batal_alasan":r.get::<_, Option<String>>(16)?, "sudah_bayar":bayar, "sisa":sisa, "status":status,
+        "batal_alasan":r.get::<_, Option<String>>(16)?,
+        "sudah_bayar":awal.map_or_else(|| json!(bayar), |_| json!(Decimal::new(bayar_lama, 2).normalize().to_string())),
+        "sisa":sisa_lama.map_or_else(|| json!(sisa_web), |n| json!(Decimal::new(n, 2).normalize().to_string())),
+        "status":status,
         "asal":r.get::<_, String>(18)?,
     }))
 }
@@ -868,6 +897,7 @@ pub struct Filter {
     pub sampai: Option<NaiveDate>,
     pub page: Option<u32>,
     pub terlambat: Option<bool>,
+    pub rekonsiliasi: Option<bool>,
 }
 
 fn daftar(c: &Connection, u: &Operator, filter: &Filter, khusus_hutang: bool) -> AppResult<Value> {
@@ -878,8 +908,6 @@ fn daftar(c: &Connection, u: &Operator, filter: &Filter, khusus_hutang: bool) ->
     let sumber = if u.role == Role::Pembelian {
         b.add("operator_id", u.id);
         format!("{WEB} WHERE b.USER_ID=TO_NUMBER(:operator_id)")
-    } else if khusus_hutang {
-        WEB.to_owned()
     } else {
         format!("{WEB} UNION ALL {LAMA}")
     };
@@ -904,10 +932,12 @@ fn daftar(c: &Connection, u: &Operator, filter: &Filter, khusus_hutang: bool) ->
         where_sql.push_str(" AND TANGGAL_TERIMA<TO_DATE(:sampai,'YYYY-MM-DD')+1");
     }
     if khusus_hutang {
-        where_sql.push_str(" AND BATAL IS NULL AND TOTAL>BAYAR");
+        where_sql.push_str(" AND BATAL IS NULL AND SISA_HUTANG>0");
         if filter.terlambat == Some(true) {
             where_sql.push_str(" AND JATUH_TEMPO<TRUNC(SYSDATE)");
         }
+    } else if u.role == Role::Admin && filter.rekonsiliasi == Some(true) {
+        where_sql.push_str(" AND ASAL='BACKOFFICE' AND AWAL_SEN IS NULL");
     }
     let urutan = if khusus_hutang {
         "JATUH_TEMPO NULLS FIRST, TANGGAL_TERIMA, NO_TRANSAKSI"
@@ -916,7 +946,7 @@ fn daftar(c: &Connection, u: &Operator, filter: &Filter, khusus_hutang: bool) ->
     };
     let sql = format!(
         "SELECT NO_TRANSAKSI,SUPPLIER_ID,SUPPLIER_NAMA,NO_FAKTUR,TANGGAL_FAKTUR,TANGGAL_TERIMA,JATUH_TEMPO,JENIS,
-         {},{},{},USER_NAMA,USER_ID,POSTED,BATAL,BATAL_NAMA,BATAL_ALASAN,BAYAR,ASAL
+         {},{},{},USER_NAMA,USER_ID,POSTED,BATAL,BATAL_NAMA,BATAL_ALASAN,BAYAR,ASAL,AWAL_SEN,BAYAR_SEN
          FROM ({sumber}) WHERE {where_sql} ORDER BY {urutan}
          OFFSET TO_NUMBER(:offset_param) ROWS FETCH NEXT 31 ROWS ONLY",
         tm("BRUTO"), tm("POTONGAN"), tm("TOTAL"),
@@ -940,8 +970,9 @@ pub fn riwayat(c: &Connection, u: &Operator, filter: &Filter) -> AppResult<Value
 pub fn hutang(c: &Connection, u: &Operator, filter: &Filter) -> AppResult<Value> {
     let mut data = daftar(c, u, filter, true)?;
     let sql = format!("SELECT SUPPLIER_ID,MAX(SUPPLIER_NAMA),{}, {},COUNT(*)
-        FROM ({WEB}) WHERE BATAL IS NULL AND TOTAL>BAYAR GROUP BY SUPPLIER_ID ORDER BY MAX(SUPPLIER_NAMA),SUPPLIER_ID",
-        tm("SUM(TOTAL-BAYAR)"), tm("SUM(CASE WHEN JATUH_TEMPO<TRUNC(SYSDATE) THEN TOTAL-BAYAR ELSE 0 END)"));
+        FROM ({WEB} UNION ALL {LAMA}) WHERE BATAL IS NULL AND SISA_HUTANG>0
+        GROUP BY SUPPLIER_ID ORDER BY MAX(SUPPLIER_NAMA),SUPPLIER_ID",
+        tm("SUM(SISA_HUTANG)"), tm("SUM(CASE WHEN JATUH_TEMPO<TRUNC(SYSDATE) THEN SISA_HUTANG ELSE 0 END)"));
     let mut ringkasan = Vec::new();
     for row in c.query(&sql, &[])? {
         let r = row?;
@@ -957,8 +988,9 @@ pub fn hutang(c: &Connection, u: &Operator, filter: &Filter) -> AppResult<Value>
 pub fn detail(c: &Connection, u: &Operator, no: &str) -> AppResult<Value> {
     let hari = faktur::sekarang(c)?.0;
     let select = format!("SELECT NO_TRANSAKSI,SUPPLIER_ID,SUPPLIER_NAMA,NO_FAKTUR,TANGGAL_FAKTUR,TANGGAL_TERIMA,
-        JATUH_TEMPO,JENIS,{},{},{},USER_NAMA,USER_ID,POSTED,BATAL,BATAL_NAMA,BATAL_ALASAN,BAYAR,ASAL FROM",
-        tm("BRUTO"), tm("POTONGAN"), tm("TOTAL"));
+        JATUH_TEMPO,JENIS,{},{},{},USER_NAMA,USER_ID,POSTED,BATAL,BATAL_NAMA,BATAL_ALASAN,BAYAR,ASAL,
+        AWAL_SEN,BAYAR_SEN,REVISI,TANGGAL_REKONSILIASI,{},PEMBAYARAN_TERAKHIR FROM",
+        tm("BRUTO"), tm("POTONGAN"), tm("TOTAL"), tm("PURCHASE_KEY"));
     let sql = format!("{select} ({WEB}) WHERE NO_TRANSAKSI=:no AND (:admin=1 OR USER_ID=:operator_id)");
     let admin = i64::from(u.role == Role::Admin);
     let web = opt(c.query_row_named(&sql, &[("no", &no), ("admin", &admin), ("operator_id", &u.id)]))?;
@@ -1002,7 +1034,15 @@ pub fn detail(c: &Connection, u: &Operator, no: &str) -> AppResult<Value> {
             tm("NVL(d.POTONGAN,0)"),
             tm("NVL(d.TOTAL,0)")
         );
-        (ambil_baris(c, &sql, no)?, Vec::new())
+        hasil["purchase_id"] = json!(r.get::<_, String>(23)?);
+        let payments = if let Some(versi) = r.get::<_, Option<i64>>(21)? {
+            hasil["tanggal_rekonsiliasi"] = json!(r.get::<_, NaiveDate>(22)?);
+            hasil["revisi_saldo"] = json!(legacy::revisi(c, no, versi)?);
+            legacy::pembayaran(c, no, r.get(24)?)?
+        } else {
+            Vec::new()
+        };
+        (ambil_baris(c, &sql, no)?, payments)
     };
     hasil["baris"] = json!(lines);
     hasil["pembayaran"] = json!(payments);

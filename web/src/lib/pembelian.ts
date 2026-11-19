@@ -153,15 +153,19 @@ export type FakturBeli = {
   tanggal_faktur: string | null; tanggal_terima: string; jatuh_tempo: string | null; jenis: Jenis | null;
   bruto: string; potongan: string; total: string; operator: string | null; posted_at: string | null;
   batal_at: string | null; batal_nama: string | null; batal_alasan: string | null;
-  sudah_bayar: number | null; sisa: number | null; asal: 'WEB' | 'BACKOFFICE';
+  sudah_bayar: number | string | null; sisa: number | string | null; asal: 'WEB' | 'BACKOFFICE';
   status: 'TERBUKA' | 'TERLAMBAT' | 'LUNAS' | 'BATAL' | 'SALDO_BELUM_DILACAK';
 };
 export type Pembayaran = {
-  id: number; tanggal: string; metode: Metode; referensi: string | null; nominal: number; balik_id: number | null;
+  id: number; tanggal: string; metode: Metode; referensi: string | null; nominal: number | string; balik_id: number | null;
   alasan: string | null; operator: string; created_at: string; dibalik: boolean;
 };
 export type DetailBeli = FakturBeli & {
   tanggal_server: string;
+  purchase_id?: string;
+  tanggal_rekonsiliasi?: string;
+  revisi_saldo?: { revisi: number; saldo_awal: string; jatuh_tempo: string | null; referensi: string;
+    alasan: string | null; operator: string; created_at: string }[];
   baris: { kode: string | null; nama: string | null; satuan: string | null; satuan_dasar: string | null;
     qty: string | null; isi: string; harga: string | null; potongan: string; total: string }[];
   pembayaran: Pembayaran[];
@@ -169,8 +173,18 @@ export type DetailBeli = FakturBeli & {
 export type SaldoSupplier = { supplier_id: string; supplier_nama: string; saldo: string; terlambat: string; faktur: number };
 
 export const labelFaktur: Record<FakturBeli['status'], string> = {
-  TERBUKA: 'Terbuka', TERLAMBAT: 'Terlambat', LUNAS: 'Lunas', BATAL: 'Dibatalkan', SALDO_BELUM_DILACAK: 'Saldo belum dilacak'
+  TERBUKA: 'Terbuka', TERLAMBAT: 'Terlambat', LUNAS: 'Lunas', BATAL: 'Dibatalkan', SALDO_BELUM_DILACAK: 'Saldo belum terverifikasi'
 };
+
+export function bacaRupiahPecahan(teks: string): string | null {
+  const [bulat, pecahan, ...lebih] = teks.trim().split(',');
+  if (lebih.length || !bulatIndonesia.test(bulat) || (pecahan !== undefined && !/^\d{1,2}$/.test(pecahan))) {
+    return null;
+  }
+  const utama = bulat.replaceAll('.', '').replace(/^0+(?=\d)/, '');
+  const desimal = pecahan?.replace(/0+$/, '');
+  return desimal ? utama + '.' + desimal : utama;
+}
 export const metodeBayar: Record<Metode, string> = { TUNAI: 'Tunai', TRANSFER: 'Transfer', LAINNYA: 'Lainnya' };
 export function rpBeli(n: number | string | null | undefined): string {
   const nilai = formatJumlahBeli(n);
