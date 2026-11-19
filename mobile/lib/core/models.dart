@@ -566,11 +566,12 @@ class AturanPinjaman {
 
 class PengajuanPinjaman {
   final int id, jumlah, tenor, angsuran;
-  final int? antrian;
+  final int? antrian, verifUser, setujuUser;
   final String status, keperluan, tglAju;
-  final String? noTransaksi, alasan;
+  final String? noTransaksi, alasan, nik, nama;
   PengajuanPinjaman({required this.id, required this.jumlah, required this.tenor, required this.angsuran, this.antrian,
-      required this.status, required this.keperluan, required this.tglAju, this.noTransaksi, this.alasan});
+      required this.status, required this.keperluan, required this.tglAju, this.noTransaksi, this.alasan,
+      this.nik, this.nama, this.verifUser, this.setujuUser});
   factory PengajuanPinjaman.fromJson(Map<String, dynamic> j) => PengajuanPinjaman(
     id: j['id'] as int,
     jumlah: j['jumlah'] as int,
@@ -582,6 +583,10 @@ class PengajuanPinjaman {
     tglAju: (j['tgl_aju'] as String? ?? '').split('T').first,
     noTransaksi: j['no_transaksi'] as String?,
     alasan: j['alasan'] as String?,
+    nik: j['nik'] as String?,
+    nama: j['nama'] as String?,
+    verifUser: j['verif_user'] as int?,
+    setujuUser: j['setuju_user'] as int?,
   );
   bool get berjalan => const ['DIAJUKAN', 'DIVERIFIKASI', 'DISETUJUI'].contains(status);
 }
@@ -623,4 +628,69 @@ class BarisAngsuran {
     sisa: _bulat(j['saldo_akhir']),
     jatuhTempo: j['jatuh_tempo'] as String,
   );
+}
+
+/// Antrian dana pencairan periode berjalan (pengurus).
+class AntrianPinjaman {
+  final int periode, terpakai;
+  final int? plafon, sisa;
+  final List<PengajuanPinjaman> items;
+  AntrianPinjaman({required this.periode, required this.terpakai, this.plafon, this.sisa, required this.items});
+  factory AntrianPinjaman.fromJson(Map<String, dynamic> j) => AntrianPinjaman(
+    periode: j['periode'] as int,
+    terpakai: j['terpakai'] as int,
+    plafon: j['plafon'] as int?,
+    sisa: j['sisa'] as int?,
+    items: [for (final p in j['items'] as List) PengajuanPinjaman.fromJson(p as Map<String, dynamic>)],
+  );
+}
+
+class BarisLaporanPinjaman {
+  final String noTransaksi, tanggal;
+  final String? nik, nama, unitKerja, jatuhTempoAkhir;
+  final int pinjaman, tenor, angsuran, angsuranLewat, sisaPokok;
+  BarisLaporanPinjaman({required this.noTransaksi, required this.tanggal, this.nik, this.nama, this.unitKerja,
+      this.jatuhTempoAkhir, required this.pinjaman, required this.tenor, required this.angsuran,
+      required this.angsuranLewat, required this.sisaPokok});
+  factory BarisLaporanPinjaman.fromJson(Map<String, dynamic> j) => BarisLaporanPinjaman(
+    noTransaksi: j['no_transaksi'] as String,
+    tanggal: j['tanggal'] as String,
+    nik: j['nik'] as String?,
+    nama: j['nama'] as String?,
+    unitKerja: j['unit_kerja'] as String?,
+    jatuhTempoAkhir: j['jatuh_tempo_akhir'] as String?,
+    pinjaman: j['pinjaman'] as int,
+    tenor: j['tenor'] as int,
+    angsuran: _bulat(j['angsuran']),
+    angsuranLewat: j['angsuran_lewat'] as int,
+    sisaPokok: _bulat(j['sisa_pokok']),
+  );
+}
+
+class LaporanPinjaman {
+  final int jumlah, totalPinjaman, totalSisaPokok;
+  final List<BarisLaporanPinjaman> items;
+  LaporanPinjaman({required this.jumlah, required this.totalPinjaman, required this.totalSisaPokok, required this.items});
+  factory LaporanPinjaman.fromJson(Map<String, dynamic> j) => LaporanPinjaman(
+    jumlah: j['jumlah'] as int,
+    totalPinjaman: j['total_pinjaman'] as int,
+    totalSisaPokok: _bulat(j['total_sisa_pokok']),
+    items: [for (final b in j['items'] as List) BarisLaporanPinjaman.fromJson(b as Map<String, dynamic>)],
+  );
+}
+
+/// Aksi pengurus yang ditawarkan (port `aksiTersedia` web); server tetap memeriksa ulang.
+List<String> aksiPinjaman(PengajuanPinjaman p, List<String> hak, int userId, bool kepalaAntrian) {
+  final pegang = p.verifUser == userId || p.setujuUser == userId;
+  bool ada(String t) => hak.contains(t);
+  switch (p.status) {
+    case 'DIAJUKAN':
+      return ada('VERIFIKASI') ? ['verifikasi', 'tolak'] : [];
+    case 'DIVERIFIKASI':
+      return ada('SETUJU') ? [if (!pegang) 'setujui', 'tolak'] : [];
+    case 'DISETUJUI':
+      return [if (ada('CAIR') && !pegang && kepalaAntrian) 'cairkan', if (ada('SETUJU')) 'tolak'];
+    default:
+      return [];
+  }
 }
