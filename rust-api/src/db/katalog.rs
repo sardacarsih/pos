@@ -521,6 +521,7 @@ pub fn daftar_produk_admin(
     q: Option<&str>,
     kategori: Option<&str>,
     aktif: Option<&str>,
+    harga_rendah: bool,
     page: u32,
     size: u32,
 ) -> AppResult<Halaman<ProdukAdmin>> {
@@ -535,14 +536,25 @@ pub fn daftar_produk_admin(
         b.add("kat", k.trim());
         sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
     }
-    match aktif {
-        Some("Y") => sql.push_str(" AND p.AKTIF = 'Y'"),
-        Some("N") => sql.push_str(" AND NVL(p.AKTIF, 'N') <> 'Y'"),
-        _ => {}
+    if harga_rendah {
+        // Monitoring margin: produk aktif dengan harga jual <= harga beli (HPP). BELI 0 = HPP belum diisi, dikecualikan.
+        sql.push_str(&format!(" AND {HARGA_RENDAH}"));
+    } else {
+        match aktif {
+            Some("Y") => sql.push_str(" AND p.AKTIF = 'Y'"),
+            Some("N") => sql.push_str(" AND NVL(p.AKTIF, 'N') <> 'Y'"),
+            _ => {}
+        }
     }
     b.add("off", (page.saturating_sub(1) * size).to_string());
     b.add("lim", (size + 1).to_string());
-    sql.push_str(" ORDER BY NVL(u.URUT, 999999999), p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY");
+    // Harga rendah: paling rugi (margin terkecil) dulu; selain itu urutan manual admin.
+    let urut = if harga_rendah {
+        "(p.PRICE - p.BELI), p.PRODUCTNAME, p.PRODUCTID"
+    } else {
+        "NVL(u.URUT, 999999999), p.PRODUCTNAME, p.PRODUCTID"
+    };
+    sql.push_str(&format!(" ORDER BY {urut} OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY"));
     let mut items = Vec::new();
     b.with(|p| -> AppResult<()> {
         for r in conn.query_named(&sql, p)? {
@@ -553,6 +565,17 @@ pub fn daftar_produk_admin(
     let ada_lagi = items.len() > size as usize;
     items.truncate(size as usize);
     Ok(Halaman { items, ada_lagi })
+}
+
+/// Syarat produk aktif yang dijual di bawah/sama dengan HPP (harga beli terakhir); BELI 0 = HPP belum diisi.
+const HARGA_RENDAH: &str = "p.AKTIF = 'Y' AND NVL(p.BELI, 0) > 0 AND NVL(p.PRICE, 0) <= p.BELI";
+
+/// Total produk yang memenuhi `HARGA_RENDAH` (tanpa filter pencarian/kategori), untuk lencana monitoring.
+pub fn jumlah_harga_rendah(conn: &Connection) -> AppResult<i64> {
+    Ok(conn.query_row_as::<i64>(
+        &format!("SELECT COUNT(*) FROM POS_PRODUCT p WHERE {HARGA_RENDAH}"),
+        &[],
+    )?)
 }
 
 pub fn produk_admin_by_id(conn: &Connection, id: i64) -> AppResult<Option<ProdukAdmin>> {
