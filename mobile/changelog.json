@@ -1,5 +1,15 @@
 [
   {
+    "versionName": "1.0.10",
+    "versionCode": 11,
+    "tanggal": "2026-11-19",
+    "perubahan": [
+      "Anggota dapat mengajukan pinjaman dan memantau statusnya hingga pencairan.",
+      "Pengurus dapat memproses pengajuan, melihat antrian dana, dan mencari pinjaman aktif dari menu Pinjaman.",
+      "Perbaruan Beranda admin, monitoring stok dan harga, serta stock opname dan dukungan multi satuan."
+    ]
+  },
+  {
     "versionName": "1.0.9",
     "versionCode": 10,
     "tanggal": "2026-11-10",
