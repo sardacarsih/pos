@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Asterisk from '@lucide/svelte/icons/asterisk';
+  import { base } from '$app/paths';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import UserRound from '@lucide/svelte/icons/user-round';
   import Lock from '@lucide/svelte/icons/lock';
@@ -14,6 +14,7 @@
   import Kas from '$lib/Kas.svelte';
   import Pinjaman from '$lib/Pinjaman.svelte';
   import PinjamanSaya from '$lib/PinjamanSaya.svelte';
+  import Supplier from '$lib/Supplier.svelte';
   import { sinkronPembelian } from '$lib/pembelianOffline';
   import type { User } from '$lib/types';
   import Shop from '$lib/Shop.svelte'; import General from '$lib/General.svelte'; import Admin from '$lib/Admin.svelte'; import Users from '$lib/Users.svelte'; import TagihanRekap from '$lib/TagihanRekap.svelte';
@@ -142,12 +143,13 @@
     try { await logout(); } catch { /* Sesi lokal sudah dikunci. */ }
   }
   function toggleTheme() { dark = !dark; localStorage.setItem('kopkar_theme', dark ? 'dark' : 'light'); }
+  const logoKopkar = base + '/kopkar-icon.png';
 </script>
 <svelte:window on:scroll={() => tergulir = window.scrollY > 4}/>
 <svelte:head><title>{user ? judulDokumen(labelView(menu, view)) : 'Kopkar POS'}</title><meta name="description" content="Aplikasi koperasi Kopkar Kusuma Lestari"/></svelte:head>
 <div class:dark class="app">
 {#if loading}<div class="center muted">Menyiapkan aplikasi…</div>
-{:else if !user}<main class="login-page"><div class="login-story"><div class="brand inverse"><span class="brand-mark"><Asterisk size={22} aria-hidden="true"/></span><span>KOPKAR <small>KUSUMA LESTARI</small></span></div><div class="story-text"><p class="eyebrow light">BERSAMA TUMBUH LEBIH BAIK</p><h1>Lebih dekat<br/>dengan <em>koperasi.</em></h1><p>Akses layanan, transaksi, dan kebutuhan sehari-hari dalam satu tempat.</p></div><div class="story-footer">KOPKAR KUSUMA LESTARI <span>●</span> LAYANAN DIGITAL</div></div><div class="login-side"><div class="login-card"><div class="login-icon"><Asterisk size={26} aria-hidden="true"/></div><p class="eyebrow">SELAMAT DATANG</p><h2>Masuk ke akun</h2><p class="muted">Gunakan akun Kopkar Anda untuk melanjutkan.</p>{#if error}<div class="error" role="alert">{error}</div>{/if}<form on:submit|preventDefault={signIn}><label>Username<span class="field"><UserRound size={18} aria-hidden="true"/><input bind:value={username} autocomplete="username" required placeholder="Masukkan username"/></span></label><label>Password<span class="field"><Lock size={18} aria-hidden="true"/><input type={lihat ? 'text' : 'password'} bind:value={password} autocomplete="current-password" required placeholder="Masukkan password"/><button type="button" class="eye" aria-label={lihat ? 'Sembunyikan password' : 'Tampilkan password'} on:click={() => lihat = !lihat}>{#if lihat}<EyeOff size={18} aria-hidden="true"/>{:else}<Eye size={18} aria-hidden="true"/>{/if}</button></span></label><label class="check"><input type="checkbox" bind:checked={ingat}/> Ingat saya di perangkat ini</label><button class="primary wide" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'} <span><ArrowRight size={18} aria-hidden="true"/></span></button></form><p class="login-help">Mengalami kendala? Hubungi administrator koperasi.</p></div></div></main>
+{:else if !user}<main class="login-page"><div class="login-story"><div class="brand inverse"><img src={logoKopkar} width="42" height="42" alt=""/><span>KOPKAR <small>KUSUMA LESTARI</small></span></div><div class="story-text"><p class="eyebrow light">BERSAMA TUMBUH LEBIH BAIK</p><h1>Lebih dekat<br/>dengan <em>koperasi.</em></h1><p>Akses layanan, transaksi, dan kebutuhan sehari-hari dalam satu tempat.</p></div><div class="story-footer">KOPKAR KUSUMA LESTARI <span>●</span> LAYANAN DIGITAL</div></div><div class="login-side"><div class="login-card"><img class="login-icon" src={logoKopkar} width="42" height="42" alt="Kopkar Kusuma Lestari"/><p class="eyebrow">SELAMAT DATANG</p><h2>Masuk ke akun</h2><p class="muted">Gunakan akun Kopkar Anda untuk melanjutkan.</p>{#if error}<div class="error" role="alert">{error}</div>{/if}<form on:submit|preventDefault={signIn}><label>Username<span class="field"><UserRound size={18} aria-hidden="true"/><input bind:value={username} autocomplete="username" required placeholder="Masukkan username"/></span></label><label>Password<span class="field"><Lock size={18} aria-hidden="true"/><input type={lihat ? 'text' : 'password'} bind:value={password} autocomplete="current-password" required placeholder="Masukkan password"/><button type="button" class="eye" aria-label={lihat ? 'Sembunyikan password' : 'Tampilkan password'} on:click={() => lihat = !lihat}>{#if lihat}<EyeOff size={18} aria-hidden="true"/>{:else}<Eye size={18} aria-hidden="true"/>{/if}</button></span></label><label class="check"><input type="checkbox" bind:checked={ingat}/> Ingat saya di perangkat ini</label><button class="primary wide" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'} <span><ArrowRight size={18} aria-hidden="true"/></span></button></form><p class="login-help">Mengalami kendala? Hubungi administrator koperasi.</p></div></div></main>
 {:else if user.ganti_password}<div class="center"><section class="panel password-card"><p class="eyebrow">KEAMANAN AKUN</p><h2>Buat password baru</h2><p>Anda perlu mengganti password sementara sebelum melanjutkan.</p>{#if error}<div class="error">{error}</div>{/if}<form on:submit|preventDefault={changePassword}><label>Password saat ini<input type="password" bind:value={password} required/></label><label>Password baru<input type="password" bind:value={newPassword} required/></label><button class="primary wide" disabled={busy}>Ganti password</button></form><button on:click={signOut}>Keluar</button></section></div>
 {:else}<div class="shell" class:rail={rail}><a class="skip" href="#konten">Lewati ke konten</a><Sidebar {menu} {view} {badge} {dark} {rail} bisaDiciutkan={!layarSedang} on:pilih={(e) => pilihView(e.detail)} on:tema={toggleTheme} on:keluar={signOut} on:ciut={toggleRail}/>
   <div class="main-area">
@@ -158,6 +160,8 @@
     <main class="content" id="konten" tabindex="-1" aria-labelledby="judul-halaman" bind:this={mainEl}>
       {#if view === 'pembelian' && bisaBeli(user)}
         {#key user.id}<Pembelian {user} online={terhubung}/>{/key}
+      {:else if view === 'supplier' && bisaBeli(user) && !modeLokal}
+        {#key user.id}<Supplier userId={user.id} online={terhubung}/>{/key}
       {:else if view === 'hutang-supplier' && user.role === 'ADMIN'}
         {#key user.id}<PembelianRiwayat {user} online={terhubung} hutang/>{/key}
       {:else if view === 'kas' && user.role === 'ADMIN'}

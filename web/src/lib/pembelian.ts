@@ -71,6 +71,34 @@ function nilaiRupiah(n: number | undefined): n is number {
   return n !== undefined && Number.isSafeInteger(n) && n >= 0 && n <= MAKS_RUPIAH;
 }
 
+const bulatIndonesia = /^(?:\d+|\d{1,3}(?:\.\d{3})+)$/;
+
+export function bacaRupiahBeli(teks: string): number | null {
+  const bersih = teks.trim().replace(/^rp\s*/i, '');
+  if (!bulatIndonesia.test(bersih)) return null;
+  const angka = Number(bersih.replaceAll('.', ''));
+  return nilaiRupiah(angka) ? angka : null;
+}
+
+export function bacaJumlahBeli(teks: string): string | null {
+  const [bulat, desimal, ...lebih] = teks.trim().split(',');
+  if (lebih.length || !bulatIndonesia.test(bulat) || (desimal !== undefined && !/^\d{1,3}$/.test(desimal))) {
+    return null;
+  }
+  const utama = bulat.replaceAll('.', '').replace(/^0+(?=\d)/, '');
+  return angkaQty(desimal === undefined ? utama : `${utama}.${desimal}`);
+}
+
+export function formatJumlahBeli(nilai: number | string | null | undefined): string {
+  if (nilai == null || nilai === '') return '—';
+  const cocok = /^(-?)(\d+)(?:[.,](\d+))?$/.exec(String(nilai));
+  if (!cocok) return '—';
+  const [, tanda, bulat, desimal = ''] = cocok;
+  const bagian = bulat.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const pecahan = desimal.replace(/0+$/, '');
+  return tanda + bagian + (pecahan ? ',' + pecahan : '');
+}
+
 export function brutoBaris(b: BarisBeli): number | null {
   const q = angkaQty(b.qty);
   if (!q || !nilaiRupiah(b.harga) || b.harga === 0) return null;
@@ -125,15 +153,19 @@ export type FakturBeli = {
   tanggal_faktur: string | null; tanggal_terima: string; jatuh_tempo: string | null; jenis: Jenis | null;
   bruto: string; potongan: string; total: string; operator: string | null; posted_at: string | null;
   batal_at: string | null; batal_nama: string | null; batal_alasan: string | null;
-  sudah_bayar: number | null; sisa: number | null; asal: 'WEB' | 'BACKOFFICE';
+  sudah_bayar: number | string | null; sisa: number | string | null; asal: 'WEB' | 'BACKOFFICE';
   status: 'TERBUKA' | 'TERLAMBAT' | 'LUNAS' | 'BATAL' | 'SALDO_BELUM_DILACAK';
 };
 export type Pembayaran = {
-  id: number; tanggal: string; metode: Metode; referensi: string | null; nominal: number; balik_id: number | null;
+  id: number; tanggal: string; metode: Metode; referensi: string | null; nominal: number | string; balik_id: number | null;
   alasan: string | null; operator: string; created_at: string; dibalik: boolean;
 };
 export type DetailBeli = FakturBeli & {
   tanggal_server: string;
+  purchase_id?: string;
+  tanggal_rekonsiliasi?: string;
+  revisi_saldo?: { revisi: number; saldo_awal: string; jatuh_tempo: string | null; referensi: string;
+    alasan: string | null; operator: string; created_at: string }[];
   baris: { kode: string | null; nama: string | null; satuan: string | null; satuan_dasar: string | null;
     qty: string | null; isi: string; harga: string | null; potongan: string; total: string }[];
   pembayaran: Pembayaran[];
@@ -141,12 +173,21 @@ export type DetailBeli = FakturBeli & {
 export type SaldoSupplier = { supplier_id: string; supplier_nama: string; saldo: string; terlambat: string; faktur: number };
 
 export const labelFaktur: Record<FakturBeli['status'], string> = {
-  TERBUKA: 'Terbuka', TERLAMBAT: 'Terlambat', LUNAS: 'Lunas', BATAL: 'Dibatalkan', SALDO_BELUM_DILACAK: 'Saldo belum dilacak'
+  TERBUKA: 'Terbuka', TERLAMBAT: 'Terlambat', LUNAS: 'Lunas', BATAL: 'Dibatalkan', SALDO_BELUM_DILACAK: 'Saldo belum terverifikasi'
 };
+
+export function bacaRupiahPecahan(teks: string): string | null {
+  const [bulat, pecahan, ...lebih] = teks.trim().split(',');
+  if (lebih.length || !bulatIndonesia.test(bulat) || (pecahan !== undefined && !/^\d{1,2}$/.test(pecahan))) {
+    return null;
+  }
+  const utama = bulat.replaceAll('.', '').replace(/^0+(?=\d)/, '');
+  const desimal = pecahan?.replace(/0+$/, '');
+  return desimal ? utama + '.' + desimal : utama;
+}
 export const metodeBayar: Record<Metode, string> = { TUNAI: 'Tunai', TRANSFER: 'Transfer', LAINNYA: 'Lainnya' };
-const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 2 });
 export function rpBeli(n: number | string | null | undefined): string {
-  if (n == null) return '—';
-  if (typeof n === 'string' && /^-?\d+$/.test(n)) return rupiah.format(BigInt(n));
-  return rupiah.format(Number(n));
+  const nilai = formatJumlahBeli(n);
+  if (nilai === '—') return nilai;
+  return nilai.startsWith('-') ? '-Rp ' + nilai.slice(1) : 'Rp ' + nilai;
 }

@@ -4,6 +4,7 @@ import base64
 import json
 import re
 import sys
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from playwright.sync_api import expect, sync_playwright
@@ -42,8 +43,20 @@ def test_pembelian(url):
     percobaan = []
     resmi = {}
     pembayaran = []
+    legacy_no = "B-26-001994"
+    legacy = dict(faktur, no_transaksi=legacy_no, no_faktur=None, asal="BACKOFFICE", jenis=None,
+                  tanggal_faktur=None, jatuh_tempo=None, total="1975000.25", purchase_id="1495",
+                  sudah_bayar=None, sisa=None, status="SALDO_BELUM_DILACAK")
+    revisi_legacy = []
+    pembayaran_legacy = []
     jaringan_putus = False
     petugas = dict(akun, id=18, role="PEMBELIAN", nama="Petugas Uji")
+
+    def hitung_legacy():
+        awal = Decimal(revisi_legacy[0]["saldo_awal"])
+        dibayar = sum((Decimal(p["nominal"]) for p in pembayaran_legacy), Decimal(0))
+        sisa = awal - dibayar
+        legacy.update(sudah_bayar=str(dibayar), sisa=str(sisa), status="TERBUKA" if sisa else "LUNAS")
 
     def mock(route):
         request = route.request
@@ -63,19 +76,58 @@ def test_pembelian(url):
             route.fulfill(json=ref)
         elif path == "/pembelian" and request.method == "POST":
             key = request.headers["idempotency-key"]
-            percobaan.append((key, request.post_data_json))
-            resmi.setdefault(key, faktur["no_transaksi"])
+            data = request.post_data_json
+            percobaan.append((key, data))
+            if key not in resmi:
+                resmi[key] = faktur["no_transaksi"]
+                faktur.update(sudah_bayar=data["uang_muka"], sisa=67000 - data["uang_muka"])
             if len(percobaan) == 1:
                 route.abort("failed")
             else:
                 route.fulfill(json=dict(no_transaksi=resmi[key]))
         elif path == "/pembelian":
-            route.fulfill(json=dict(items=[faktur] if resmi else [], page=1, ada_lagi=False))
+            items = [legacy] if "rekonsiliasi=true" in request.url and not revisi_legacy else []
+            if "rekonsiliasi=true" not in request.url:
+                items = [faktur, legacy] if resmi else [legacy]
+            route.fulfill(json=dict(items=items, page=1, ada_lagi=False))
+        elif path == f"/pembelian/{legacy_no}/saldo-awal":
+            data = request.post_data_json
+            assert request.headers.get("idempotency-key")
+            if request.method == "POST":
+                assert data["purchase_id"] == "1495"
+                assert data["saldo_awal"] == "1000.25"
+                legacy["tanggal_rekonsiliasi"] = data["tanggal_rekonsiliasi"]
+            else:
+                assert request.method == "PATCH"
+                assert data["revisi"] == 1 and data["saldo_awal"] == "900.5"
+            rev = len(revisi_legacy) + 1
+            revisi_legacy.insert(0, dict(revisi=rev, saldo_awal=data["saldo_awal"], jatuh_tempo=data["jatuh_tempo"],
+                                        alasan=data.get("alasan"), referensi=data["referensi"], operator="Admin Uji",
+                                        created_at="2026-11-18 14:00:00"))
+            hitung_legacy()
+            route.fulfill(json=dict(revisi=str(rev)))
+        elif path == f"/pembelian/{legacy_no}":
+            route.fulfill(json=dict(**legacy, tanggal_server=ref["tanggal_server"], pembayaran=pembayaran_legacy,
+                                    revisi_saldo=revisi_legacy, baris=[]))
+        elif path == f"/hutang-supplier/{legacy_no}/pembayaran":
+            data = request.post_data_json
+            assert data["nominal"] == "100.15"
+            pembayaran_legacy.append(dict(id=4, **data, balik_id=None, alasan=None, operator="Admin Uji",
+                                           created_at="2026-11-18 14:10:00", dibalik=False))
+            hitung_legacy()
+            route.fulfill(json=dict(id="4"))
+        elif path == f"/hutang-supplier/{legacy_no}/pembayaran/4/balik":
+            asal = pembayaran_legacy[0]
+            asal["dibalik"] = True
+            pembayaran_legacy.append(dict(asal, id=5, nominal="-100.15", balik_id=4,
+                                           alasan=request.post_data_json["alasan"], dibalik=False))
+            hitung_legacy()
+            route.fulfill(json=dict(id="5"))
         elif path.endswith("/pembayaran"):
             data = request.post_data_json
             pembayaran.append(dict(id=3, **data, balik_id=None, alasan=None, operator="Admin Uji",
                                    created_at="2026-11-18 13:00:00", dibalik=False))
-            faktur.update(sudah_bayar=data["nominal"], sisa=67000 - data["nominal"])
+            faktur.update(sudah_bayar=faktur["sudah_bayar"] + data["nominal"], sisa=faktur["sisa"] - data["nominal"])
             route.fulfill(json=dict(id="3"))
         elif path == "/pembelian/BW-26-000001":
             route.fulfill(json=dict(**faktur, tanggal_server=ref["tanggal_server"], pembayaran=pembayaran, baris=[
@@ -83,8 +135,10 @@ def test_pembelian(url):
                      harga="36000", potongan="5000", total="67000")
             ]))
         elif path == "/hutang-supplier":
-            route.fulfill(json=dict(items=[faktur], page=1, ada_lagi=False, supplier=[
-                dict(supplier_id="S1", supplier_nama="Supplier Uji", saldo=str(faktur["sisa"]), terlambat="0", faktur=1)
+            items = [faktur] + ([legacy] if revisi_legacy and Decimal(legacy["sisa"]) > 0 else [])
+            saldo_total = sum(Decimal(f["sisa"]) for f in items)
+            route.fulfill(json=dict(items=items, page=1, ada_lagi=False, supplier=[
+                dict(supplier_id="S1", supplier_nama="Supplier Uji", saldo=str(saldo_total), terlambat="0", faktur=len(items))
             ]))
         elif path == "/auth/logout":
             route.fulfill(status=204)
@@ -116,21 +170,47 @@ def test_pembelian(url):
         page.goto(url)
         page.wait_for_load_state("networkidle")
         page.get_by_label("Username").fill("admin")
-        page.get_by_label("Password", exact=True).fill("test12345")
+        sandi = page.get_by_label("Password", exact=True)
+        sandi.fill("test12345")
+        expect(sandi).to_have_attribute("type", "password")
+        page.get_by_role("button", name="Tampilkan password").press("Space")
+        expect(sandi).to_have_attribute("type", "text")
+        expect(sandi).to_have_value("test12345")
+        page.get_by_role("button", name="Sembunyikan password").click()
+        expect(sandi).to_have_attribute("type", "password")
+        expect(sandi).to_have_value("test12345")
         page.get_by_label("Ingat saya di perangkat ini").check()
         page.get_by_role("button", name="Masuk", exact=True).press("Enter")
         page.get_by_role("button", name="Pembelian", exact=True).press("Enter")
         scan = page.get_by_role("combobox", name="Barcode atau nama barang")
         expect(scan).to_be_visible()
-        page.wait_for_function("!!navigator.serviceWorker.controller")
-        page.get_by_label("Supplier", exact=True).select_option("S1")
+        page.wait_for_function("""navigator.serviceWorker.controller &&
+            new URL(navigator.serviceWorker.controller.scriptURL).searchParams.has('v')""")
+        page.get_by_role("combobox", name="Supplier", exact=True).select_option("S1")
         page.get_by_label("No. faktur supplier").fill("INV-UJI")
+        metode = page.get_by_role("combobox", name="Metode pembayaran", exact=True)
+        expect(metode).to_have_value("TUNAI")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
+        metode.press("ArrowUp")
+        expect(metode).to_have_value("TUNAI")
+        metode.select_option(label="Transfer")
+        expect(metode).to_have_value("TRANSFER")
+        metode.select_option(label="Tunai")
+        expect(metode).to_have_value("TUNAI")
         page.get_by_label("Jenis pembayaran").select_option("TEMPO")
         page.get_by_label("Jatuh tempo").fill("2026-12-01")
+        page.get_by_label("Uang muka").fill("2000")
+        expect(page.get_by_label("Uang muka")).to_have_value("2.000")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
 
         jaringan_putus = True
         context.set_offline(True)
         expect(page.get_by_text("Mode offline", exact=True)).to_be_visible()
+        page.reload()
+        expect(metode).to_have_value("TRANSFER")
+        expect(page.get_by_label("Uang muka")).to_have_value("2.000")
         page.get_by_role("button", name="Scan dengan kamera").press("Enter")
         expect(page.get_by_label("Jumlah Teh Uji")).to_be_focused()
         assert page.evaluate("window.testCameraTrack.readyState") == "ended"
@@ -144,16 +224,44 @@ def test_pembelian(url):
         scan.focus()
         page.keyboard.type("0400638133390")
         page.keyboard.press("Enter")
-        expect(page.get_by_label("Jumlah Teh Uji")).to_be_focused()
-        page.keyboard.type("2")
+        jumlah = page.get_by_label("Jumlah Teh Uji")
+        harga = page.get_by_label("Harga beli Teh Uji")
+        potongan = page.get_by_label("Potongan Teh Uji")
+        expect(jumlah).to_be_focused()
+        for kolom in (jumlah, harga, potongan, page.get_by_label("Uang muka")):
+            expect(kolom).to_have_css("text-align", "right")
+        expect(scan).to_have_css("text-align", "start")
+        jumlah.fill("1,2345")
+        page.keyboard.press("Control+Enter")
+        expect(jumlah).to_have_attribute("aria-invalid", "true")
+        expect(page.get_by_role("button", name="Masukkan antrean")).to_have_count(0)
+        page.get_by_role("button", name="Tinjau faktur", exact=True).click()
+        expect(page.get_by_role("button", name="Masukkan antrean")).to_have_count(0)
+        jumlah.fill("1.234,5")
         page.keyboard.press("Enter")
-        expect(page.get_by_label("Harga beli Teh Uji")).to_be_focused()
+        expect(harga).to_be_focused()
+        expect(jumlah).to_have_value("1.234,5")
+        jumlah.fill("2")
         page.keyboard.press("Enter")
-        expect(page.get_by_label("Potongan Teh Uji")).to_be_focused()
-        page.keyboard.press("Control+A")
-        page.keyboard.type("5000")
+        expect(harga).to_be_focused()
+        expect(harga).to_have_value("36.000")
+        harga.evaluate("input => input.setSelectionRange(3, 3)")
+        page.keyboard.press("Backspace")
+        expect(harga).to_have_value("3.000")
+        harga.fill("36000")
+        expect(harga).to_have_value("36.000")
+        page.keyboard.press("Enter")
+        expect(potongan).to_be_focused()
+        potongan.evaluate("""input => {
+            const clipboardData = new DataTransfer();
+            clipboardData.setData('text/plain', 'Rp 5.000');
+            input.select();
+            input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+        }""")
+        expect(potongan).to_have_value("5.000")
         page.keyboard.press("Enter")
         expect(scan).to_be_focused()
+        expect(page.get_by_role("cell", name="Rp 67.000", exact=True)).to_have_css("text-align", "right")
         page.keyboard.press("Control+Enter")
         page.get_by_role("button", name="Masukkan antrean").press("Enter")
         expect(page.get_by_text("Menunggu", exact=True)).to_be_visible()
@@ -174,6 +282,8 @@ def test_pembelian(url):
         tab_lain.evaluate("window.dispatchEvent(new Event('online'))")
         expect(page.get_by_text("Tersinkron", exact=True)).to_be_visible(timeout=35_000)
         assert len(percobaan) >= 2 and len(resmi) == 1 and percobaan[0] == percobaan[1], percobaan
+        assert percobaan[0][1]["metode"] == "TRANSFER"
+        assert percobaan[0][1]["uang_muka"] == 2000
         assert percobaan[0][1]["baris"][0] == {
             "product_id": 42, "satuan": "BOX", "isi": "12", "qty": "2", "harga": 36000, "potongan": 5000
         }, percobaan
@@ -181,13 +291,75 @@ def test_pembelian(url):
 
         page.get_by_role("button", name="Hutang Supplier", exact=True).press("Enter")
         expect(page.get_by_role("heading", name="Saldo per supplier")).to_be_visible()
+        expect(page.get_by_role("cell", name="Rp 65.000", exact=True).first).to_have_css("text-align", "right")
         page.get_by_role("button", name="INV-UJI", exact=True).press("Enter")
+        expect(page.get_by_role("cell", name="Rp 36.000", exact=True)).to_have_css("text-align", "right")
         page.get_by_role("button", name="Catat pembayaran").press("Enter")
-        page.get_by_label("Nominal", exact=True).fill("17000")
+        nominal = page.get_by_label("Nominal", exact=True)
+        expect(nominal).to_have_css("text-align", "right")
+        expect(nominal).to_have_value("65.000")
+        nominal.fill("65001")
+        expect(nominal).to_have_attribute("aria-invalid", "true")
+        page.get_by_role("button", name="Konfirmasi", exact=True).press("Enter")
+        assert not pembayaran
+        nominal.fill("17000")
+        expect(nominal).to_have_value("17.000")
+        metode.press("ArrowDown")
+        expect(metode).to_have_value("TRANSFER")
         page.get_by_role("button", name="Konfirmasi", exact=True).press("Enter")
         expect(page.get_by_text("Pembayaran dicatat.", exact=True)).to_be_visible()
         assert pembayaran[0]["nominal"] == 17000
+        assert pembayaran[0]["metode"] == "TRANSFER"
         page.get_by_role("button", name="Tutup", exact=True).press("Enter")
+
+        page.get_by_role("button", name="Pembelian", exact=True).press("Enter")
+        page.get_by_role("tab", name="Riwayat").press("Enter")
+        page.get_by_role("checkbox", name="Perlu rekonsiliasi").press("Space")
+        cari = page.get_by_role("button", name="Cari", exact=True)
+        expect(cari).to_be_enabled()
+        cari.press("Enter")
+        expect(page.get_by_text("Saldo belum terverifikasi", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="INV-UJI", exact=True)).to_have_count(0)
+        page.get_by_role("button", name=legacy_no, exact=True).press("Enter")
+        expect(page.get_by_text("Rp 1.975.000,25", exact=True).last).to_be_visible()
+        expect(page.get_by_text("Belum terverifikasi", exact=True)).to_be_visible()
+        page.get_by_role("button", name="Tetapkan saldo awal").press("Enter")
+        aksi = page.get_by_role("dialog", name="Tetapkan saldo awal")
+        expect(aksi.get_by_label("Saldo awal", exact=True)).to_be_focused()
+        aksi.get_by_label("Saldo awal", exact=True).fill("1.000,25")
+        aksi.get_by_label("Referensi bukti").fill("BUKTI-1")
+        aksi.get_by_role("button", name="Konfirmasi").press("Enter")
+        expect(page.get_by_text("Saldo awal ditetapkan.", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Riwayat saldo awal")).to_be_visible()
+        page.get_by_role("button", name="Tutup", exact=True).press("Enter")
+        expect(page.get_by_text("Tidak ada faktur yang cocok.", exact=True)).to_be_visible()
+
+        page.get_by_role("button", name="Hutang Supplier", exact=True).press("Enter")
+        page.get_by_role("button", name=legacy_no, exact=True).press("Enter")
+        page.get_by_role("button", name="Catat pembayaran").press("Enter")
+        aksi = page.get_by_role("dialog", name="Catat pembayaran")
+        aksi.get_by_label("Nominal", exact=True).fill("100,15")
+        aksi.get_by_role("button", name="Konfirmasi").press("Enter")
+        expect(page.get_by_text("Pembayaran dicatat.", exact=True)).to_be_visible()
+        faktur_lama = page.get_by_role("dialog", name=f"Faktur {legacy_no}")
+        expect(faktur_lama.get_by_text("Rp 900,1", exact=True)).to_be_visible()
+        page.get_by_role("button", name="Koreksi saldo awal").press("Enter")
+        aksi = page.get_by_role("dialog", name="Koreksi saldo awal")
+        expect(aksi.get_by_label("Tanggal rekonsiliasi")).to_have_attribute("readonly", "")
+        aksi.get_by_label("Saldo awal", exact=True).fill("900,50")
+        aksi.get_by_label("Referensi bukti").fill("BUKTI-2")
+        aksi.get_by_label("Alasan koreksi").fill("Koreksi catatan awal")
+        aksi.get_by_role("button", name="Konfirmasi").press("Enter")
+        expect(page.get_by_text("Koreksi saldo awal dicatat.", exact=True)).to_be_visible()
+        expect(page.get_by_text("Koreksi catatan awal", exact=True)).to_be_visible()
+        page.get_by_role("button", name="Balik", exact=True).press("Enter")
+        aksi = page.get_by_role("dialog", name="Balik pembayaran")
+        aksi.get_by_label("Alasan", exact=True).fill("Salah pembayaran")
+        aksi.get_by_role("button", name="Konfirmasi").press("Enter")
+        expect(page.get_by_text("Pembayaran dibalik.", exact=True)).to_be_visible()
+        expect(page.get_by_text("Sudah dibalik", exact=True)).to_be_visible()
+        page.get_by_role("button", name="Tutup", exact=True).press("Enter")
+
         page.get_by_role("button", name="Keluar", exact=True).press("Enter")
         page.get_by_label("Username").fill("petugas")
         page.get_by_label("Password", exact=True).fill("test12345")
@@ -202,4 +374,4 @@ def test_pembelian(url):
 
 if __name__ == "__main__":
     test_pembelian(sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:4187")
-    print("Chromium: scan kamera offline, input keyboard, reload, retry, pembayaran dan isolasi akun lulus.")
+    print("Chromium: scan kamera offline, keyboard, pembayaran Web, rekonsiliasi, koreksi, pembalikan dan isolasi akun lulus.")

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cariBarang, payloadBeli, totalBeli, type BarangBeli, type DrafBeli } from './pembelian';
+import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, bacaRupiahPecahan, cariBarang, formatJumlahBeli, payloadBeli, rpBeli, totalBeli,
+  type BarangBeli, type DrafBeli } from './pembelian';
 
 const barang: BarangBeli[] = [
   { id: 1, kode: 'TEH', nama: 'Teh', beli: '3000', satuan: [
@@ -22,6 +23,34 @@ function draf(): DrafBeli {
 }
 
 describe('pembelian web', () => {
+  it('mempertahankan presisi saldo faktur Backoffice dan menerima nol', () => {
+    expect(bacaRupiahPecahan('1.975.000,25')).toBe('1975000.25');
+    expect(bacaRupiahPecahan('0,00')).toBe('0');
+    expect(bacaRupiahPecahan('9.000.000.000.000.000,01')).toBe('9000000000000000.01');
+    expect(bacaRupiahPecahan('10,000')).toBeNull();
+    expect(bacaRupiahPecahan('-1')).toBeNull();
+  });
+  it('membedakan titik ribuan di input dari titik desimal pada draf lama', () => {
+    expect(bacaJumlahBeli('1.234')).toBe('1234');
+    expect(bacaJumlahBeli('1.234,5')).toBe('1234.5');
+    expect(angkaQty('1.234')).toBe('1.234');
+    expect(bacaJumlahBeli('1,234')).toBe('1.234');
+    expect(bacaJumlahBeli('1,2345')).toBeNull();
+    expect(bacaJumlahBeli('12.50')).toBeNull();
+    expect(formatJumlahBeli('1234.5625')).toBe('1.234,5625');
+  });
+
+  it('menerima rupiah bulat bertitik dan mempertahankan presisi tampilan historis', () => {
+    expect(bacaRupiahBeli('12500')).toBe(12500);
+    expect(bacaRupiahBeli('12.500')).toBe(12500);
+    expect(bacaRupiahBeli('Rp\u00a012.500')).toBe(12500);
+    expect(bacaRupiahBeli('12.50')).toBeNull();
+    expect(bacaRupiahBeli('12.500,50')).toBeNull();
+    expect(bacaRupiahBeli('9.000.000.000.000.001')).toBeNull();
+    expect(rpBeli(12500)).toBe('Rp 12.500');
+    expect(rpBeli('-12345678901234567890.2500')).toBe('-Rp 12.345.678.901.234.567.890,25');
+  });
+
   it('mempertahankan nol awal dan menawarkan semua hasil persis yang ambigu', () => {
     expect(cariBarang(barang, '00042').persis.map(p => p.satuan.satuan)).toEqual(['BOX', 'PCS']);
     expect(cariBarang(barang, '42').persis).toEqual([]);

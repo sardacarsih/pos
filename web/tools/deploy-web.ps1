@@ -33,7 +33,7 @@ function Invoke-Remote([string]$Skrip) {
 }
 
 # Smoke publik: halaman utama valid, aset JS yang dirujuk terlayani, index.html tidak di-cache.
-function Test-Situs {
+function Test-Situs([string]$VersiWorker) {
     $r = Invoke-WebRequest "$Url/" -UseBasicParsing -TimeoutSec 20
     if ($r.StatusCode -ne 200 -or $r.Content -notmatch '_app/') { throw "index.html di $Url tidak valid (status $($r.StatusCode))" }
     $js = [regex]::Match($r.Content, '/_app/immutable/[^"''\s]+\.js').Value
@@ -41,6 +41,14 @@ function Test-Situs {
     $a = Invoke-WebRequest "$Url$js" -UseBasicParsing -TimeoutSec 20
     if ($a.StatusCode -ne 200) { throw "aset $js status $($a.StatusCode)" }
     if ("$($r.Headers['Cache-Control'])" -notmatch 'no-cache') { Write-Warning "Cache-Control index.html bukan no-cache: '$($r.Headers['Cache-Control'])'" }
+    if ($VersiWorker) {
+        $workerUrl = "$Url/service-worker.js?v=" + [Uri]::EscapeDataString($VersiWorker)
+        $sw = Invoke-WebRequest $workerUrl -UseBasicParsing -TimeoutSec 20
+        if ($sw.StatusCode -ne 200 -or "$($sw.Headers['Content-Type'])" -notmatch '(java|ecma)script' -or $sw.Content -notmatch 'kopkar-shell-') {
+            throw 'Service worker tidak terlayani sebagai JavaScript POS Web.'
+        }
+        if ($sw.Content -notmatch [Regex]::Escape($VersiWorker)) { throw 'Versi service worker berbeda dari build kandidat.' }
+    }
     "Smoke OK: $Url/ dan $js"
 }
 
@@ -81,6 +89,9 @@ if ($LASTEXITCODE) { throw 'bun run build gagal' }
 
 $root = (Resolve-Path 'build').Path
 if (-not (Test-Path (Join-Path $root 'index.html'))) { throw 'build/index.html tidak ada' }
+if (-not (Test-Path (Join-Path $root 'service-worker.js'))) { throw 'build/service-worker.js tidak ada' }
+$versiWorker = (Get-Content -LiteralPath (Join-Path $root '_app/version.json') -Raw | ConvertFrom-Json).version
+if (-not $versiWorker) { throw 'Build web tidak memiliki versi service worker' }
 $files = @(Get-ChildItem $root -Recurse -File)
 $manifest = foreach ($f in $files) {
     $rel = $f.FullName.Substring($root.Length).TrimStart('\').Replace('\', '/')
@@ -148,7 +159,7 @@ if ((Invoke-Remote $gabung) -notmatch '^OK') { throw 'gagal menggabungkan chunk 
 $hasil = Tukar-Folder $baru $Dir $lama
 if ($hasil -notmatch '^OK') { throw "Tukar folder gagal ($hasil); situs hidup tidak berubah atau sudah dikembalikan" }
 try {
-    Test-Situs
+    Test-Situs -VersiWorker $versiWorker
 } catch {
     Write-Warning "Smoke gagal: $($_.Exception.Message). Mengembalikan versi sebelumnya..."
     $r = Tukar-Folder $lama $Dir $baru

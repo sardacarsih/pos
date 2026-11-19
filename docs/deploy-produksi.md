@@ -30,9 +30,10 @@ Hasil harus `SIAP`. Latih skrip tanpa menyentuh server:
 Deploy memakai **working tree**, bukan commit: pastikan yang dideploy sudah di-commit dan di-push (preflight memperingatkan).
 
 ### Migrasi database
-Tidak perlu `pos-api migrate` untuk rilis ini: `rust-api/src/db/schema.sql` tidak berubah sejak `3b0babd`, dan fitur baru
-(stok habis, opname, harga <= HPP, rincian penjualan, lencana) memakai tabel `POS_*` dan `MOB_IDEMPOTENCY` yang sudah ada.
-Jalankan `pos-api migrate` di server **hanya** bila rilis berikutnya mengubah `schema.sql`.
+Periksa migrasi pada biner kandidat sebelum mengganti layanan. Jika Oracle produksi sudah punya skema dasar dan migrasi desktop,
+jalankan `pos-api migrate-pembelian` untuk menyiapkan tabel dan trigger rekonsiliasi faktur BackOffice. Gunakan koneksi pemilik
+tabel pembelian dan uji pencatatan saldo awal, koreksi, serta pembayaran di Oracle staging terlebih dahulu.
+Untuk pemasangan yang masih memerlukan migrasi sistem lengkap, jalankan `pos-api migrate --skip-admin`.
 
 ## 2. Deploy API
 
@@ -52,7 +53,9 @@ server: `cd D:/be-rustapi; .\pos-api-release.exe selftest`. Lewati dengan `-Lewa
 detik: lakukan di luar jam transaksi puncak. `.env`, kredensial FCM, dan skema DB tidak disentuh.
 
 ### Smoke test API (read-only dulu)
-SQL baru belum pernah diuji terhadap Oracle sungguhan, jadi mulai dari endpoint GET. Login sebagai ADMIN, lalu:
+
+Pemeriksaan kandidat memvalidasi trigger perlindungan faktur lama serta query riwayat dan hutang. Periksa daftar dan detail faktur sebelum membuka pencatatan pembayaran di produksi.
+Mulai pemeriksaan produksi dengan endpoint GET. Login sebagai ADMIN, lalu:
 
 1. `GET https://api.kopkarksk.com/health` = 200.
 2. `GET /api/v1/admin/dashboard` memuat `kemarin`, `tren` (7 hari), `perhatian`.
@@ -86,12 +89,10 @@ topbar (chip periode, menu pengguna), lencana Stok habis/Harga <= HPP; menu Stok
 (`mobile\tools\rilis-apk.ps1`). API tetap melayani APK lama tanpa masalah.
 
 ## 5. Rollback
-- **API**: otomatis bila health gagal. Manual (di server): 
-  `Stop-Service KopkarPosApi; Copy-Item D:/be-rustapi/pos-api-release.prev.exe D:/be-rustapi/pos-api-release.exe -Force; Start-Service KopkarPosApi`,
-  lalu cocokkan `Get-FileHash` dengan sha256 yang dicatat saat preflight. Tidak ada migrasi, jadi skema tidak terpengaruh;
-  dokumen SO yang sudah dibuat tetap ada.
-- **Web**: `.\web\tools\deploy-web.ps1 -Rollback` (menukar `admin-web.lama` kembali; versi yang baru dibatalkan disimpan
-  sebagai `admin-web.baru` sampai deploy berikutnya).
+Jika rollback diperlukan setelah saldo faktur BackOffice diverifikasi, pertahankan tabel rekonsiliasi, riwayat saldo, jurnal pembayaran, dan trigger perlindungannya. Tunda pencatatan pembayaran faktur BackOffice sampai API dan Web yang mendukung rekonsiliasi tersedia kembali, lalu cocokkan saldo berdasarkan jurnal.
+
+- **API** dapat dipulihkan dengan biner sebelumnya yang mendukung akun `PEMBELIAN`. Hentikan layanan, ganti biner dengan salinan `pos-api-release.prev.exe`, jalankan layanan, lalu cocokkan SHA-256 dengan hasil preflight dan cek health.
+- **Web** dipulihkan dengan `./web/tools/deploy-web.ps1 -Rollback`. Minta operator memuat ulang saat online, lalu cocokkan antrean pembelian, saldo faktur, dan pembayaran sebelum melanjutkan aktivitas.
 
 ## 6. Catatan teknis skrip
 `powershell -Command -` membaca stdin baris demi baris seperti konsol: blok yang melintasi beberapa baris baru dijalankan

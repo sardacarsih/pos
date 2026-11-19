@@ -4,8 +4,9 @@
   import Camera from '@lucide/svelte/icons/camera';
   import ScanBarcode from '@lucide/svelte/icons/scan-barcode';
   import Trash2 from '@lucide/svelte/icons/trash-2';
-  import { brutoBaris, cariBarang, cocokBarcode, metodeBayar, payloadBeli, rpBeli, totalBeli,
+  import { brutoBaris, cariBarang, cocokBarcode, formatJumlahBeli, metodeBayar, payloadBeli, rpBeli, totalBeli,
     type DrafBeli, type PilihanBarang, type ReferensiBeli } from './pembelian';
+  import { inputAngkaPembelian } from './inputAngkaPembelian';
 
   export let draf: DrafBeli;
   export let referensi: ReferensiBeli;
@@ -20,6 +21,7 @@
   let pilihanAktif = -1;
   let scanInput: HTMLInputElement;
   let tabel: HTMLTableElement;
+  let form: HTMLFormElement;
   let konfirmasi: HTMLDialogElement;
   let dialogKamera: HTMLDialogElement;
   let video: HTMLVideoElement;
@@ -41,6 +43,12 @@
   $: barangAktif = new Map(referensi.barang.map(p => [p.id, p]));
 
   function simpan() { dispatch('simpan', draf); }
+
+  function simpanInput(e: Event) {
+    // Bind Svelte pada select diperbarui saat change, setelah event input.
+    if (!(e.target instanceof HTMLSelectElement)) simpan();
+  }
+
   onDestroy(hentikanKamera);
 
   function hentikanKamera() {
@@ -121,6 +129,7 @@
   function pindahKolom(e: KeyboardEvent, i: number, kolom?: string) {
     if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
+    if (!(e.currentTarget as HTMLInputElement).reportValidity()) return;
     if (kolom) tabel.querySelector<HTMLInputElement>(`[data-baris="${i}"] [data-kolom="${kolom}"]`)?.focus();
     else scanInput.focus();
   }
@@ -191,6 +200,7 @@
   function tinjau() {
     if (menyimpan || konfirmasi.open) return;
     galat = '';
+    if (!form.reportValidity()) return;
     try {
       payloadBeli(draf);
       if (supplierLama) throw new Error('Pilih supplier yang masih aktif.');
@@ -212,7 +222,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Ctrl+Enter berlaku dari setiap kolom form) -->
-<form aria-label="Input pembelian" on:input={simpan} on:change={simpan} on:keydown={shortcut} on:submit|preventDefault={tinjau}>
+<form aria-label="Input pembelian" bind:this={form} on:input={simpanInput} on:change={simpan} on:keydown={shortcut} on:submit|preventDefault={tinjau}>
   <div class="beli-layout">
     <div class="beli-kolom">
       <section class="panel beli-panel">
@@ -261,7 +271,7 @@
               <li role="option" id={'beli-pilihan-' + i} aria-selected={i === pilihanAktif}>
                 <button type="button" tabindex="-1" on:pointerdown|preventDefault={() => {}} on:click={() => tambah(p)}>
                   <strong>{p.produk.nama}</strong>
-                  <span>{p.produk.kode} · {p.satuan.satuan}{p.satuan.isi !== '1' ? ' × ' + p.satuan.isi : ''}</span>
+                  <span>{p.produk.kode} · {p.satuan.satuan}{Number(p.satuan.isi) !== 1 ? ' × ' + formatJumlahBeli(p.satuan.isi) : ''}</span>
                 </button>
               </li>
             {/each}
@@ -272,27 +282,33 @@
         <div class="sr-only" role="status">{pesan}</div>
         <div class="beli-gulir">
           <table class="beli-tabel beli-grid-barang" bind:this={tabel}>
-            <thead><tr><th>Barang / satuan</th><th>Jumlah</th><th>Harga beli</th><th>Potongan</th><th>Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
+            <thead><tr><th>Barang / satuan</th><th class="beli-angka">Jumlah</th><th class="beli-angka">Harga beli</th><th class="beli-angka">Potongan</th><th class="beli-angka">Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
             <tbody>
               {#each draf.baris as b, i (b.id)}
                 {@const bruto = brutoBaris(b)}
                 {@const item = barangAktif.get(b.product_id)}
                 <tr data-baris={i}>
                   <th scope="row">
-                    <strong>{b.nama}</strong><small>{b.kode} · {b.satuan} × {b.isi}</small>
+                    <strong>{b.nama}</strong><small>{b.kode} · {b.satuan} × {formatJumlahBeli(b.isi)}</small>
                     {#if !item?.satuan.some(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi))}
                       {#if item}
                         <select aria-label={'Pilih ulang satuan ' + b.nama} value="" on:change={(e) => pilihUlang(i, e.currentTarget.value)}>
                           <option value="">Pilih ulang satuan</option>
-                          {#each item.satuan as s}<option value={s.satuan}>{s.satuan} × {s.isi}</option>{/each}
+                          {#each item.satuan as s}<option value={s.satuan}>{s.satuan} × {formatJumlahBeli(s.isi)}</option>{/each}
                         </select>
                         <small>Periksa ulang harga per satuan.</small>
                       {:else}<small>Barang sudah tidak tersedia</small>{/if}
                     {/if}
                   </th>
-                  <td><input aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" bind:value={b.qty} on:keydown={(e) => pindahKolom(e, i, 'harga')} /></td>
-                  <td><input aria-label={'Harga beli ' + b.nama} type="number" min="1" step="1" inputmode="numeric" data-kolom="harga" bind:value={b.harga} on:keydown={(e) => pindahKolom(e, i, 'potongan')} /></td>
-                  <td><input aria-label={'Potongan ' + b.nama} type="number" min="0" step="1" inputmode="numeric" data-kolom="potongan" bind:value={b.potongan} on:keydown={(e) => pindahKolom(e, i)} /></td>
+                  <td><input class="beli-angka" aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" required
+                    use:inputAngkaPembelian={{ jenis: 'jumlah', nilai: b.qty, ubah: nilai => b.qty = nilai }}
+                    on:keydown={(e) => pindahKolom(e, i, 'harga')} /></td>
+                  <td><input class="beli-angka" aria-label={'Harga beli ' + b.nama} inputmode="numeric" data-kolom="harga" required
+                    use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.harga, min: 1, ubah: nilai => b.harga = nilai }}
+                    on:keydown={(e) => pindahKolom(e, i, 'potongan')} /></td>
+                  <td><input class="beli-angka" aria-label={'Potongan ' + b.nama} inputmode="numeric" data-kolom="potongan"
+                    use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.potongan, ubah: nilai => b.potongan = nilai }}
+                    on:keydown={(e) => pindahKolom(e, i)} /></td>
                   <td class="beli-angka">{rpBeli(bruto === null ? null : bruto - (b.potongan ?? 0))}</td>
                   <td><button type="button" class="beli-hapus" aria-label={'Hapus ' + b.nama} on:click={() => hapus(i)}><Trash2 size={17} aria-hidden="true" /></button></td>
                 </tr>
@@ -313,11 +329,13 @@
         </label>
         {#if draf.jenis === 'TEMPO'}
           <label>Jatuh tempo <input type="date" min={draf.tanggal_faktur} bind:value={draf.jatuh_tempo} required /></label>
-          <label>Uang muka <input type="number" min="0" step="1" inputmode="numeric" bind:value={draf.uang_muka} /></label>
+          <label>Uang muka <input class="beli-angka" inputmode="numeric"
+            use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: draf.uang_muka, ubah: nilai => draf.uang_muka = nilai }} />
+          </label>
         {/if}
         {#if draf.jenis === 'TUNAI' || dibayar > 0}
-          <label>Metode
-            <select bind:value={draf.metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
+          <label>Metode pembayaran
+            <select aria-label="Metode pembayaran" bind:value={draf.metode}>{#each Object.entries(metodeBayar) as [kode, nama]}<option value={kode}>{nama}</option>{/each}</select>
           </label>
           <label>Referensi pembayaran <input maxlength="100" bind:value={draf.referensi} /></label>
         {/if}

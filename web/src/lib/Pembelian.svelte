@@ -181,7 +181,7 @@
             </button>
           </div>
           <div class="beli-gulir"><table class="beli-tabel">
-            <thead><tr><th>Faktur supplier</th><th>Total</th><th>Status</th><th>Tindakan</th></tr></thead>
+            <thead><tr><th>Faktur supplier</th><th class="beli-angka">Total</th><th>Status</th><th>Tindakan</th></tr></thead>
             <tbody>
               {#each [...antrean].reverse() as a (a.id)}
                 <tr><th scope="row">{a.draf.no_faktur}<small>{referensi?.supplier.find(s => s.kode === a.draf.supplier_id)?.nama ?? a.draf.supplier_id} · {a.draf.tanggal_terima}</small></th>

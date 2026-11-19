@@ -14,7 +14,7 @@ use axum::{
     Json, Router,
     extract::{ConnectInfo, DefaultBodyLimit, FromRequestParts},
     http::{HeaderMap, Request, request::Parts},
-    routing::{get, post, put},
+    routing::{get, patch, post, put},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -190,9 +190,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/admin/users", get(admin::list).post(admin::buat))
         .route("/api/v1/web/admin/users", get(admin::list_web).post(admin::buat_web))
         .route("/api/v1/pembelian/referensi", get(pembelian::referensi))
+        .route("/api/v1/supplier", get(pembelian::daftar_supplier).post(pembelian::buat_supplier))
+        .route("/api/v1/supplier/{kode}", patch(pembelian::ubah_supplier))
         .route("/api/v1/pembelian", get(pembelian::riwayat).post(pembelian::posting))
         .route("/api/v1/pembelian/{no}", get(pembelian::detail))
         .route("/api/v1/pembelian/{no}/batal", post(pembelian::batal))
+        .route("/api/v1/pembelian/{no}/saldo-awal", post(pembelian::saldo_awal).patch(pembelian::koreksi_saldo))
         .route("/api/v1/hutang-supplier", get(pembelian::hutang))
         .route("/api/v1/kas/akun", get(kas::akun).post(kas::akun_buat))
         .route("/api/v1/kas/akun/{id}", put(kas::akun_ubah))

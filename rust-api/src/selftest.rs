@@ -8,7 +8,8 @@ use chrono::{Datelike, Duration, NaiveDate};
 use oracle::Connection;
 
 use crate::{
-    db::{dashboard, faktur, katalog, opname, pembelian, user},
+    auth::Role,
+    db::{dashboard, faktur, katalog, opname, opt, pembelian, supplier, user},
     error::{AppError, AppResult},
 };
 
@@ -100,6 +101,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     }
     h.push(cek("proteksi dan seri pembelian web", || {
         pembelian::cek_guard(conn)?;
+        pembelian::legacy::cek_guard(conn)?;
         let lebar: i64 = conn.query_row_as(
             "SELECT NVL(MIN(CHAR_LENGTH), 0) FROM USER_TAB_COLUMNS
              WHERE TABLE_NAME IN ('POS_PEMBELIAN','POS_PEMBELIANDETAIL') AND COLUMN_NAME='NO_TRANSAKSI'", &[],
@@ -108,6 +110,60 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
             return Err(AppError::Internal(format!("NO_TRANSAKSI pembelian memerlukan 12 karakter, tersedia {lebar}")));
         }
         Ok("Kedua trigger valid dan seri web muat".into())
+    }));
+    let admin = pembelian::Operator {
+        id: 0,
+        username: String::new(),
+        nama: String::new(),
+        role: Role::Admin,
+    };
+    h.push(cek("detail faktur pembelian backoffice", || {
+        let nomor: Option<String> = opt(conn.query_row_as(
+            "SELECT b.NO_TRANSAKSI FROM POS_PEMBELIAN b
+             WHERE b.NO_TRANSAKSI IS NOT NULL AND b.TANGGAL IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM MOB_BELI w WHERE w.PURCHASE_ID=b.PURCHASE_ID)
+             ORDER BY b.TANGGAL DESC, b.NO_TRANSAKSI DESC FETCH FIRST 1 ROW ONLY",
+            &[],
+        ))?;
+        let Some(nomor) = nomor else {
+            return match pembelian::detail(conn, &admin, "~SELFTEST~") {
+                Err(AppError::NotFound(_)) => Ok("Belum ada faktur backoffice".into()),
+                Err(e) => Err(e),
+                Ok(_) => Err(AppError::Internal("Nomor uji faktur seharusnya tidak ditemukan".into())),
+            };
+        };
+        let detail = pembelian::detail(conn, &admin, &nomor)?;
+        let baris = detail["baris"].as_array().filter(|_| detail["asal"] == "BACKOFFICE")
+            .ok_or_else(|| AppError::Internal("Detail faktur backoffice tidak lengkap".into()))?;
+        Ok(format!("{nomor}, {} baris", baris.len()))
+    }));
+    let filter = pembelian::Filter {
+        q: None,
+        supplier: None,
+        dari: None,
+        sampai: None,
+        page: None,
+        terlambat: None,
+        rekonsiliasi: None,
+    };
+    h.push(cek("ringkasan hutang termasuk faktur Backoffice", || {
+        let hasil = pembelian::hutang(conn, &admin, &filter)?;
+        let jumlah = hasil["supplier"].as_array().map_or(0, Vec::len);
+        Ok(format!("{jumlah} supplier dengan saldo"))
+    }));
+    h.push(cek("riwayat petugas pembelian", || {
+        let petugas = pembelian::Operator { role: Role::Pembelian, ..admin };
+        pembelian::riwayat(conn, &petugas, &filter)?;
+        Ok("Kueri dengan filter petugas berhasil".into())
+    }));
+    h.push(cek("daftar supplier dan filter", || {
+        let semua = supplier::daftar(conn, &supplier::Filter::default())?;
+        let aktif = supplier::daftar(conn, &supplier::Filter {
+            q: semua.items.first().map(|s| s.kode.clone()),
+            aktif: Some(true),
+            page: Some(1),
+        })?;
+        Ok(format!("{} baris, {} cocok dengan filter", semua.items.len(), aktif.items.len()))
     }));
     h.push(cek("skema MOB_IDEMPOTENCY.OPERASI muat 'OPNAME_DOK'", || {
         let n: i64 = conn.query_row_as(
