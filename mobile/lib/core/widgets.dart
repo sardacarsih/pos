@@ -172,23 +172,34 @@ class GradientActionButton extends StatelessWidget {
           child: InkWell(
             onTap: onPressed,
             borderRadius: BorderRadius.circular(32),
-            child: SizedBox(
-              height: height,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, color: Colors.white),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: height),
+              // Skala font dibatasi agar label tetap muat di layar sempit / font sistem besar.
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.3,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, color: Colors.white),
+                        const SizedBox(width: 8),
+                      ],
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -548,5 +559,27 @@ class UserAvatar extends ConsumerWidget {
         ? null
         : ref.watch(fotoUserProvider((id: id, versi: fotoVersi!))).value,
     radius: radius,
+  );
+}
+
+/// Animasi "KOPKAR Loading Data..." untuk memuat area/halaman (spinner kecil di tombol tetap bawaan).
+class LoadingKopkar extends StatelessWidget {
+  const LoadingKopkar({super.key, this.ukuran = 120});
+  final double ukuran;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Memuat data',
+    child: Center(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ukuran * 0.2),
+        child: Image.asset(
+          'assets/loading.gif',
+          width: ukuran,
+          height: ukuran,
+          gaplessPlayback: true,
+        ),
+      ),
+    ),
   );
 }

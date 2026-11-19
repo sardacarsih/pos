@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
@@ -12,6 +14,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import 'kasir_page.dart';
 import 'struk_pdf.dart';
+import 'struk_bluetooth.dart';
 
 class BayarPage extends ConsumerStatefulWidget {
   const BayarPage({super.key});
@@ -439,7 +442,7 @@ class _PelangganPickerState extends ConsumerState<PelangganPicker> {
           ),
         );
       } else if (mounted) {
-        pesan(context, e.pesan);
+        pesan(context, e.pesan, galat: true);
       }
     }
   }
@@ -493,7 +496,7 @@ class _PelangganPickerState extends ConsumerState<PelangganPicker> {
           ),
         Expanded(
           child: _loading && _items.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? const LoadingKopkar()
               : RefreshIndicator(
                   onRefresh: _muat,
                   child: ListView(
@@ -555,6 +558,7 @@ class StrukPage extends ConsumerStatefulWidget {
 }
 
 class _StrukPageState extends ConsumerState<StrukPage> {
+  bool _mencetakBluetooth = false;
   @override
   void initState() {
     super.initState();
@@ -575,7 +579,52 @@ class _StrukPageState extends ConsumerState<StrukPage> {
         pesan(
           context,
           'Faktur sudah tersimpan, tetapi gagal dicetak. Coba lagi dari tombol Cetak.',
+          galat: true,
         );
+    }
+  }
+
+  Future<void> _cetakBluetooth() async {
+    if (_mencetakBluetooth) return;
+    setState(() => _mencetakBluetooth = true);
+    const layanan = LayananPrinterBluetooth();
+    try {
+      final daftar = await layanan.daftar();
+      if (!mounted) return;
+      if (daftar.isEmpty) {
+        pesan(context, 'Belum ada perangkat Bluetooth yang dipasangkan. Pasangkan printer di pengaturan Bluetooth Android.', galat: true);
+        return;
+      }
+      final printer = await showDialog<PrinterBluetooth>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Pilih printer Bluetooth'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final p in daftar)
+                  ListTile(
+                    title: Text(p.nama),
+                    subtitle: Text(p.alamat),
+                    onTap: () => Navigator.pop(context, p),
+                  ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal'))],
+        ),
+      );
+      if (printer == null || !mounted) return;
+      await layanan.cetak(printer, widget.faktur);
+      if (mounted) pesan(context, 'Nota dikirim ke printer.');
+    } on PlatformException catch (e) {
+      if (mounted) pesan(context, e.message ?? 'Gagal mengakses printer Bluetooth.', galat: true);
+    } catch (_) {
+      if (mounted) pesan(context, 'Gagal mengirim nota ke printer Bluetooth.', galat: true);
+    } finally {
+      if (mounted) setState(() => _mencetakBluetooth = false);
     }
   }
 
@@ -621,6 +670,7 @@ class _StrukPageState extends ConsumerState<StrukPage> {
                       '${f.tanggal} ${f.jam}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    Text('Kasir: ${f.identitasKasir}'),
                   ],
                 ),
               ),
@@ -696,6 +746,14 @@ class _StrukPageState extends ConsumerState<StrukPage> {
               ),
             ],
             const SizedBox(height: 16),
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
+              OutlinedButton.icon(
+                onPressed: _mencetakBluetooth ? null : _cetakBluetooth,
+                icon: const Icon(Icons.bluetooth),
+                label: Text(_mencetakBluetooth ? 'Menghubungkan printer...' : 'Cetak printer Bluetooth'),
+              ),
+              const SizedBox(height: 8),
+            ],
             OutlinedButton.icon(
               onPressed: _cetak,
               icon: const Icon(Icons.print_outlined),

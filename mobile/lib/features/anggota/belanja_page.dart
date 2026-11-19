@@ -238,7 +238,7 @@ class _BelanjaPageState extends ConsumerState<BelanjaPage> {
             ),
           Expanded(
             child: _loading && _items.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const LoadingKopkar()
                 : ListView(
                     controller: _scroll,
                     padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/providers.dart';
+import 'core/tema_mode.dart';
 import 'core/theme.dart';
+import 'core/update.dart';
+import 'core/widgets.dart';
 import 'features/admin/admin_dashboard_page.dart';
 import 'features/admin/admin_katalog_page.dart';
 import 'features/admin/admin_page.dart';
@@ -32,11 +37,14 @@ String? redirectUntuk(AuthState a, String loc) {
   return null;
 }
 
+final _navKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
   ref.listen(authProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
   return GoRouter(
+    navigatorKey: _navKey,
     initialLocation: '/mulai',
     refreshListenable: refresh,
     redirect: (ctx, st) =>
@@ -45,7 +53,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mulai',
         builder: (_, _) =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
+            const Scaffold(body: LoadingKopkar()),
       ),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/ganti', builder: (_, _) => const GantiPasswordPage()),
@@ -86,11 +94,82 @@ class KopkarApp extends ConsumerStatefulWidget {
   ConsumerState<KopkarApp> createState() => _KopkarAppState();
 }
 
-class _KopkarAppState extends ConsumerState<KopkarApp> {
+class _KopkarAppState extends ConsumerState<KopkarApp>
+    with WidgetsBindingObserver {
+  bool _sedangCek = false;
+  bool _menunggu = false;
+  String? _pushPending;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => ref.read(authProvider.notifier).pulihkan());
+    final push = ref.read(pushProvider);
+    push.onTap = (no) {
+      _pushPending = no;
+      _bukaNotifikasi();
+    };
+    Future.microtask(() async {
+      await push.initialize();
+      if (mounted) await push.sync(ref.read(authProvider).profil);
+    });
+    // Cek setelah sesi pulih (bukan di layar /mulai), sekali tiap login/pemulihan.
+    ref.listenManual(authProvider, (_, a) {
+      if (!a.memulihkan) {
+        _cekUpdate();
+        unawaited(push.sync(a.profil));
+        _bukaNotifikasi();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(pushProvider).onTap = null;
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed && !ref.read(authProvider).memulihkan) {
+      _cekUpdate();
+      unawaited(ref.read(pushProvider).sync(ref.read(authProvider).profil));
+    }
+  }
+
+  void _bukaNotifikasi() {
+    final state = ref.read(authProvider);
+    final no = _pushPending;
+    if (no == null || state.memulihkan || state.profil == null || state.profil!.gantiPassword) return;
+    _pushPending = null;
+    if (state.profil!.role != 'ANGGOTA') return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(routerProvider).go('/saya/faktur/${Uri.encodeComponent(no)}');
+    });
+  }
+
+  Future<void> _cekUpdate() async {
+    final ctx = _navKey.currentContext;
+    if (_sedangCek || ctx == null) return;
+    // Sedang di layar bayar/scan/struk (halaman di atas shell): jangan potong transaksi, coba lagi sebentar lagi.
+    if (_navKey.currentState?.canPop() ?? false) {
+      if (!_menunggu) {
+        _menunggu = true;
+        Future.delayed(const Duration(minutes: 1), () {
+          _menunggu = false;
+          if (mounted) _cekUpdate();
+        });
+      }
+      return;
+    }
+    _sedangCek = true;
+    try {
+      await tawarkanUpdate(ctx);
+    } finally {
+      _sedangCek = false;
+    }
   }
 
   @override
@@ -99,7 +178,7 @@ class _KopkarAppState extends ConsumerState<KopkarApp> {
       title: 'Kopkar Kusuma Lestari',
       theme: kopkarTheme(Brightness.light),
       darkTheme: kopkarTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(temaModeProvider),
       routerConfig: ref.watch(routerProvider),
     );
   }

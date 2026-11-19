@@ -93,7 +93,7 @@ class _AdminKategoriPageState extends ConsumerState<AdminKategoriPage> {
               ),
             ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingKopkar()
           : _error != null
           ? Center(
               child: Column(

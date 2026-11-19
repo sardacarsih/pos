@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api.dart';
 import '../../core/providers.dart';
+import '../../core/update.dart';
 import '../../core/widgets.dart';
 import '../admin/admin_produk_page.dart' show fotoPersegi;
+import 'changelog_page.dart';
 import 'foto_crop_page.dart';
 
 /// Profil akun sendiri (semua role): foto, nama tampilan, kontak, dan ganti password.
@@ -289,7 +292,7 @@ class _ProfilPageState extends ConsumerState<ProfilPage> {
         onPressed: () => Navigator.of(context).pop(),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingKopkar()
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
@@ -341,6 +344,27 @@ class _ProfilPageState extends ConsumerState<ProfilPage> {
                     ),
                   ],
                 ),
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: const Text('Riwayat versi'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const ChangelogPage()),
+                  ),
+                ),
+                if (!kIsWeb)
+                  ListTile(
+                    leading: const Icon(Icons.system_update_outlined),
+                    title: const Text('Cek pembaruan'),
+                    subtitle: FutureBuilder<PackageInfo>(
+                      future: PackageInfo.fromPlatform(),
+                      builder: (_, s) => Text(
+                        s.hasData
+                            ? 'Versi terpasang ${s.data!.version} (build ${s.data!.buildNumber})'
+                            : '',
+                      ),
+                    ),
+                    onTap: () => tawarkanUpdate(context, manual: true),
+                  ),
               ],
             ),
     );

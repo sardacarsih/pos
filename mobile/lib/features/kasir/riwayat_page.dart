@@ -145,7 +145,7 @@ class _RiwayatPageState extends ConsumerState<RiwayatPage> {
             child: RefreshIndicator(
               onRefresh: _muat,
               child: _loading && _items.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const LoadingKopkar()
                   : _error != null
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
