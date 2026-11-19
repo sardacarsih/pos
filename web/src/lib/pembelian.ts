@@ -1,3 +1,17 @@
+export type TabBeli = 'input' | 'antrean' | 'riwayat' | 'supplier' | 'hutang';
+
+/** Tab Pembelian per peran: hutang supplier hanya ADMIN (batas akses lama dipertahankan). */
+export function tabBeli(peran: string): { id: TabBeli; label: string }[] {
+  const tabs: { id: TabBeli; label: string }[] = [
+    { id: 'input', label: 'Input pembelian' },
+    { id: 'antrean', label: 'Antrean' },
+    { id: 'riwayat', label: 'Riwayat' },
+    { id: 'supplier', label: 'Supplier' }
+  ];
+  if (peran === 'ADMIN') tabs.push({ id: 'hutang', label: 'Hutang Supplier' });
+  return tabs;
+}
+
 export type Metode = 'TUNAI' | 'TRANSFER' | 'LAINNYA';
 export type Jenis = 'TUNAI' | 'TEMPO';
 export type Supplier = { kode: string; nama: string };

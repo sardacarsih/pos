@@ -2,20 +2,25 @@
   import { onMount, tick } from 'svelte';
   import CloudOff from '@lucide/svelte/icons/cloud-off';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+  import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+  import Inbox from '@lucide/svelte/icons/inbox';
+  import ReceiptText from '@lucide/svelte/icons/receipt-text';
+  import Truck from '@lucide/svelte/icons/truck';
+  import Scale from '@lucide/svelte/icons/scale';
   import type { User } from './types';
-  import { drafBaru, hariJakarta, rpBeli, totalBeli, type DrafBeli, type ReferensiBeli } from './pembelian';
+  import { drafBaru, hariJakarta, rpBeli, tabBeli, totalBeli, type DrafBeli, type ReferensiBeli, type TabBeli } from './pembelian';
   import { antrekanBeli, bacaAntreanBeli, bacaPembelian, ikutiAntrean, muatReferensiBeli, simpanDrafBeli, sinkronPembelian,
     type AntreanBeli } from './pembelianOffline';
   import PembelianInput from './PembelianInput.svelte';
   import PembelianRiwayat from './PembelianRiwayat.svelte';
+  import Supplier from './Supplier.svelte';
   import './pembelian.css';
 
   export let user: User;
   export let online: boolean;
-  type Tab = 'input' | 'antrean' | 'riwayat';
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'input', label: 'Input pembelian' }, { id: 'antrean', label: 'Antrean' }, { id: 'riwayat', label: 'Riwayat' }
-  ];
+  type Tab = TabBeli;
+  const IKON_TAB: Record<Tab, any> = { input: ClipboardList, antrean: Inbox, riwayat: ReceiptText, supplier: Truck, hutang: Scale };
+  $: tabs = tabBeli(user.role);
   let tab: Tab = 'input';
   let draf = drafBaru();
   let referensi: ReferensiBeli | undefined;
@@ -121,10 +126,13 @@
   }
 
   async function pilihTab(target: Tab) {
+    const dariSupplier = tab === 'supplier' && target !== 'supplier';
     nomorPilihan = '';
     tab = target;
     await tick();
     document.getElementById('beli-tab-' + target)?.focus();
+    // Perubahan supplier di tab Supplier harus tampak di katalog input tanpa remount.
+    if (dariSupplier && online) void segarkan();
   }
 
   function tombolTab(e: KeyboardEvent, i: number) {
@@ -151,7 +159,7 @@
     {#each tabs as t, i (t.id)}
       <button type="button" id={'beli-tab-' + t.id} role="tab" aria-selected={tab === t.id} aria-controls={'beli-panel-' + t.id}
         tabindex={tab === t.id ? 0 : -1} on:keydown={(e) => tombolTab(e, i)} on:click={() => pilihTab(t.id)}>
-        {t.label}{#if t.id === 'antrean' && perluDikirim}<span>{perluDikirim}</span>{/if}
+        <svelte:component this={IKON_TAB[t.id]} size={16} aria-hidden="true"/>{t.label}{#if t.id === 'antrean' && perluDikirim}<span>{perluDikirim}</span>{/if}
       </button>
     {/each}
   </div>
@@ -199,8 +207,12 @@
             </tbody>
           </table></div>
         </section>
-      {:else}
+      {:else if tab === 'riwayat'}
         <PembelianRiwayat {user} {online} nomorAwal={nomorPilihan} />
+      {:else if tab === 'supplier'}
+        <Supplier userId={user.id} {online} />
+      {:else if tab === 'hutang'}
+        <PembelianRiwayat {user} {online} hutang />
       {/if}
     {/if}
     </div>

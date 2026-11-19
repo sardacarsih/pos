@@ -1,6 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import Plus from '@lucide/svelte/icons/plus';
+  import Pencil from '@lucide/svelte/icons/pencil';
+  import Power from '@lucide/svelte/icons/power';
+  import IconButton from './IconButton.svelte';
   import { api, query } from './api';
   import './pembelian.css';
 
@@ -155,13 +158,12 @@
                 <td>{supplier.nama ?? '—'}</td>
                 <td><span class="beli-status" class:waspada={!supplier.aktif}>{supplier.aktif ? 'Aktif' : 'Nonaktif'}</span></td>
                 <td>
-                  <div class="actions">
-                    <button type="button" aria-label={'Ubah nama ' + supplier.kode} disabled={memuat}
-                      on:click={(e) => buka({ jenis: 'ubah', supplier }, e.currentTarget)}>Ubah nama</button>
-                    <button type="button" aria-label={(supplier.aktif ? 'Nonaktifkan ' : 'Aktifkan kembali ') + supplier.kode}
-                      disabled={memuat} on:click={(e) => buka({ jenis: 'status', supplier }, e.currentTarget)}>
-                      {supplier.aktif ? 'Nonaktifkan' : 'Aktifkan kembali'}
-                    </button>
+                  <div style="display:flex;gap:5px;justify-content:flex-end">
+                    <IconButton icon={Pencil} label={'Ubah nama ' + supplier.kode} hint="Ubah nama" disabled={memuat}
+                      on:click={(e) => buka({ jenis: 'ubah', supplier }, e.currentTarget)}/>
+                    <IconButton icon={Power} label={(supplier.aktif ? 'Nonaktifkan ' : 'Aktifkan kembali ') + supplier.kode}
+                      hint={supplier.aktif ? 'Nonaktifkan' : 'Aktifkan kembali'} disabled={memuat}
+                      on:click={(e) => buka({ jenis: 'status', supplier }, e.currentTarget)}/>
                   </div>
                 </td>
               </tr>

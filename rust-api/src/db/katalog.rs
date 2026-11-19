@@ -436,6 +436,154 @@ pub fn kategori_diizinkan(conn: &Connection, allowed: &[String]) -> AppResult<Ve
     })
 }
 
+fn nama_kategori_valid(nama: &str) -> AppResult<String> {
+    let nama = nama.trim();
+    if nama.is_empty() {
+        return Err(AppError::validation("Nama kategori wajib diisi"));
+    }
+    if nama.len() > 50 {
+        return Err(AppError::validation("Nama kategori maksimal 50 byte"));
+    }
+    if nama.chars().any(char::is_control) {
+        return Err(AppError::validation(
+            "Nama kategori mengandung karakter kontrol",
+        ));
+    }
+    Ok(nama.to_string())
+}
+
+fn kategori_ada(c: &Connection, id: &str) -> AppResult<Kategori> {
+    opt(c.query_row_named(
+        "SELECT TO_CHAR(KODE), KATEGORI FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :id",
+        &[("id", &id)],
+    ))?
+    .map(|r| -> AppResult<Kategori> {
+        Ok(Kategori {
+            id: r.get(0)?,
+            nama: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+        })
+    })
+    .transpose()?
+    .ok_or_else(|| AppError::NotFound("Kategori tidak ditemukan".into()))
+}
+
+fn kategori_jumlah_produk(c: &Connection, id: &str) -> AppResult<i64> {
+    Ok(c.query_row_named(
+        "SELECT COUNT(*) FROM POS_PRODUCT WHERE TO_CHAR(KATEGORI_ID) = :id",
+        &[("id", &id)],
+    )?
+    .get(0)?)
+}
+
+fn kategori_nama_dipakai(c: &Connection, nama: &str, kecuali: Option<&str>) -> AppResult<bool> {
+    let n: i64 = match kecuali {
+        Some(id) => c.query_row_named(
+            "SELECT COUNT(*) FROM POS_KATEGORI WHERE UPPER(KATEGORI) = UPPER(:nama) AND TO_CHAR(KODE) <> :id",
+            &[("nama", &nama), ("id", &id)],
+        )?.get(0)?,
+        None => c.query_row_named(
+            "SELECT COUNT(*) FROM POS_KATEGORI WHERE UPPER(KATEGORI) = UPPER(:nama)",
+            &[("nama", &nama)],
+        )?.get(0)?,
+    };
+    Ok(n > 0)
+}
+
+pub fn kategori_buat(c: &Connection, nama: &str) -> AppResult<Kategori> {
+    let nama = nama_kategori_valid(nama)?;
+    if kategori_nama_dipakai(c, &nama, None)? {
+        return Err(AppError::Conflict("Nama kategori sudah dipakai".into()));
+    }
+    let kode: i64 = c.query_row_as("SELECT NVL(MAX(KODE), 0) + 1 FROM POS_KATEGORI", &[])?;
+    c.execute_named(
+        "INSERT INTO POS_KATEGORI (KODE, KATEGORI) VALUES (:kode, :nama)",
+        &[("kode", &kode), ("nama", &nama)],
+    )
+    .map_err(|e| {
+        if e.oci_code() == Some(1) {
+            AppError::Conflict("Kode kategori bentrok, coba lagi".into())
+        } else {
+            e.into()
+        }
+    })?;
+    c.commit()?;
+    Ok(Kategori { id: kode.to_string(), nama })
+}
+
+pub fn kategori_ubah(c: &Connection, id: &str, nama: &str) -> AppResult<()> {
+    let nama = nama_kategori_valid(nama)?;
+    kategori_ada(c, id)?;
+    if kategori_nama_dipakai(c, &nama, Some(id))? {
+        return Err(AppError::Conflict("Nama kategori sudah dipakai".into()));
+    }
+    let hasil = (|| -> AppResult<()> {
+        let stmt = c.execute_named(
+            "UPDATE POS_KATEGORI SET KATEGORI = :nama WHERE TO_CHAR(KODE) = :id",
+            &[("nama", &nama), ("id", &id)],
+        )?;
+        if stmt.row_count()? == 0 {
+            return Err(AppError::NotFound("Kategori tidak ditemukan".into()));
+        }
+        c.commit()?;
+        Ok(())
+    })();
+    if hasil.is_err() {
+        let _ = c.rollback();
+    }
+    hasil
+}
+
+pub fn kategori_jejak(c: &Connection, id: &str) -> AppResult<(Kategori, i64)> {
+    let k = kategori_ada(c, id)?;
+    let n = kategori_jumlah_produk(c, id)?;
+    Ok((k, n))
+}
+
+pub fn kategori_hapus(c: &Connection, id: &str) -> AppResult<()> {
+    kategori_ada(c, id)?;
+    let n = kategori_jumlah_produk(c, id)?;
+    if n > 0 {
+        return Err(AppError::Conflict(format!(
+            "Kategori masih dipakai {n} produk. Pindahkan produk ke kategori lain dulu."
+        )));
+    }
+    let hasil = (|| -> AppResult<()> {
+        c.execute_named(
+            "DELETE FROM MOB_KATEGORI_TAMPIL WHERE KATEGORI_ID = :id",
+            &[("id", &id)],
+        )?;
+        let stmt = c.execute_named(
+            "DELETE FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :id",
+            &[("id", &id)],
+        )?;
+        if stmt.row_count()? == 0 {
+            return Err(AppError::NotFound("Kategori tidak ditemukan".into()));
+        }
+        c.commit()?;
+        Ok(())
+    })();
+    if hasil.is_err() {
+        let _ = c.rollback();
+    }
+    hasil
+}
+
+#[cfg(test)]
+mod tests_kategori {
+    use super::nama_kategori_valid;
+
+    #[test]
+    fn nama_kategori_trim_dan_batas_byte() {
+        assert_eq!(nama_kategori_valid("  Minuman ").unwrap(), "Minuman");
+        assert!(nama_kategori_valid("   ").is_err());
+        assert!(nama_kategori_valid(&"é".repeat(25)).is_ok());
+        assert!(nama_kategori_valid(&"é".repeat(26)).is_err());
+        assert!(nama_kategori_valid("a\nb").is_err());
+        // Huruf besar/kecil dipertahankan (data lama mixed-case).
+        assert_eq!(nama_kategori_valid("Alat Tulis").unwrap(), "Alat Tulis");
+    }
+}
+
 /// Aturan diskon qty: (MINQTY, POTONGAN per unit) untuk satu KODE_ITEM.
 pub fn potongan_qty(conn: &Connection, kode: &str) -> AppResult<Option<(i64, Decimal)>> {
     let sql = format!(
