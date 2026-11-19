@@ -48,11 +48,11 @@ namespace Kopkar.Shared
             return new PeriodeCek(PeriodeKode.Terbuka, string.Empty);
         }
 
-        public static PeriodeCek Cek(OracleConnection conn, OracleTransaction? transaction, DateTime tanggal)
+        public static PeriodeCek Cek(OracleConnection conn, OracleTransaction? transaction, DateTime tanggal, string? statusAnggota = null)
         {
             string sql = $@"SELECT PERIODE, REMISE1, REMISE2,
                                    TO_DATE(R1DARI, {Tgl}), TO_DATE(R1SAMPAI, {Tgl}),
-                                   TO_DATE(R2DARI, {Tgl}), TO_DATE(R2SAMPAI, {Tgl})
+                                   TO_DATE(R2DARI, {Tgl}), TO_DATE(R2SAMPAI, {Tgl}), BULANAN
                             FROM POS_PERIODE
                             WHERE :tgl BETWEEN TO_DATE(BDARI, {Tgl}) AND TO_DATE(BSAMPAI, {Tgl})
                             ORDER BY PERIODE DESC FETCH FIRST 1 ROWS ONLY";
@@ -71,6 +71,11 @@ namespace Kopkar.Shared
                 int remise = PilihRemise(tanggal, D(3), D(4), D(5), D(6));
                 int kolom = remise == 1 ? 1 : 2;
                 tutup = r.IsDBNull(kolom) ? null : r.GetString(kolom);
+                if (string.Equals(statusAnggota?.Trim(), "BULANAN", StringComparison.OrdinalIgnoreCase) &&
+                    !r.IsDBNull(7) && string.Equals(r.GetString(7).Trim(), "Y", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new PeriodeCek(PeriodeKode.Tutup, $"Periode bulanan {periode} telah ditutup.");
+                }
             }
 
             int? max;
@@ -100,9 +105,9 @@ namespace Kopkar.Shared
         }
 
         /// <summary>Lempar exception bila periode tidak terbuka (dipakai saat simpan faktur, dalam transaksi yang sama).</summary>
-        public static void Pastikan(OracleConnection conn, OracleTransaction? transaction, DateTime tanggal)
+        public static void Pastikan(OracleConnection conn, OracleTransaction? transaction, DateTime tanggal, string? statusAnggota = null)
         {
-            var cek = Cek(conn, transaction, tanggal);
+            var cek = Cek(conn, transaction, tanggal, statusAnggota);
             if (!cek.Terbuka)
                 throw new InvalidOperationException($"{cek.Judul}: {cek.Pesan} Transaksi tidak dapat dilakukan. {HubungiAdmin}");
         }
