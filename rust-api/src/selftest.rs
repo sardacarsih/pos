@@ -271,6 +271,10 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         let v = persediaan::valuasi(conn, None, awal, hari)?;
         Ok(format!("{} produk, nilai {}, tanpa HPP {}, {} kategori", v.total_produk, v.total_nilai, v.tanpa_hpp, v.per_kategori.len()))
     }));
+    h.push(cek("valuasi persediaan per item", || {
+        let h = persediaan::valuasi_item(conn, None, awal, hari, 1, 50)?;
+        Ok(format!("{} item pada halaman pertama, ada_lagi={}", h.items.len(), h.ada_lagi))
+    }));
     h.push(cek("stok minimum (daftar + jumlah)", || {
         let (h, jumlah) = persediaan::stok_minimum(conn, None, None, awal, hari, 1, 5)?;
         let n = persediaan::jumlah_stok_minimum(conn, awal, hari)?;
