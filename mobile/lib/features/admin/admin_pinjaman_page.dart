@@ -220,6 +220,7 @@ class _AdminPinjamanPageState extends ConsumerState<AdminPinjamanPage>
         ),
       DropdownButtonFormField<String?>(
         initialValue: _status,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Status'),
         items: [
           const DropdownMenuItem(value: null, child: Text('Semua')),

@@ -120,6 +120,10 @@ void main() {
   testWidgets(
     'pengurus memverifikasi, tolak wajib alasan, dan laporan tampil',
     (t) async {
+      t.view.physicalSize = const Size(390, 844);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
       final api = FakeApi();
       await t.pumpWidget(
         ProviderScope(
