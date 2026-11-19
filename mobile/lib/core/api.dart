@@ -705,6 +705,31 @@ class ApiClient {
     return j['nomor_so'] as String? ?? '';
   }
 
+  /// Buat produk baru (kode item otomatis dari server). `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
+  Future<ProdukAdmin> buatProduk({
+    required String nama,
+    required String barcode,
+    required String satuan,
+    required String kategoriId,
+    required int harga,
+    required int beli,
+    required String idempotencyKey,
+  }) async => ProdukAdmin.fromJson(
+    await post(
+      '/api/v1/admin/produk',
+      body: {
+        'nama': nama,
+        'barcode': barcode,
+        'satuan': satuan,
+        'kategori_id': kategoriId,
+        'harga': harga,
+        'beli': beli,
+        'aktif': true,
+      },
+      headers: {'Idempotency-Key': idempotencyKey},
+    ) as Map<String, dynamic>,
+  );
+
   Future<ProdukAdmin> ubahProduk(
     int id, {
     required String nama,

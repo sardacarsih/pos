@@ -206,7 +206,7 @@ pub fn router(state: AppState) -> Router {
             get(admin::rekap_transaksi),
         )
         .route("/api/v1/admin/faktur/{no}", get(admin::faktur_admin))
-        .route("/api/v1/admin/produk", get(admin::produk_list))
+        .route("/api/v1/admin/produk", get(admin::produk_list).post(admin::produk_buat))
         .route("/api/v1/admin/produk/{id}", put(admin::produk_ubah).delete(admin::produk_hapus))
         .route("/api/v1/admin/produk/{id}/jejak", get(admin::produk_jejak))
         .route("/api/v1/admin/produk/{id}/satuan", get(admin::produk_satuan).put(admin::produk_satuan_ganti))

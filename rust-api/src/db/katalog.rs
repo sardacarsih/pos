@@ -977,6 +977,182 @@ pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64
     Ok((lama.harga, baru))
 }
 
+/// Aturan tambahan produk baru (sama dengan frmMasterBarang desktop): harga jual dan beli > 0, jual > beli.
+pub fn validasi_buat(p: &UbahProduk) -> AppResult<()> {
+    validasi_produk(p)?;
+    if p.harga <= 0 || p.beli <= 0 {
+        return Err(AppError::validation("Harga jual dan harga beli harus lebih dari 0"));
+    }
+    if p.harga <= p.beli {
+        return Err(AppError::validation("Harga jual harus lebih besar dari harga beli"));
+    }
+    Ok(())
+}
+
+/// Sidik isian produk: kunci idempotensi yang dipakai ulang dengan isian lain ditolak.
+fn hash_produk(p: &UbahProduk) -> String {
+    use sha2::{Digest, Sha256};
+    let s = format!(
+        "{}|{}|{}|{}|{}|{}",
+        p.nama.trim(),
+        p.barcode.trim(),
+        p.satuan.trim(),
+        p.kategori_id.trim(),
+        p.harga,
+        p.beli
+    );
+    Sha256::digest(s.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Trigger DB desktop menolak duplikat dengan ORA-20xxx berisi `DUPLIKAT_*`: jadikan 409, bukan 500.
+fn peta_duplikat(e: oracle::Error) -> AppError {
+    let m = e.to_string();
+    if m.contains("DUPLIKAT_NAMA_BARANG") {
+        AppError::Conflict("Nama barang sudah dipakai produk lain".into())
+    } else if m.contains("DUPLIKAT_BARCODE") {
+        AppError::Conflict("Barcode sudah dipakai produk lain".into())
+    } else if m.contains("DUPLIKAT_KODE_BARANG") {
+        AppError::Conflict("Kode barang sudah dipakai, coba lagi".into())
+    } else {
+        e.into()
+    }
+}
+
+/// Buat produk baru (kode item otomatis `KB-yy-nnnnn` dari urutan NOMOR_TRANSAKSI/BARANG yang dipakai desktop).
+/// Idempoten: kunci yang sama dengan isian sama mengembalikan produk yang sudah dibuat.
+pub fn buat_produk(conn: &Connection, user_id: i64, key: &str, p: &UbahProduk) -> AppResult<ProdukAdmin> {
+    validasi_buat(p)?;
+    let hash = hash_produk(p);
+    let hasil = (|| -> AppResult<ProdukAdmin> {
+        if let Some(rid) = super::opname::klaim_kunci(conn, user_id, "PRODUK_BARU", key, &hash)? {
+            let id: i64 = rid
+                .parse()
+                .map_err(|_| AppError::Internal("resource idempotensi produk tidak valid".into()))?;
+            return produk_admin_by_id(conn, id)?
+                .ok_or_else(|| AppError::NotFound("Produk hasil permintaan ini sudah dihapus".into()));
+        }
+        let kat = p.kategori_id.trim();
+        let n: i64 = conn.query_row_as_named(
+            "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
+            &[("k", &kat)],
+        )?;
+        if n == 0 {
+            return Err(AppError::validation("Kategori tidak dikenal"));
+        }
+        let barcode = p.barcode.trim();
+        if !barcode.is_empty() {
+            let n: i64 = conn.query_row_as_named(
+                "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b) + \
+                        (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b) FROM DUAL",
+                &[("b", &barcode)],
+            )?;
+            if n > 0 {
+                return Err(AppError::Conflict("Barcode sudah dipakai produk lain".into()));
+            }
+        }
+        let nama = p.nama.trim();
+        let n: i64 = conn.query_row_as_named(
+            "SELECT COUNT(*) FROM POS_PRODUCT WHERE UPPER(TRIM(PRODUCTNAME)) = UPPER(:n)",
+            &[("n", &nama)],
+        )?;
+        if n > 0 {
+            return Err(AppError::Conflict("Nama barang sudah dipakai produk lain".into()));
+        }
+        // Urutan kode dikunci sampai commit; cermin ke baris BARANG agar desktop melanjutkan dari sini.
+        let (hari, _) = super::faktur::sekarang(conn)?;
+        let terakhir: Option<String> = opt(conn.query_row_as_named::<Option<String>>(
+            "SELECT NOMOR FROM NOMOR_TRANSAKSI WHERE KODE = 'BARANG' FOR UPDATE",
+            &[],
+        ))?
+        .flatten();
+        let mut kode = crate::domain::nomor::kode_produk_berikutnya(terakhir.as_deref(), chrono::Datelike::year(&hari));
+        // Lewati kode yang sudah terpakai (mis. diketik manual di desktop).
+        for _ in 0..50 {
+            let ada: i64 = conn.query_row_as_named(
+                "SELECT COUNT(*) FROM POS_PRODUCT WHERE KODE_ITEM = :k",
+                &[("k", &kode)],
+            )?;
+            if ada == 0 {
+                break;
+            }
+            kode = crate::domain::nomor::kode_produk_berikutnya(Some(&kode), chrono::Datelike::year(&hari));
+        }
+        conn.execute_named(
+            "INSERT INTO POS_PRODUCT (KODE_ITEM, PRODUCTNAME, BARCODE, BELI, PRICE, SATUAN, KATEGORI_ID, AKTIF) \
+             VALUES (:kode, :nama, :barcode, :beli, :harga, :satuan, :kat, 'Y')",
+            &[
+                ("kode", &kode),
+                ("nama", &nama),
+                ("barcode", &barcode),
+                ("beli", &p.beli),
+                ("harga", &p.harga),
+                ("satuan", &p.satuan.trim()),
+                ("kat", &kat),
+            ],
+        )
+        .map_err(peta_duplikat)?;
+        conn.execute_named(
+            "MERGE INTO NOMOR_TRANSAKSI t USING (SELECT 'BARANG' AS KODE FROM DUAL) s ON (t.KODE = s.KODE) \
+             WHEN MATCHED THEN UPDATE SET NOMOR = :n WHEN NOT MATCHED THEN INSERT (KODE, NOMOR) VALUES ('BARANG', :n)",
+            &[("n", &kode)],
+        )?;
+        let id: i64 = conn.query_row_as_named(
+            "SELECT PRODUCTID FROM POS_PRODUCT WHERE KODE_ITEM = :k",
+            &[("k", &kode)],
+        )?;
+        conn.execute_named(
+            "UPDATE MOB_IDEMPOTENCY SET RESOURCE_ID = :r WHERE USER_ID = :u AND OPERASI = 'PRODUK_BARU' AND IDEMPOTENCY_KEY = :k",
+            &[("r", &id.to_string()), ("u", &user_id), ("k", &key)],
+        )?;
+        conn.commit()?;
+        produk_admin_by_id(conn, id)?
+            .ok_or_else(|| AppError::Internal("produk hilang setelah dibuat".into()))
+    })();
+    if hasil.is_err() {
+        let _ = conn.rollback(); // lepas kunci FOR UPDATE dan klaim idempotensi
+    }
+    hasil
+}
+
+#[cfg(test)]
+mod buat_tests {
+    use super::*;
+
+    fn p(harga: i64, beli: i64) -> UbahProduk {
+        UbahProduk {
+            nama: "Teh Botol".into(),
+            barcode: "".into(),
+            satuan: "PCS".into(),
+            kategori_id: "1".into(),
+            harga,
+            beli,
+            aktif: true,
+        }
+    }
+
+    #[test]
+    fn buat_valid() {
+        assert!(validasi_buat(&p(5000, 4000)).is_ok());
+    }
+
+    #[test]
+    fn buat_ditolak() {
+        assert!(validasi_buat(&p(4000, 4000)).is_err(), "jual <= beli");
+        assert!(validasi_buat(&p(3000, 4000)).is_err(), "jual < beli");
+        assert!(validasi_buat(&p(5000, 0)).is_err(), "beli nol");
+        assert!(validasi_buat(&p(0, 0)).is_err(), "harga nol");
+        let mut kosong = p(5000, 4000);
+        kosong.nama = "  ".into();
+        assert!(validasi_buat(&kosong).is_err(), "nama kosong");
+    }
+
+    #[test]
+    fn hash_produk_membedakan_isian() {
+        assert_eq!(hash_produk(&p(5000, 4000)), hash_produk(&p(5000, 4000)));
+        assert_ne!(hash_produk(&p(5000, 4000)), hash_produk(&p(5100, 4000)));
+    }
+}
+
 #[cfg(test)]
 mod jejak_tests {
     use super::*;
