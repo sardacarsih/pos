@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api.dart';
@@ -20,7 +21,9 @@ const labelStatusPinjaman = {
 
 /// Pinjaman tunai anggota: pinjaman aktif, status pengajuan + nomor antrian, form ajukan dengan simulasi, riwayat.
 class PinjamanPage extends ConsumerStatefulWidget {
-  const PinjamanPage({super.key});
+  /// true bila dibuka dari notifikasi (rute /saya/pinjaman), bukan dari tab shell.
+  const PinjamanPage({super.key, this.kembali = false});
+  final bool kembali;
   @override
   ConsumerState<PinjamanPage> createState() => _PinjamanPageState();
 }
@@ -153,6 +156,13 @@ class _PinjamanPageState extends ConsumerState<PinjamanPage> {
     final bisaAju = d != null && berjalan == null && d.aktif.isEmpty;
     return TropicalScaffold(
       title: 'Pinjaman',
+      leading: widget.kembali
+          ? IconButton(
+              tooltip: 'Kembali',
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => context.go('/saya'),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _muat,
         child: ListView(

@@ -22,7 +22,7 @@ pub fn migrate(c: &Connection) -> AppResult<usize> {
         let ddl: String = ddl.lines().filter(|l| !l.trim_start().starts_with("--")).collect::<Vec<_>>().join("\n");
         match c.execute(ddl.trim(), &[]) {
             Ok(_) => n += 1,
-            Err(e) if matches!(e.oci_code(), Some(955 | 1408)) => {}
+            Err(e) if matches!(e.oci_code(), Some(955 | 1408 | 1430)) => {}
             Err(e) => return Err(e.into()),
         }
     }
@@ -484,8 +484,48 @@ pub fn proses(c: &Connection, u: &Operator, id: i64, aksi: Aksi, key: &str, p: &
                 return cairkan(c, u, id, &nik, jumlah, tenor);
             }
         }
+        let rp = format!("Rp {}", ribuan(jumlah));
+        match aksi {
+            Aksi::Verifikasi => kabari(c, id, 1, &nik, &format!("Pengajuan pinjaman {rp} sudah diverifikasi dan menunggu persetujuan."))?,
+            Aksi::Setujui => {
+                let urut: i64 = c.query_row_as_named(
+                    "SELECT COUNT(*) FROM MOB_PINJAMAN_AJU q, (SELECT SETUJU_TGL t FROM MOB_PINJAMAN_AJU WHERE ID=:id) m
+                     WHERE q.STATUS='DISETUJUI' AND (q.SETUJU_TGL < m.t OR (q.SETUJU_TGL = m.t AND q.ID <= :id))",
+                    &[("id", &id)],
+                )?;
+                kabari(c, id, 2, &nik, &format!("Pengajuan pinjaman {rp} disetujui. Nomor antrian pencairan Anda: {urut}."))?
+            }
+            Aksi::Tolak => kabari(c, id, 3, &nik, &format!("Pengajuan pinjaman {rp} ditolak: {}", catatan.as_deref().unwrap_or("-")))?,
+            Aksi::Cairkan => {}
+        }
         Ok(id.to_string())
     })
+}
+
+/// 12345678 -> "12.345.678".
+fn ribuan(n: i64) -> String {
+    let s = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            out.push('.');
+        }
+        out.push(ch);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// Antre notifikasi push ke anggota dalam transaksi yang sama. ID negatif deterministik per (pengajuan, kejadian)
+/// agar tidak bentrok dengan SALE_ID penjualan; tag "PJ-<id>" membuat status terbaru mengganti notifikasi sebelumnya.
+fn kabari(c: &Connection, id: i64, kejadian: i64, nik: &str, pesan: &str) -> AppResult<()> {
+    let pesan: String = pesan.chars().take(250).collect();
+    match c.execute_named(
+        "INSERT INTO MOB_PUSH_QUEUE (SALE_ID,NO_TRANSAKSI,NIK,PESAN) VALUES (:id,:no,:nik,:p)",
+        &[("id", &-(id * 10 + kejadian)), ("no", &format!("PJ-{id}")), ("nik", &nik), ("p", &pesan)],
+    ) {
+        Err(e) if e.oci_code() == Some(1) => Ok(()),
+        r => r.map(|_| ()).map_err(Into::into),
+    }
 }
 
 fn tahap_sama() -> AppError {
@@ -548,6 +588,10 @@ fn cairkan(c: &Connection, u: &Operator, id: i64, nik: &str, jumlah: i64, tenor:
         ),
         &[("u", &u.id), ("n", &u.nama), ("no", &no), ("b", &at.bunga.to_string()), ("ang", &n(angsuran)), ("id", &id)],
     )?;
+    kabari(c, id, 4, nik, &format!(
+        "Pinjaman Rp {} sudah dicairkan ({no}). Angsuran Rp {}/bulan selama {tenor} bulan.",
+        ribuan(jumlah), ribuan(angsuran.round().to_i64().unwrap_or_default())
+    ))?;
     Ok(no)
 }
 
@@ -570,4 +614,16 @@ fn nomor_baru(c: &Connection, hari: NaiveDate) -> AppResult<String> {
         &[("n", &baru)],
     )?;
     Ok(baru)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn ribuan_pakai_titik() {
+        assert_eq!(super::ribuan(0), "0");
+        assert_eq!(super::ribuan(999), "999");
+        assert_eq!(super::ribuan(1000), "1.000");
+        assert_eq!(super::ribuan(3_000_000), "3.000.000");
+        assert_eq!(super::ribuan(-12_345), "-12.345");
+    }
 }
