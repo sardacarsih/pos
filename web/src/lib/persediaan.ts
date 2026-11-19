@@ -1,12 +1,13 @@
 // Helper murni module Persediaan: tab, rentang kartu stok, validasi penyesuaian (cermin server), label mutasi.
-export type TabSedia = 'kartu' | 'habis' | 'opname' | 'sesuai' | 'valuasi';
+export type TabSedia = 'kartu' | 'habis' | 'opname' | 'sesuai' | 'valuasi' | 'valuasi-item';
 
 export const TAB_SEDIA: { id: TabSedia; label: string }[] = [
   { id: 'kartu', label: 'Kartu stok' },
   { id: 'habis', label: 'Stok habis' },
   { id: 'opname', label: 'Stock opname' },
   { id: 'sesuai', label: 'Penyesuaian' },
-  { id: 'valuasi', label: 'Valuasi & alert' }
+  { id: 'valuasi', label: 'Valuasi & alert' },
+  { id: 'valuasi-item', label: 'Valuasi Item' }
 ];
 
 const POLA_TANGGAL = /^\d{4}-\d{2}-\d{2}$/;
