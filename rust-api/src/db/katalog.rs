@@ -230,11 +230,11 @@ pub fn produk_by_barcode_satuan(conn: &Connection, barcode: &str) -> AppResult<O
 }
 
 /// Ekspresi stok sistem (alias join dari `stok_join`): stok awal tahun + pembelian + selisih opname - penjualan - rusak.
-const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
+pub(crate) const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
 
 /// Join agregat stok per KODE_ITEM untuk `POS_PRODUCT p` (bind `:dari`/`:sampai`).
 /// `inl` = daftar bind IN untuk membatasi kode (satu halaman); None = semua produk.
-fn stok_join(inl: Option<&str>) -> String {
+pub(crate) fn stok_join(inl: Option<&str>) -> String {
     let rng = "TO_DATE(:dari,'YYYY-MM-DD') AND TO_DATE(:sampai,'YYYY-MM-DD')";
     let batas = |kcol: &str| inl.map(|i| format!(" AND {kcol} IN ({i})")).unwrap_or_default();
     let sub = |t: &str, kcol: &str, qcol: &str, tgl: &str| {

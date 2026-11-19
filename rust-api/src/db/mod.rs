@@ -8,6 +8,7 @@ pub mod kas;
 pub mod katalog;
 pub mod opname;
 pub mod pembelian;
+pub mod persediaan;
 pub mod pinjaman;
 pub mod profil;
 pub mod push;
