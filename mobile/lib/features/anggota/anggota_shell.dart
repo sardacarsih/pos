@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'belanja_page.dart';
 import 'dashboard_anggota_page.dart';
+import 'pinjaman_page.dart';
 import 'transaksi_saya_page.dart';
 
-/// Shell anggota: Dashboard (awal) · Belanja mandiri · Riwayat (Transaksi Saya).
+/// Shell anggota: Dashboard (awal) · Belanja mandiri · Riwayat (Transaksi Saya) · Pinjaman.
 class AnggotaShell extends StatefulWidget {
   const AnggotaShell({super.key});
   @override
@@ -37,6 +38,7 @@ class _AnggotaShellState extends State<AnggotaShell> {
             }),
           ),
           TransaksiSayaPage(key: ValueKey(_riwayat)),
+          const PinjamanPage(),
         ],
       ),
     ),
@@ -60,6 +62,11 @@ class _AnggotaShellState extends State<AnggotaShell> {
                 icon: Icon(Icons.receipt_long_outlined),
                 selectedIcon: Icon(Icons.receipt_long),
                 label: 'Riwayat',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                selectedIcon: Icon(Icons.account_balance_wallet),
+                label: 'Pinjaman',
               ),
             ],
           ),
