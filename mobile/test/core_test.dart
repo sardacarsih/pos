@@ -5,7 +5,13 @@ import 'package:kopkar_pos/core/models.dart';
 import 'package:kopkar_pos/core/providers.dart';
 import 'package:kopkar_pos/main.dart';
 
-Barang barang(int id, {int harga = 1000, int? stok}) => Barang.fromJson({
+Barang barang(
+  int id, {
+  int harga = 1000,
+  int? stok,
+  List<Map<String, dynamic>>? lain,
+}) => Barang.fromJson({
+  if (lain != null) 'satuan_lain': lain,
   'id': id,
   'kode': 'K$id',
   'barcode': 'B$id',
@@ -83,6 +89,38 @@ void main() {
       expect(parseLiterCenti('4,10'), 410);
       expect(parseLiterCenti('4.1'), 410);
       expect(parseLiterCenti('4,123'), isNull);
+    });
+
+    test('satuan berbeda = baris terpisah, harga dan kiriman per satuan', () {
+      final b = barang(
+        1,
+        harga: 5000,
+        stok: 100,
+        lain: [
+          {'satuan': 'BOX', 'isi': 12, 'harga': 55000, 'barcode': 'BX1'},
+        ],
+      );
+      final c = Cart()
+        ..tambah(b)
+        ..tambah(b, satuan: 'BOX', qty: 2)
+        ..tambah(b, satuan: 'BOX');
+      expect(c.lines.length, 2);
+      expect(c.lines[1].qty, 3);
+      expect(c.perkiraan, 5000 + 3 * 55000);
+      expect(c.toRequest()[0].containsKey('satuan'), isFalse);
+      expect(c.toRequest()[1]['satuan'], 'BOX');
+      // stok dibandingkan dalam satuan dasar: 3 box x 12 = 36 <= 100, tapi 9 box = 108 > 100
+      expect(c.peringatanStok(), isEmpty);
+      c.aturCenti(1, 900, satuan: 'BOX');
+      expect(c.peringatanStok().single, contains('BOX'));
+      c.ubahSatuan(c.lines[1], null); // gabung ke satuan dasar
+      expect(c.lines.length, 1);
+      expect(c.lines.single.qty, 10);
+    });
+
+    test('satuan tak dikenal jatuh ke satuan dasar', () {
+      final c = Cart()..tambah(barang(1), satuan: 'DUS');
+      expect(c.lines.single.satuan, isNull);
     });
 
     test('peringatan stok informatif', () {

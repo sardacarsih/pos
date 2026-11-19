@@ -159,7 +159,7 @@ namespace Penjualan
                      WHERE m.tanggal BETWEEN :StartDate AND :EndDate
                      GROUP BY d.kode_barang) purchases ON all_data.kode_item = purchases.kode_barang
                 LEFT JOIN
-                    (SELECT d.kode_barang, SUM(d.jumlah_barang) AS jumlah_barang
+                    (SELECT d.kode_barang, SUM(d.jumlah_barang * d.isi) AS jumlah_barang
                      FROM pos_penjualan_detail d
                      JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
                      WHERE m.tanggal BETWEEN :StartDate AND :EndDate

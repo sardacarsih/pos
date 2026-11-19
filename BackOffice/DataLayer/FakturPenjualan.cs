@@ -444,7 +444,7 @@ namespace BackOffice.DataLayer
                     WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_product_code
                     GROUP BY d.kode_barang) purchases ON all_data.kode_item = purchases.kode_barang
                 LEFT JOIN
-                    (SELECT d.kode_barang, SUM(d.jumlah_barang) AS jumlah_barang
+                    (SELECT d.kode_barang, SUM(d.jumlah_barang * d.isi) AS jumlah_barang
                     FROM pos_penjualan_detail d
                     JOIN pos_penjualan m ON m.no_transaksi = d.no_transaksi
                     WHERE m.tanggal BETWEEN :start_date AND :end_date AND d.kode_barang = :p_product_code

@@ -63,7 +63,7 @@ namespace Penjualan.DataLayer
 
             string query = @"SELECT NO_TRANSAKSI,BARIS,PRODUCT_ID,KODE_BARANG,BARCODE,
                               NAMA_BARANG,SATUAN,JUMLAH_BARANG,HPP,HARGA_BARANG,
-                              BRUTO,POTONGAN,TOTAL_HARGA
+                              ISI,BRUTO,POTONGAN,TOTAL_HARGA
                             FROM
                               POS_PENDING_DETAIL
                             WHERE
@@ -91,6 +91,7 @@ namespace Penjualan.DataLayer
                         JUMLAH_BARANG = Convert.ToDecimal(reader["JUMLAH_BARANG"]),
                         HARGA_BARANG = Convert.ToDecimal(reader["HARGA_BARANG"]),
                         HPP = Convert.ToDecimal(reader["HPP"]),
+                        ISI = Convert.ToDecimal(reader["ISI"]),
                         BRUTO = Convert.ToDecimal(reader["BRUTO"]),
                         POTONGAN = Convert.ToDecimal(reader["POTONGAN"]),
                         TOTAL_HARGA = Convert.ToDecimal(reader["TOTAL_HARGA"])
@@ -117,8 +118,8 @@ namespace Penjualan.DataLayer
                 conn.Execute(insertFakturJual_Master, faktur_header, transaction);
 
 
-                string insertFakturJual_Detail = "INSERT INTO POS_PENDING_DETAIL ( NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, JUMLAH_BARANG,HARGA_BARANG, HPP, BRUTO, POTONGAN, TOTAL_HARGA) " +
-                    "VALUES (:NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :JUMLAH_BARANG,:HARGA_BARANG, :HPP, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
+                string insertFakturJual_Detail = "INSERT INTO POS_PENDING_DETAIL ( NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, JUMLAH_BARANG,HARGA_BARANG, HPP, ISI, BRUTO, POTONGAN, TOTAL_HARGA) " +
+                    "VALUES (:NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :JUMLAH_BARANG,:HARGA_BARANG, :HPP, :ISI, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
 
                 foreach (var detail in ListItemsPenjualan)
                 {

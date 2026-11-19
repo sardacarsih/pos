@@ -440,7 +440,7 @@ namespace BackOffice.DataLayer
                     GROUP BY detail.kode_barang
                 ) purchases ON purchases.kode_barang = product.kode_item
                 LEFT JOIN (
-                    SELECT detail.kode_barang, SUM(detail.jumlah_barang) AS quantity
+                    SELECT detail.kode_barang, SUM(detail.jumlah_barang * detail.isi) AS quantity
                     FROM POS_PENJUALAN_DETAIL detail
                     JOIN POS_PENJUALAN header
                       ON header.no_transaksi = detail.no_transaksi

@@ -342,6 +342,9 @@ pub struct BarisReq {
     pub product_id: i64,
     #[serde(with = "rust_decimal::serde::arbitrary_precision")]
     pub qty: Decimal,
+    /// Satuan jual (kosong = satuan dasar produk; klien lama tidak mengirim).
+    #[serde(default)]
+    pub satuan: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -533,11 +536,20 @@ fn simpan_inner(
     let tunai = pel.nik == opsi.default_nik;
 
     // Gabungkan baris dengan produk sama (seperti keranjang desktop).
-    let mut gabung: Vec<(i64, Decimal)> = Vec::new();
+    let mut gabung: Vec<(i64, Option<String>, Decimal)> = Vec::new();
     for b in &req.baris {
-        match gabung.iter_mut().find(|(id, _)| *id == b.product_id) {
-            Some((_, q)) => *q += b.qty,
-            None => gabung.push((b.product_id, b.qty)),
+        let sat = b
+            .satuan
+            .as_deref()
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(str::to_uppercase);
+        match gabung
+            .iter_mut()
+            .find(|(id, st, _)| *id == b.product_id && *st == sat)
+        {
+            Some((_, _, q)) => *q += b.qty,
+            None => gabung.push((b.product_id, sat, b.qty)),
         }
     }
 
@@ -545,9 +557,14 @@ fn simpan_inner(
         p: katalog::Produk,
         qty: Decimal,
         pot: Decimal,
+        /// Satuan jual terpilih: nama, faktor ke satuan dasar, harga, HPP per satuan jual.
+        satuan: String,
+        isi: Decimal,
+        harga: Decimal,
+        hpp: Decimal,
     }
     let mut items: Vec<Item> = Vec::new();
-    for (pid, q) in gabung {
+    for (pid, sat, q) in gabung {
         if !calc::qty_valid(q.normalize()) || q.normalize().scale() > 2 {
             return Err(AppError::validation(
                 "Qty harus lebih dari 0, maksimal 1000, dan paling banyak 2 angka desimal",
@@ -560,14 +577,36 @@ fn simpan_inner(
                 format!("Barang {pid} tidak ditemukan atau tidak aktif"),
             )
         })?;
-        calc::harga_boleh_dijual(p.harga, p.hpp).map_err(|m| {
+        let (satuan, isi, harga) = match sat.filter(|x| *x != p.satuan.to_uppercase()) {
+            None => (p.satuan.clone(), Decimal::ONE, p.harga),
+            Some(nama) => {
+                let sj = katalog::satuan_jual(conn, pid, &nama)?.ok_or_else(|| {
+                    AppError::rule(
+                        "SATUAN_TIDAK_ADA",
+                        format!("Satuan {nama} tidak tersedia: {} {}", p.kode, p.nama),
+                    )
+                })?;
+                (sj.satuan, sj.isi, sj.harga)
+            }
+        };
+        let hpp = p.hpp * isi;
+        calc::harga_boleh_dijual(harga, hpp).map_err(|m| {
             AppError::rule("HARGA_TIDAK_VALID", format!("{m}: {} {}", p.kode, p.nama))
         })?;
+        // Potongan qty berlaku per satuan dasar: qty jual * ISI.
         let pot = match katalog::potongan_qty(conn, &p.kode)? {
-            Some((min, per_unit)) => potongan::diskon_qty(qty, min, per_unit),
+            Some((min, per_unit)) => potongan::diskon_qty(qty * isi, min, per_unit),
             None => Decimal::ZERO,
         };
-        items.push(Item { p, qty, pot });
+        items.push(Item {
+            p,
+            qty,
+            pot,
+            satuan,
+            isi,
+            harga,
+            hpp,
+        });
     }
 
     // Kontrol stok bila FIN_SETTINGS KONTROL_SALDO_QTY > 0.
@@ -575,9 +614,14 @@ fn simpan_inner(
         let kodes: Vec<String> = items.iter().map(|i| i.p.kode.clone()).collect();
         let awal = NaiveDate::from_ymd_opt(hari.year(), 1, 1).expect("1 Jan valid");
         let stok = katalog::stok_map(conn, &kodes, awal, hari)?;
+        // Stok dalam satuan dasar; baris produk sama beda satuan dijumlahkan.
+        let mut perlu: std::collections::HashMap<&str, Decimal> = std::collections::HashMap::new();
+        for i in &items {
+            *perlu.entry(i.p.kode.as_str()).or_default() += i.qty * i.isi;
+        }
         for i in &items {
             let ada = stok.get(&i.p.kode).copied().unwrap_or_default();
-            if i.qty > ada {
+            if perlu[i.p.kode.as_str()] > ada {
                 return Err(AppError::rule(
                     "STOK_KURANG",
                     format!(
@@ -593,7 +637,7 @@ fn simpan_inner(
         .iter()
         .map(|i| calc::Baris {
             qty: i.qty,
-            harga: i.p.harga,
+            harga: i.harga,
             potongan: i.pot,
         })
         .collect();
@@ -684,19 +728,21 @@ fn simpan_inner(
         d.add("kode", &it.p.kode);
         d.add("barcode", &it.p.barcode);
         d.add("nama", &it.p.nama);
-        d.add("satuan", &it.p.satuan);
-        d.add("hpp", it.p.hpp);
-        d.add("harga", it.p.harga);
+        d.add("satuan", &it.satuan);
+        d.add("hpp", it.hpp);
+        d.add("harga", it.harga);
+        d.add("isi", it.isi);
         d.add("qty", it.qty);
         d.add("bruto", br.bruto());
         d.add("pot", it.pot);
         d.add("total", br.total());
         let sql = format!(
-            "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP, HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA) \
-             VALUES (TO_NUMBER(:id), :no, TO_NUMBER(:baris), TO_NUMBER(:pid), :kode, :barcode, :nama, :satuan, {}, {}, {}, {}, {}, {})",
+            "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP, HARGA_BARANG, JUMLAH_BARANG, ISI, BRUTO, POTONGAN, TOTAL_HARGA) \
+             VALUES (TO_NUMBER(:id), :no, TO_NUMBER(:baris), TO_NUMBER(:pid), :kode, :barcode, :nama, :satuan, {}, {}, {}, {}, {}, {}, {})",
             num("hpp"),
             num("harga"),
             num("qty"),
+            num("isi"),
             num("bruto"),
             num("pot"),
             num("total")

@@ -318,7 +318,7 @@ class _KasirPageState extends ConsumerState<KasirPage> {
     if (kode == null || !mounted) return;
     try {
       final b = await ref.read(apiProvider).barangBarcode(kode);
-      ref.read(cartProvider.notifier).tambah(b);
+      ref.read(cartProvider.notifier).tambah(b, satuan: b.satuanPilih);
       if (mounted) pesan(context, '${b.nama} ditambahkan');
     } on ApiException catch (e) {
       if (mounted)
@@ -981,7 +981,9 @@ class CartPanel extends ConsumerWidget {
       ),
     );
     t.dispose();
-    if (v != null) ref.read(cartProvider.notifier).aturCenti(l.barang.id, v);
+    if (v != null) {
+      ref.read(cartProvider.notifier).aturCenti(l.barang.id, v, satuan: l.satuan);
+    }
   }
 
   @override
@@ -1033,16 +1035,38 @@ class CartPanel extends ConsumerWidget {
                         ),
                         title: Text(l.barang.nama),
                         subtitle: Text(
-                          '${qtyString(l.qtyCenti, liter: l.barang.dijualPerLiter)} × ${rupiah(l.barang.harga)} = ${rupiah(l.subtotal)}',
+                          '${qtyString(l.qtyCenti, liter: l.barang.dijualPerLiter)} ${l.namaSatuan} × ${rupiah(l.harga)} = ${rupiah(l.subtotal)}',
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (l.barang.satuanLain.isNotEmpty)
+                              PopupMenuButton<String?>(
+                                tooltip: 'Ganti satuan',
+                                icon: const Icon(Icons.straighten),
+                                onSelected: (v) => n.ubahSatuan(l, v),
+                                itemBuilder: (_) => [
+                                  PopupMenuItem<String?>(
+                                    value: null,
+                                    child: Text(l.barang.satuan),
+                                  ),
+                                  for (final s in l.barang.satuanLain)
+                                    PopupMenuItem<String?>(
+                                      value: s.satuan,
+                                      child: Text(
+                                        '${s.satuan} (isi ${s.isi % 1 == 0 ? s.isi.toInt() : s.isi})',
+                                      ),
+                                    ),
+                                ],
+                              ),
                             IconButton(
                               tooltip: 'Kurangi',
                               icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: () =>
-                                  n.aturCenti(l.barang.id, l.qtyCenti - 100),
+                              onPressed: () => n.aturCenti(
+                                l.barang.id,
+                                l.qtyCenti - 100,
+                                satuan: l.satuan,
+                              ),
                             ),
                             InkWell(
                               onTap: () => _ubahQty(context, ref, l),
@@ -1060,8 +1084,11 @@ class CartPanel extends ConsumerWidget {
                             IconButton(
                               tooltip: 'Tambah',
                               icon: const Icon(Icons.add_circle_outline),
-                              onPressed: () =>
-                                  n.aturCenti(l.barang.id, l.qtyCenti + 100),
+                              onPressed: () => n.aturCenti(
+                                l.barang.id,
+                                l.qtyCenti + 100,
+                                satuan: l.satuan,
+                              ),
                             ),
                           ],
                         ),

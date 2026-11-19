@@ -17,6 +17,7 @@ namespace Penjualan.Model
         public string NAMA_BARANG { get; set; }
         public string SATUAN { get; set; }
         public decimal JUMLAH_BARANG { get; set; }
+        public decimal ISI { get; set; } = 1m;
         public decimal HARGA_BARANG { get; set; }
         public decimal HPP { get; set; }
         public decimal BRUTO { get; set; }

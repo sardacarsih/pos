@@ -93,8 +93,13 @@ class CartNotifier extends Notifier<CartState> {
   CartState build() => CartState(Cart(), 0);
 
   void _bump() => state = CartState(state.cart, state.v + 1);
-  void tambah(Barang b, {int qty = 1, int? qtyCenti}) {
-    state.cart.tambah(b, qty: qty, qtyCenti: qtyCenti);
+  void tambah(Barang b, {int qty = 1, int? qtyCenti, String? satuan}) {
+    state.cart.tambah(b, qty: qty, qtyCenti: qtyCenti, satuan: satuan);
+    _bump();
+  }
+
+  void ubahSatuan(CartLine l, String? baru) {
+    state.cart.ubahSatuan(l, baru);
     _bump();
   }
 
@@ -103,8 +108,8 @@ class CartNotifier extends Notifier<CartState> {
     _bump();
   }
 
-  void aturCenti(int id, int qtyCenti) {
-    state.cart.aturCenti(id, qtyCenti);
+  void aturCenti(int id, int qtyCenti, {String? satuan}) {
+    state.cart.aturCenti(id, qtyCenti, satuan: satuan);
     _bump();
   }
 
