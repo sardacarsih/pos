@@ -153,8 +153,41 @@ pub fn barang_by_id(conn: &Connection, id: i64, allowed: &[String]) -> AppResult
     )
 }
 
-/// Stok sistem per kode: stok awal tahun + pembelian + selisih opname - penjualan - barang rusak
-/// (formula sama dengan GetStocItem desktop, dibuat set-based untuk satu halaman).
+/// Ekspresi stok sistem (alias join dari `stok_join`): stok awal tahun + pembelian + selisih opname - penjualan - rusak.
+const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
+
+/// Join agregat stok per KODE_ITEM untuk `POS_PRODUCT p` (bind `:dari`/`:sampai`).
+/// `inl` = daftar bind IN untuk membatasi kode (satu halaman); None = semua produk.
+fn stok_join(inl: Option<&str>) -> String {
+    let rng = "TO_DATE(:dari,'YYYY-MM-DD') AND TO_DATE(:sampai,'YYYY-MM-DD')";
+    let batas = |kcol: &str| inl.map(|i| format!(" AND {kcol} IN ({i})")).unwrap_or_default();
+    let sub = |t: &str, kcol: &str, qcol: &str, tgl: &str| {
+        format!(
+            "(SELECT {kcol} k, SUM({qcol}) q FROM {t} WHERE {tgl} BETWEEN {rng}{} GROUP BY {kcol})",
+            batas(kcol)
+        )
+    };
+    format!(
+        "LEFT JOIN (SELECT KODE_BARANG k, SUM(QUANTITY) q FROM POS_STOCK WHERE TANGGAL = TO_DATE(:dari,'YYYY-MM-DD'){} GROUP BY KODE_BARANG) st ON st.k = p.KODE_ITEM          LEFT JOIN {} pb ON pb.k = p.KODE_ITEM          LEFT JOIN {} pj ON pj.k = p.KODE_ITEM          LEFT JOIN {} rs ON rs.k = p.KODE_ITEM          LEFT JOIN {} so ON so.k = p.KODE_ITEM",
+        batas("KODE_BARANG"),
+        sub(
+            "POS_PEMBELIANDETAIL d JOIN POS_PEMBELIAN m ON m.PURCHASE_ID = d.PURCHASE_ID",
+            "d.KODE_BARANG",
+            "d.QUANTITY",
+            "m.TANGGAL"
+        ),
+        sub(
+            "POS_PENJUALAN_DETAIL d JOIN POS_PENJUALAN m ON m.NO_TRANSAKSI = d.NO_TRANSAKSI",
+            "d.KODE_BARANG",
+            "d.JUMLAH_BARANG",
+            "m.TANGGAL"
+        ),
+        sub("POS_BARANGRUSAK", "KODE_BARANG", "JUMLAHFISIK", "TANGGAL"),
+        sub("POS_STOCKOPNAME", "KODE_BARANG", "SELISIH", "TANGGAL"),
+    )
+}
+
+/// Stok sistem per kode (formula sama dengan GetStocItem desktop, set-based untuk satu halaman).
 pub fn stok_map(
     conn: &Connection,
     kodes: &[String],
@@ -177,35 +210,10 @@ pub fn stok_map(
     let inl = names.join(",");
     b.add("dari", dari.format("%Y-%m-%d"));
     b.add("sampai", sampai.format("%Y-%m-%d"));
-    let rng = "TO_DATE(:dari,'YYYY-MM-DD') AND TO_DATE(:sampai,'YYYY-MM-DD')";
-    let sub = |t: &str, kcol: &str, qcol: &str, tgl: &str| {
-        format!(
-            "(SELECT {kcol} k, SUM({qcol}) q FROM {t} WHERE {tgl} BETWEEN {rng} AND {kcol} IN ({inl}) GROUP BY {kcol})"
-        )
-    };
     let sql = format!(
-        "SELECT p.KODE_ITEM, {} FROM POS_PRODUCT p \
-         LEFT JOIN (SELECT KODE_BARANG k, SUM(QUANTITY) q FROM POS_STOCK WHERE TANGGAL = TO_DATE(:dari,'YYYY-MM-DD') AND KODE_BARANG IN ({inl}) GROUP BY KODE_BARANG) st ON st.k = p.KODE_ITEM \
-         LEFT JOIN {} pb ON pb.k = p.KODE_ITEM \
-         LEFT JOIN {} pj ON pj.k = p.KODE_ITEM \
-         LEFT JOIN {} rs ON rs.k = p.KODE_ITEM \
-         LEFT JOIN {} so ON so.k = p.KODE_ITEM \
-         WHERE p.KODE_ITEM IN ({inl})",
-        tm("NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))"),
-        sub(
-            "POS_PEMBELIANDETAIL d JOIN POS_PEMBELIAN m ON m.PURCHASE_ID = d.PURCHASE_ID",
-            "d.KODE_BARANG",
-            "d.QUANTITY",
-            "m.TANGGAL"
-        ),
-        sub(
-            "POS_PENJUALAN_DETAIL d JOIN POS_PENJUALAN m ON m.NO_TRANSAKSI = d.NO_TRANSAKSI",
-            "d.KODE_BARANG",
-            "d.JUMLAH_BARANG",
-            "m.TANGGAL"
-        ),
-        sub("POS_BARANGRUSAK", "KODE_BARANG", "JUMLAHFISIK", "TANGGAL"),
-        sub("POS_STOCKOPNAME", "KODE_BARANG", "SELISIH", "TANGGAL"),
+        "SELECT p.KODE_ITEM, {} FROM POS_PRODUCT p {} WHERE p.KODE_ITEM IN ({inl})",
+        tm(STOK_EXPR),
+        stok_join(Some(&inl)),
     );
     b.with(|p| -> AppResult<()> {
         for r in conn.query_named(&sql, p)? {
@@ -215,6 +223,95 @@ pub fn stok_map(
         Ok(())
     })?;
     Ok(out)
+}
+
+#[derive(Debug, Serialize)]
+pub struct StokHabis {
+    pub id: i64,
+    pub kode: String,
+    pub nama: String,
+    pub satuan: String,
+    pub kategori: String,
+    pub stok: Decimal,
+}
+
+/// Produk aktif dengan stok sistem <= 0 (1 Jan tahun berjalan s/d `sampai`), urut nama.
+/// `jumlah` (total seluruh halaman) hanya dihitung pada halaman pertama.
+pub fn stok_habis(
+    conn: &Connection,
+    q: Option<&str>,
+    kategori: Option<&str>,
+    dari: NaiveDate,
+    sampai: NaiveDate,
+    page: u32,
+    size: u32,
+) -> AppResult<(Halaman<StokHabis>, Option<i64>)> {
+    let mut b = Binds::default();
+    b.add("dari", dari.format("%Y-%m-%d"));
+    b.add("sampai", sampai.format("%Y-%m-%d"));
+    let mut where_sql = format!("WHERE p.AKTIF = 'Y' AND {STOK_EXPR} <= 0");
+    if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
+        b.add("q", like(q));
+        b.add("qraw", q.trim());
+        where_sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw)");
+    }
+    if let Some(k) = kategori.filter(|k| !k.trim().is_empty()) {
+        b.add("kat", k.trim());
+        where_sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
+    }
+    b.add("off", (page.saturating_sub(1) * size).to_string());
+    b.add("lim", (size + 1).to_string());
+    // COUNT(*) OVER () memberi total seluruh hasil dari agregasi yang sama (satu pemindaian, bukan dua).
+    let sql = format!(
+        "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, p.SATUAN, k.KATEGORI, {}, COUNT(*) OVER () \
+         FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
+         ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
+        tm(STOK_EXPR),
+        stok_join(None)
+    );
+    let mut items = Vec::new();
+    let mut total: Option<i64> = None;
+    b.with(|p| -> AppResult<()> {
+        for r in conn.query_named(&sql, p)? {
+            let r = r?;
+            total.get_or_insert(r.get::<_, i64>(6)?);
+            items.push(StokHabis {
+                id: r.get(0)?,
+                kode: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                nama: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                satuan: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                kategori: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                stok: dec(&r.get::<_, String>(5)?)?,
+            });
+        }
+        Ok(())
+    })?;
+    let ada_lagi = items.len() > size as usize;
+    items.truncate(size as usize);
+    // Total hanya dikirim di halaman 1 (halaman kosong di sana berarti memang 0).
+    let jumlah = (page <= 1).then(|| total.unwrap_or(0));
+    Ok((Halaman { items, ada_lagi }, jumlah))
+}
+
+#[cfg(test)]
+mod stok_sql_tests {
+    use super::*;
+
+    #[test]
+    fn stok_join_tanpa_batas_kode_tidak_memakai_in() {
+        let s = stok_join(None);
+        assert!(!s.contains(" IN ("));
+        assert!(s.contains(":dari") && s.contains(":sampai"));
+        for t in ["POS_STOCK ", "POS_PEMBELIANDETAIL", "POS_PENJUALAN_DETAIL", "POS_BARANGRUSAK", "POS_STOCKOPNAME"] {
+            assert!(s.contains(t), "{t}");
+        }
+    }
+
+    #[test]
+    fn stok_join_dengan_batas_kode_membatasi_semua_subquery() {
+        let s = stok_join(Some(":k0,:k1"));
+        assert_eq!(s.matches("IN (:k0,:k1)").count(), 5);
+    }
 }
 
 #[derive(Debug, Serialize)]

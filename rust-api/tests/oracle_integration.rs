@@ -83,3 +83,117 @@ fn migrasi_idempotent_dan_user_roundtrip() {
         .unwrap();
     c.commit().unwrap();
 }
+
+const TABEL_POS: [&str; 11] = [
+    "POS_PRODUCT", "POS_KATEGORI", "POS_STOCK", "POS_PEMBELIAN", "POS_PEMBELIANDETAIL", "POS_PENJUALAN",
+    "POS_PENJUALAN_DETAIL", "POS_BARANGRUSAK", "POS_STOCKOPNAME", "POS_TRANSACTION_COUNTER", "NOMOR_TRANSAKSI",
+];
+
+/// Membuat tabel POS_* minimal untuk uji stok/opname dan menghapusnya lagi (juga bila uji panik).
+struct SkemaPos<'a>(&'a Connection);
+
+impl<'a> SkemaPos<'a> {
+    fn buat(c: &'a Connection) -> Option<Self> {
+        let ada: i64 = c
+            .query_row_as(
+                &format!("SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME IN ({})", TABEL_POS.map(|t| format!("'{t}'")).join(",")),
+                &[],
+            )
+            .unwrap();
+        if ada > 0 {
+            eprintln!("dilewati: tabel POS_* sudah ada (bukan skema uji sekali pakai)");
+            return None;
+        }
+        for ddl in [
+            "CREATE TABLE POS_PRODUCT (PRODUCTID NUMBER PRIMARY KEY, KODE_ITEM VARCHAR2(30), BARCODE VARCHAR2(30), PRODUCTNAME VARCHAR2(100), SATUAN VARCHAR2(10), PRICE NUMBER, BELI NUMBER, KATEGORI_ID NUMBER, AKTIF VARCHAR2(1))",
+            "CREATE TABLE POS_KATEGORI (KODE NUMBER, KATEGORI VARCHAR2(50))",
+            "CREATE TABLE POS_STOCK (KODE_BARANG VARCHAR2(30), TANGGAL DATE, QUANTITY NUMBER, HPP NUMBER)",
+            "CREATE TABLE POS_PEMBELIAN (PURCHASE_ID NUMBER, TANGGAL DATE)",
+            "CREATE TABLE POS_PEMBELIANDETAIL (PURCHASE_ID NUMBER, KODE_BARANG VARCHAR2(30), QUANTITY NUMBER, HARGA_BELI NUMBER)",
+            "CREATE TABLE POS_PENJUALAN (NO_TRANSAKSI VARCHAR2(30), TANGGAL DATE)",
+            "CREATE TABLE POS_PENJUALAN_DETAIL (NO_TRANSAKSI VARCHAR2(30), KODE_BARANG VARCHAR2(30), JUMLAH_BARANG NUMBER)",
+            "CREATE TABLE POS_BARANGRUSAK (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHFISIK NUMBER)",
+            "CREATE TABLE POS_STOCKOPNAME (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHSISTEM NUMBER, JUMLAHFISIK NUMBER, SELISIH NUMBER, HPP NUMBER, TOTAL NUMBER)",
+            "CREATE TABLE POS_TRANSACTION_COUNTER (TRANSACTION_CODE VARCHAR2(30), TRANSACTION_YEAR NUMBER(4), LAST_NUMBER NUMBER, PRIMARY KEY (TRANSACTION_CODE, TRANSACTION_YEAR))",
+            "CREATE TABLE NOMOR_TRANSAKSI (KODE VARCHAR2(30), NOMOR VARCHAR2(30))",
+        ] {
+            c.execute(ddl, &[]).unwrap();
+        }
+        Some(Self(c))
+    }
+}
+
+impl Drop for SkemaPos<'_> {
+    fn drop(&mut self) {
+        for t in TABEL_POS {
+            let _ = self.0.execute(&format!("DROP TABLE {t} PURGE"), &[]);
+        }
+    }
+}
+
+#[test]
+fn stok_habis_dan_opname_idempoten() {
+    use pos_api::{db::{faktur, katalog, opname}, error::AppError};
+    use rust_decimal::Decimal;
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    let (hari, _) = faktur::sekarang(&c).unwrap();
+    let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).unwrap();
+    for (id, kode, beli) in [(1, "IT-A", 1000), (2, "IT-B", 0)] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', 2000, :b, 1, 'Y')",
+            &[("i", &id), ("k", &kode), ("b", &beli)],
+        )
+        .unwrap();
+    }
+    // IT-A: stok awal 5 lalu terjual 5 -> habis. IT-B juga habis (tanpa transaksi) dengan harga beli 0.
+    c.execute_named(
+        "INSERT INTO POS_STOCK VALUES ('IT-A', TO_DATE(:d,'YYYY-MM-DD'), 5, 1000)",
+        &[("d", &awal.format("%Y-%m-%d").to_string())],
+    )
+    .unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN VALUES ('J1', TRUNC(SYSDATE))", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
+    c.commit().unwrap();
+
+    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10).unwrap();
+    assert_eq!((h.items.len(), jumlah), (2, Some(2)));
+    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10).unwrap();
+    assert_eq!(h.items.len(), 1);
+
+    let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+    let uid = user::create_user(&c, &nama, "Uji Opname", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
+    let key = uuid::Uuid::new_v4().to_string();
+    let d = |s: &str| s.parse::<Decimal>().unwrap();
+
+    let r = opname::simpan(&c, uid, &key, 1, d("10"), hari).unwrap();
+    assert_eq!((r.selisih, r.ulang), (d("10"), false));
+    let stok = katalog::stok_map(&c, &["IT-A".to_string()], awal, hari).unwrap();
+    assert_eq!(stok["IT-A"], d("10"));
+    // Retry dengan kunci sama: hasil sama, tidak ada dokumen SO baru.
+    let ulang = opname::simpan(&c, uid, &key, 1, d("10"), hari).unwrap();
+    assert_eq!((ulang.nomor_so.as_str(), ulang.ulang), (r.nomor_so.as_str(), true));
+    let n: i64 = c.query_row_as("SELECT COUNT(*) FROM POS_STOCKOPNAME", &[]).unwrap();
+    assert_eq!(n, 1);
+    // Kunci sama, qty berbeda -> konflik.
+    assert!(matches!(opname::simpan(&c, uid, &key, 1, d("11"), hari), Err(AppError::Conflict(_))));
+    // Qty sama dengan stok sistem dan tambah stok tanpa harga beli ditolak.
+    let k2 = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(opname::simpan(&c, uid, &k2, 1, d("10"), hari), Err(AppError::Validation(_))));
+    let k3 = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(opname::simpan(&c, uid, &k3, 2, d("3"), hari), Err(AppError::Validation(_))));
+    // Nomor SO berikutnya naik.
+    let k4 = uuid::Uuid::new_v4().to_string();
+    let r2 = opname::simpan(&c, uid, &k4, 1, d("4"), hari).unwrap();
+    assert_ne!(r2.nomor_so, r.nomor_so);
+    assert_eq!(r2.selisih, d("-6"));
+
+    c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&uid]).unwrap();
+    c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();
+    c.commit().unwrap();
+}
