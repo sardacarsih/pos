@@ -250,118 +250,184 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     final beli = TextEditingController();
     var kategoriId = _kategori.isEmpty ? '' : _kategori.first.id;
     final kunci = newCheckoutKey();
+    final satuanLain = <_DrafSatuanJual>[];
     String? galat;
     var sibuk = false;
     final baru = await showDialog<ProdukAdmin>(
       context: context,
       barrierDismissible: false,
       builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: const Text('Tambah produk'),
-          content: SingleChildScrollView(
-            child: Column(
+        builder: (c, set) => PopScope(
+          canPop: !sibuk,
+          child: AlertDialog(
+            title: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: nama,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Nama'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: barcode,
-                  decoration: const InputDecoration(labelText: 'Barcode (opsional)'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: satuan,
-                  decoration: const InputDecoration(labelText: 'Satuan'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _kategori.any((k) => k.id == kategoriId) ? kategoriId : null,
-                  isExpanded: true,
-                  items: [
-                    for (final k in _kategori)
-                      DropdownMenuItem(
-                        value: k.id,
-                        child: Text(k.nama, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: (v) => set(() => kategoriId = v ?? kategoriId),
-                  decoration: const InputDecoration(labelText: 'Kategori'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: harga,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: 'Harga jual (Rp)'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: beli,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: 'Harga beli (Rp)'),
-                ),
+                const Text('Tambah produk'),
                 if (galat != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       galat!,
-                      style: TextStyle(color: Theme.of(c).colorScheme.error),
+                      style: Theme.of(c).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(c).colorScheme.error,
+                      ),
                     ),
                   ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: sibuk ? null : () => Navigator.pop(c),
-              child: const Text('Batal'),
+            content: SingleChildScrollView(
+              child: AbsorbPointer(
+                absorbing: sibuk,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nama,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Nama'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: barcode,
+                      decoration: const InputDecoration(
+                        labelText: 'Barcode (opsional)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: satuan,
+                      decoration: const InputDecoration(
+                        labelText: 'Satuan dasar',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _kategori.any((k) => k.id == kategoriId)
+                          ? kategoriId
+                          : null,
+                      isExpanded: true,
+                      items: [
+                        for (final k in _kategori)
+                          DropdownMenuItem(
+                            value: k.id,
+                            child: Text(
+                              k.nama,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => set(() => kategoriId = v ?? kategoriId),
+                      decoration: const InputDecoration(labelText: 'Kategori'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: harga,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Harga jual (Rp)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: beli,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Harga beli (Rp)',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Satuan jual tambahan',
+                      style: Theme.of(c).textTheme.titleSmall,
+                    ),
+                    const Text(
+                      'Isi adalah jumlah satuan dasar per satuan jual.',
+                    ),
+                    for (final draf in satuanLain)
+                      _SatuanJualFields(
+                        key: ObjectKey(draf),
+                        draf: draf,
+                        onHapus: () => set(() => satuanLain.remove(draf)),
+                      ),
+                    OutlinedButton(
+                      onPressed: satuanLain.length >= 10
+                          ? null
+                          : () => set(() => satuanLain.add(_DrafSatuanJual())),
+                      child: const Text('Tambah satuan'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: sibuk
-                  ? null
-                  : () async {
-                      final h = digitsToInt(harga.text), b = digitsToInt(beli.text);
-                      final salah = cekProdukBaru(
-                        nama: nama.text,
-                        satuan: satuan.text,
-                        kategoriId: kategoriId,
-                        harga: h,
-                        beli: b,
-                      );
-                      if (salah != null) {
-                        set(() => galat = salah);
-                        return;
-                      }
-                      set(() {
-                        sibuk = true;
-                        galat = null;
-                      });
-                      try {
-                        final p = await ref.read(apiProvider).buatProduk(
-                          nama: nama.text.trim(),
-                          barcode: barcode.text.trim(),
-                          satuan: satuan.text.trim(),
+            actions: [
+              TextButton(
+                onPressed: sibuk ? null : () => Navigator.pop(c),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: sibuk
+                    ? null
+                    : () async {
+                        final h = digitsToInt(harga.text),
+                            b = digitsToInt(beli.text);
+                        final salah = cekProdukBaru(
+                          nama: nama.text,
+                          satuan: satuan.text,
                           kategoriId: kategoriId,
                           harga: h,
                           beli: b,
-                          idempotencyKey: kunci,
                         );
-                        if (c.mounted) Navigator.pop(c, p);
-                      } on ApiException catch (e) {
+                        if (salah != null) {
+                          set(() => galat = salah);
+                          return;
+                        }
+                        final daftar = <IsianSatuanJual>[];
+                        for (final (i, draf) in satuanLain.indexed) {
+                          final nilai = draf.nilai();
+                          if (nilai == null) {
+                            set(
+                              () => galat =
+                                  'Lengkapi satuan tambahan ${i + 1}. Isi harus lebih dari 1 (maksimal 4 desimal), harga lebih dari 0 (maksimal 2 desimal).',
+                            );
+                            return;
+                          }
+                          daftar.add(nilai);
+                        }
+                        FocusScope.of(c).unfocus();
                         set(() {
-                          sibuk = false;
-                          galat = e.pesan;
+                          sibuk = true;
+                          galat = null;
                         });
-                      }
-                    },
-              child: Text(sibuk ? 'Menyimpan…' : 'Simpan'),
-            ),
-          ],
+                        try {
+                          final p = await ref
+                              .read(apiProvider)
+                              .buatProduk(
+                                nama: nama.text.trim(),
+                                barcode: barcode.text.trim(),
+                                satuan: satuan.text.trim(),
+                                kategoriId: kategoriId,
+                                harga: h,
+                                beli: b,
+                                idempotencyKey: kunci,
+                                satuanLain: daftar,
+                              );
+                          if (c.mounted) Navigator.pop(c, p);
+                        } on ApiException catch (e) {
+                          if (!c.mounted) return;
+                          set(() {
+                            sibuk = false;
+                            galat = e.pesan;
+                          });
+                        }
+                      },
+                child: Text(sibuk ? 'Menyimpan…' : 'Simpan'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -850,4 +916,90 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     bytes: Uint8List.fromList(img.encodeJpg(kotak, quality: 85)),
     galat: null,
   );
+}
+
+class _DrafSatuanJual {
+  String satuan = '', isi = '', harga = '', barcode = '';
+
+  IsianSatuanJual? nilai() {
+    final isiTeks = isi.trim().replaceAll(',', '.');
+    final hargaTeks = harga.trim().replaceAll(',', '.');
+    if (!RegExp(r'^\d+(\.\d{1,4})?$').hasMatch(isiTeks) ||
+        !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(hargaTeks)) {
+      return null;
+    }
+    final jumlah = num.tryParse(isiTeks);
+    final rupiah = num.tryParse(hargaTeks);
+    if (satuan.trim().isEmpty ||
+        jumlah == null ||
+        jumlah <= 1 ||
+        jumlah > 1000000 ||
+        rupiah == null ||
+        !rupiah.isFinite ||
+        rupiah <= 0) {
+      return null;
+    }
+    return (
+      satuan: satuan.trim(),
+      isi: jumlah,
+      harga: rupiah,
+      barcode: barcode.trim(),
+    );
+  }
+}
+
+class _SatuanJualFields extends StatelessWidget {
+  const _SatuanJualFields({
+    super.key,
+    required this.draf,
+    required this.onHapus,
+  });
+
+  final _DrafSatuanJual draf;
+  final VoidCallback onHapus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            initialValue: draf.satuan,
+            onChanged: (v) => draf.satuan = v,
+            maxLength: 20,
+            decoration: const InputDecoration(
+              labelText: 'Satuan tambahan',
+              counterText: '',
+            ),
+          ),
+          TextFormField(
+            initialValue: draf.isi,
+            onChanged: (v) => draf.isi = v,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Isi per satuan'),
+          ),
+          TextFormField(
+            initialValue: draf.harga,
+            onChanged: (v) => draf.harga = v,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Harga jual satuan (Rp)',
+            ),
+          ),
+          TextFormField(
+            initialValue: draf.barcode,
+            onChanged: (v) => draf.barcode = v,
+            maxLength: 50,
+            decoration: const InputDecoration(
+              labelText: 'Barcode satuan (opsional)',
+              counterText: '',
+            ),
+          ),
+          TextButton(onPressed: onHapus, child: const Text('Hapus satuan')),
+        ],
+      ),
+    );
+  }
 }

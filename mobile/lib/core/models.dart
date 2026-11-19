@@ -72,6 +72,8 @@ class Barang {
   }
 }
 
+typedef IsianSatuanJual = ({String satuan, num isi, num harga, String barcode});
+
 /// Satuan jual tambahan: [isi] = jumlah satuan dasar per satuan ini.
 class SatuanJual {
   SatuanJual.fromJson(Map<String, dynamic> j)

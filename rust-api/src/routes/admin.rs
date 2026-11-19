@@ -566,6 +566,40 @@ pub struct SatuanReq {
     pub satuan: Vec<SatuanBody>,
 }
 
+#[derive(serde::Deserialize)]
+pub struct BuatProdukReq {
+    #[serde(flatten)]
+    pub produk: UbahProdukReq,
+    #[serde(default)]
+    pub satuan_lain: Vec<SatuanBody>,
+}
+
+#[cfg(test)]
+#[test]
+fn payload_produk_baru_menerima_klien_lama_dan_satuan_desimal() {
+    let dasar = r#""nama":"Teh","satuan":"PCS","kategori_id":"1","harga":5000,"beli":4000,"aktif":true"#;
+    let lama: BuatProdukReq = serde_json::from_str(&format!("{{{dasar}}}")).unwrap();
+    assert_eq!(lama.produk.nama, "Teh");
+    assert!(lama.satuan_lain.is_empty());
+    let tambahan = r#""satuan_lain":[{"satuan":"BOX","isi":12.1251,"harga":55000.25}]"#;
+    let baru: BuatProdukReq = serde_json::from_str(&format!("{{{dasar},{tambahan}}}")).unwrap();
+    let satuan = katalog::SatuanJual::from(baru.satuan_lain.into_iter().next().unwrap());
+    assert_eq!(satuan.isi.to_string(), "12.1251");
+    assert_eq!(satuan.harga.to_string(), "55000.25");
+    assert!(satuan.barcode.is_empty());
+}
+
+impl From<SatuanBody> for katalog::SatuanJual {
+    fn from(b: SatuanBody) -> Self {
+        Self {
+            satuan: b.satuan,
+            isi: b.isi,
+            harga: b.harga,
+            barcode: b.barcode.unwrap_or_default(),
+        }
+    }
+}
+
 fn satuan_json(v: &[katalog::SatuanJual]) -> Value {
     json!({ "satuan": v.iter().map(|s| json!({
         "satuan": s.satuan, "isi": s.isi.normalize().to_string(),
@@ -591,12 +625,7 @@ pub async fn produk_satuan_ganti(
     let daftar: Vec<katalog::SatuanJual> = req
         .satuan
         .into_iter()
-        .map(|b| katalog::SatuanJual {
-            satuan: b.satuan,
-            isi: b.isi,
-            harga: b.harga,
-            barcode: b.barcode.unwrap_or_default(),
-        })
+        .map(Into::into)
         .collect();
     let v = db::run(&s.pool, move |c| katalog::ganti_satuan(c, id, &daftar)).await?;
     tracing::info!(admin = %admin, produk = id, jumlah = v.len(), "satuan jual produk diubah");
@@ -608,13 +637,15 @@ pub async fn produk_buat(
     State(s): State<AppState>,
     a: Auth,
     headers: axum::http::HeaderMap,
-    Json(req): Json<UbahProdukReq>,
+    Json(req): Json<BuatProdukReq>,
 ) -> AppResult<(StatusCode, Json<katalog::ProdukAdmin>)> {
     let (admin, uid) = {
         let c = a.peran(ADMIN)?;
         (c.usr.clone(), c.sub)
     };
     let key = super::idempotency_key(&headers)?;
+    let daftar: Vec<katalog::SatuanJual> = req.satuan_lain.into_iter().map(Into::into).collect();
+    let req = req.produk;
     let p = katalog::UbahProduk {
         nama: req.nama,
         barcode: req.barcode.unwrap_or_default(),
@@ -624,7 +655,7 @@ pub async fn produk_buat(
         beli: req.beli,
         aktif: true,
     };
-    let baru = db::run(&s.pool, move |c| katalog::buat_produk(c, uid, &key, &p)).await?;
+    let baru = db::run(&s.pool, move |c| katalog::buat_produk(c, uid, &key, &p, &daftar)).await?;
     tracing::info!(admin = %admin, produk = baru.id, kode = %baru.kode, nama = %baru.nama, "produk dibuat");
     Ok((StatusCode::CREATED, Json(baru)))
 }

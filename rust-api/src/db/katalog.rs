@@ -848,56 +848,96 @@ pub fn validasi_satuan(dasar: &str, daftar: &[SatuanJual]) -> AppResult<()> {
     Ok(())
 }
 
-/// Ganti seluruh satuan tambahan produk (atomik). Barcode harus unik terhadap produk dan satuan lain.
+// Barcode dipakai bersama dua tabel. Ambil kunci dalam urutan yang sama
+// sebelum memeriksa atau menulis barcode dari jalur admin.
+fn kunci_barcode(conn: &Connection) -> AppResult<()> {
+    for sql in [
+        "LOCK TABLE POS_PRODUCT IN SHARE ROW EXCLUSIVE MODE WAIT 5",
+        "LOCK TABLE POS_PRODUCT_SATUAN IN SHARE ROW EXCLUSIVE MODE WAIT 5",
+    ] {
+        conn.execute(sql, &[]).map_err(|e| {
+            if matches!(e.oci_code(), Some(54 | 30006)) {
+                AppError::Conflict("Katalog sedang diperbarui. Coba simpan lagi.".into())
+            } else {
+                e.into()
+            }
+        })?;
+    }
+    Ok(())
+}
+
+fn barcode_tersedia(
+    conn: &Connection,
+    barcode: &str,
+    kecuali_produk: Option<i64>,
+    kecuali_satuan: Option<i64>,
+) -> AppResult<bool> {
+    if barcode.is_empty() {
+        return Ok(true);
+    }
+    let n: i64 = conn.query_row_as_named(
+        "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b
+                   AND (:produk IS NULL OR PRODUCTID <> :produk))
+              + (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b
+                   AND (:satuan IS NULL OR PRODUCT_ID <> :satuan))
+         FROM DUAL",
+        &[("b", &barcode), ("produk", &kecuali_produk), ("satuan", &kecuali_satuan)],
+    )?;
+    Ok(n == 0)
+}
+
+fn pastikan_barcode_satuan(
+    conn: &Connection,
+    daftar: &[SatuanJual],
+    kecuali: Option<i64>,
+) -> AppResult<()> {
+    for s in daftar {
+        let barcode = s.barcode.trim();
+        if !barcode_tersedia(conn, barcode, None, kecuali)? {
+            return Err(AppError::rule("BARCODE_SUDAH_ADA", format!("Barcode {barcode} sudah dipakai")));
+        }
+    }
+    Ok(())
+}
+
+fn sisipkan_satuan(conn: &Connection, id: i64, daftar: &[SatuanJual]) -> AppResult<()> {
+    let sql = format!(
+        "INSERT INTO POS_PRODUCT_SATUAN (PRODUCT_ID, SATUAN, ISI, HARGA, BARCODE)
+         VALUES (TO_NUMBER(:id), :sat, {}, {}, :bc)",
+        super::num("isi"), super::num("harga")
+    );
+    for s in daftar {
+        let mut b = Binds::default();
+        b.add("id", id);
+        b.add("sat", s.satuan.trim());
+        b.add("isi", s.isi.normalize());
+        b.add("harga", s.harga.normalize());
+        b.add("bc", s.barcode.trim());
+        b.with(|p| conn.execute_named(&sql, p))?;
+    }
+    Ok(())
+}
+
+/// Ganti seluruh satuan tambahan produk (atomik).
 pub fn ganti_satuan(conn: &Connection, id: i64, daftar: &[SatuanJual]) -> AppResult<Vec<SatuanJual>> {
-    let hasil = (|| -> AppResult<()> {
-        let dasar: Option<String> = opt(conn.query_row_as_named::<Option<String>>(
+    let hasil = (|| -> AppResult<Vec<SatuanJual>> {
+        kunci_barcode(conn)?;
+        let dasar = opt(conn.query_row_as_named::<Option<String>>(
             "SELECT SATUAN FROM POS_PRODUCT WHERE PRODUCTID = :id FOR UPDATE",
             &[("id", &id)],
-        ))?
-        .map(|s| s.unwrap_or_default());
-        let Some(dasar) = dasar else {
-            return Err(AppError::NotFound("Produk tidak ditemukan".into()));
-        };
-        validasi_satuan(&dasar, daftar)?;
-        for s in daftar {
-            let bc = s.barcode.trim();
-            if bc.is_empty() {
-                continue;
-            }
-            let (a, b): (i64, i64) = conn.query_row_as_named(
-                "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b), \
-                        (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b AND PRODUCT_ID <> :id) FROM DUAL",
-                &[("b", &bc), ("id", &id)],
-            )?;
-            if a + b > 0 {
-                return Err(AppError::rule("BARCODE_SUDAH_ADA", format!("Barcode {bc} sudah dipakai produk lain")));
-            }
-        }
+        ))?.ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
+        validasi_satuan(dasar.as_deref().unwrap_or_default(), daftar)?;
+        pastikan_barcode_satuan(conn, daftar, Some(id))?;
         conn.execute_named("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = :id", &[("id", &id)])?;
-        for s in daftar {
-            let mut b = Binds::default();
-            b.add("id", id);
-            b.add("sat", s.satuan.trim());
-            b.add("isi", s.isi);
-            b.add("harga", s.harga);
-            let bc = s.barcode.trim();
-            b.add("bc", bc);
-            let sql = format!(
-                "INSERT INTO POS_PRODUCT_SATUAN (PRODUCT_ID, SATUAN, ISI, HARGA, BARCODE) VALUES (TO_NUMBER(:id), :sat, {}, {}, NULLIF(:bc, ''))",
-                super::num("isi"),
-                super::num("harga")
-            );
-            b.with(|p| conn.execute_named(&sql, p))?;
-        }
+        sisipkan_satuan(conn, id, daftar)?;
+        let satuan = satuan_produk(conn, id)?;
         conn.commit()?;
-        Ok(())
+        Ok(satuan)
     })();
-    if let Err(e) = hasil {
+    if hasil.is_err() {
         let _ = conn.rollback();
-        return Err(e);
     }
-    satuan_produk(conn, id)
+    hasil
 }
 
 /// Hapus permanen produk yang tidak punya riwayat apa pun. Mengunci baris produk (FOR UPDATE), memeriksa ulang
@@ -935,46 +975,47 @@ pub fn hapus_produk(conn: &Connection, id: i64) -> AppResult<ProdukAdmin> {
 /// Ubah produk. Mengembalikan (harga jual lama, produk setelah diubah). `KODE_ITEM` tidak berubah.
 pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64, ProdukAdmin)> {
     validasi_produk(p)?;
-    let lama = produk_admin_by_id(conn, id)?
-        .ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
-    let barcode = p.barcode.trim();
-    if !barcode.is_empty() {
-        let n: i64 = conn.query_row_as_named(
-            "SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b AND PRODUCTID <> :id",
-            &[("b", &barcode), ("id", &id)],
-        )?;
-        if n > 0 {
-            return Err(AppError::Conflict(
-                "Barcode sudah dipakai produk lain".into(),
-            ));
+    let hasil = (|| -> AppResult<(i64, ProdukAdmin)> {
+        let barcode = p.barcode.trim();
+        if !barcode.is_empty() {
+            kunci_barcode(conn)?;
         }
+        let lama = produk_admin_by_id(conn, id)?
+            .ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
+        if barcode != lama.barcode.trim() && !barcode_tersedia(conn, barcode, Some(id), None)? {
+            return Err(AppError::Conflict("Barcode sudah dipakai produk lain".into()));
+        }
+        let kat = p.kategori_id.trim();
+        let n: i64 = conn.query_row_as_named(
+            "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
+            &[("k", &kat)],
+        )?;
+        if n == 0 {
+            return Err(AppError::validation("Kategori tidak dikenal"));
+        }
+        conn.execute_named(
+            "UPDATE POS_PRODUCT SET PRODUCTNAME = :nama, BARCODE = :barcode, PRICE = :harga, \
+             SATUAN = :satuan, KATEGORI_ID = :kat, BELI = :beli, AKTIF = :aktif WHERE PRODUCTID = :id",
+            &[
+                ("nama", &p.nama.trim()),
+                ("barcode", &barcode),
+                ("harga", &p.harga),
+                ("satuan", &p.satuan.trim()),
+                ("kat", &kat),
+                ("beli", &p.beli),
+                ("aktif", &if p.aktif { "Y" } else { "N" }),
+                ("id", &id),
+            ],
+        )?;
+        let baru = produk_admin_by_id(conn, id)?
+            .ok_or_else(|| AppError::Internal("produk hilang setelah diubah".into()))?;
+        conn.commit()?;
+        Ok((lama.harga, baru))
+    })();
+    if hasil.is_err() {
+        let _ = conn.rollback();
     }
-    let kat = p.kategori_id.trim();
-    let n: i64 = conn.query_row_as_named(
-        "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
-        &[("k", &kat)],
-    )?;
-    if n == 0 {
-        return Err(AppError::validation("Kategori tidak dikenal"));
-    }
-    conn.execute_named(
-        "UPDATE POS_PRODUCT SET PRODUCTNAME = :nama, BARCODE = :barcode, PRICE = :harga, \
-         SATUAN = :satuan, KATEGORI_ID = :kat, BELI = :beli, AKTIF = :aktif WHERE PRODUCTID = :id",
-        &[
-            ("nama", &p.nama.trim()),
-            ("barcode", &barcode),
-            ("harga", &p.harga),
-            ("satuan", &p.satuan.trim()),
-            ("kat", &kat),
-            ("beli", &p.beli),
-            ("aktif", &if p.aktif { "Y" } else { "N" }),
-            ("id", &id),
-        ],
-    )?;
-    conn.commit()?;
-    let baru = produk_admin_by_id(conn, id)?
-        .ok_or_else(|| AppError::Internal("produk hilang setelah diubah".into()))?;
-    Ok((lama.harga, baru))
+    hasil
 }
 
 /// Aturan tambahan produk baru (sama dengan frmMasterBarang desktop): harga jual dan beli > 0, jual > beli.
@@ -1004,6 +1045,27 @@ fn hash_produk(p: &UbahProduk) -> String {
     Sha256::digest(s.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
 
+fn hash_produk_baru(p: &UbahProduk, daftar: &[SatuanJual]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let dasar = hash_produk(p);
+    if daftar.is_empty() {
+        return dasar;
+    }
+    let mut satuan: Vec<_> = daftar
+        .iter()
+        .map(|s| (
+            s.satuan.trim(),
+            s.isi.normalize().to_string(),
+            s.harga.normalize().to_string(),
+            s.barcode.trim(),
+        ))
+        .collect();
+    satuan.sort_unstable();
+    let data = serde_json::json!([dasar, satuan]).to_string();
+    Sha256::digest(data.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Trigger DB desktop menolak duplikat dengan ORA-20xxx berisi `DUPLIKAT_*`: jadikan 409, bukan 500.
 fn peta_duplikat(e: oracle::Error) -> AppError {
     let m = e.to_string();
@@ -1020,9 +1082,20 @@ fn peta_duplikat(e: oracle::Error) -> AppError {
 
 /// Buat produk baru (kode item otomatis `KB-yy-nnnnn` dari urutan NOMOR_TRANSAKSI/BARANG yang dipakai desktop).
 /// Idempoten: kunci yang sama dengan isian sama mengembalikan produk yang sudah dibuat.
-pub fn buat_produk(conn: &Connection, user_id: i64, key: &str, p: &UbahProduk) -> AppResult<ProdukAdmin> {
+pub fn buat_produk(
+    conn: &Connection,
+    user_id: i64,
+    key: &str,
+    p: &UbahProduk,
+    daftar: &[SatuanJual],
+) -> AppResult<ProdukAdmin> {
     validasi_buat(p)?;
-    let hash = hash_produk(p);
+    validasi_satuan(&p.satuan, daftar)?;
+    let barcode = p.barcode.trim();
+    if !barcode.is_empty() && daftar.iter().any(|s| s.barcode.trim() == barcode) {
+        return Err(AppError::validation("Barcode satuan tambahan sama dengan barcode dasar"));
+    }
+    let hash = hash_produk_baru(p, daftar);
     let hasil = (|| -> AppResult<ProdukAdmin> {
         if let Some(rid) = super::opname::klaim_kunci(conn, user_id, "PRODUK_BARU", key, &hash)? {
             let id: i64 = rid
@@ -1039,17 +1112,11 @@ pub fn buat_produk(conn: &Connection, user_id: i64, key: &str, p: &UbahProduk) -
         if n == 0 {
             return Err(AppError::validation("Kategori tidak dikenal"));
         }
-        let barcode = p.barcode.trim();
-        if !barcode.is_empty() {
-            let n: i64 = conn.query_row_as_named(
-                "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE BARCODE = :b) + \
-                        (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE BARCODE = :b) FROM DUAL",
-                &[("b", &barcode)],
-            )?;
-            if n > 0 {
-                return Err(AppError::Conflict("Barcode sudah dipakai produk lain".into()));
-            }
+        kunci_barcode(conn)?;
+        if !barcode_tersedia(conn, barcode, None, None)? {
+            return Err(AppError::Conflict("Barcode sudah dipakai produk lain".into()));
         }
+        pastikan_barcode_satuan(conn, daftar, None)?;
         let nama = p.nama.trim();
         let n: i64 = conn.query_row_as_named(
             "SELECT COUNT(*) FROM POS_PRODUCT WHERE UPPER(TRIM(PRODUCTNAME)) = UPPER(:n)",
@@ -1100,13 +1167,15 @@ pub fn buat_produk(conn: &Connection, user_id: i64, key: &str, p: &UbahProduk) -
             "SELECT PRODUCTID FROM POS_PRODUCT WHERE KODE_ITEM = :k",
             &[("k", &kode)],
         )?;
+        sisipkan_satuan(conn, id, daftar)?;
+        let baru = produk_admin_by_id(conn, id)?
+            .ok_or_else(|| AppError::Internal("produk hilang setelah dibuat".into()))?;
         conn.execute_named(
             "UPDATE MOB_IDEMPOTENCY SET RESOURCE_ID = :r WHERE USER_ID = :u AND OPERASI = 'PRODUK_BARU' AND IDEMPOTENCY_KEY = :k",
             &[("r", &id.to_string()), ("u", &user_id), ("k", &key)],
         )?;
         conn.commit()?;
-        produk_admin_by_id(conn, id)?
-            .ok_or_else(|| AppError::Internal("produk hilang setelah dibuat".into()))
+        Ok(baru)
     })();
     if hasil.is_err() {
         let _ = conn.rollback(); // lepas kunci FOR UPDATE dan klaim idempotensi
