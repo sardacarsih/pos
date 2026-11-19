@@ -1,4 +1,4 @@
-﻿using BackOffice.BussinessLayer;
+using BackOffice.BussinessLayer;
 using BackOffice.Controller;
 using BackOffice.DataLayer;
 using BackOffice.Laporan;
@@ -117,6 +117,7 @@ namespace BackOffice.UC
                     if(pembayaranList.Count> 0 ) 
                     {
                         gridControl1.DataSource = pembayaranList;
+                        gridControl1.ForceInitialize();
                         gridView1.RefreshData(); // Refresh the grid view's data source
                                                  // Assuming you have defined the grid columns for "tagihan," "bayar," and "sisa" in gridView1
 

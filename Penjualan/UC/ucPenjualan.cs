@@ -1,6 +1,7 @@
 ﻿using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Views.Grid;
 using Penjualan.BusinessLayer;
+using Kopkar.Shared;
 using Penjualan.DataLayer;
 using Penjualan.Model;
 using System.ComponentModel;
@@ -166,29 +167,32 @@ namespace Penjualan.UC
             gridView1.Columns["Bruto"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
             gridView1.Columns["Potongan"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
             gridView1.Columns["Total"].OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
-            int tahun=DateTime.Now.Year;
-            int bulan = DateTime.Now.Month;
-            int periode = (tahun * 100) + bulan;
-            GetTanggalByPeriode(periode);
+            // Periode hari ini menurut rentang tanggal POS_PERIODE (bukan bulan kalender).
+            int? periode = null;
+            try { periode = PeriodeGuard.PeriodeUntukTanggal(DateTime.Today); } catch (Exception) { /* CheckPeriodeStatus melaporkan */ }
+            if (periode.HasValue) GetTanggalByPeriode(periode.Value);
             CheckPeriodeStatus();
         }
 
+        // Periode bermasalah (tutup / belum diatur / belum valid) memblokir transaksi sejak awal:
+        // limit hutang bergantung pada periode. Fail closed bila periode tidak bisa dibaca.
         private void CheckPeriodeStatus()
         {
-            var tgl = DateTime.Today;
-            var periode = Convert.ToInt32(tgl.Year.ToString() + tgl.Month.ToString("00"));
-            int remise = tgl.Day <= 15 ? 1 : 2;
+            PeriodeCek cek;
+            try
+            {
+                cek = PeriodeGuard.Cek(DateTime.Today);
+            }
+            catch (Exception ex)
+            {
+                cek = new PeriodeCek(PeriodeKode.TidakAda, "Periode tidak dapat diperiksa: " + ex.Message);
+            }
 
-            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
-            MaxPeriodeFinder periodemax = new();
-            var maxperiode = periodemax.GetMaxPeriode();
-
-            if (tutup || periode > maxperiode)
+            if (!cek.Terbuka)
             {
                 blbibayar.Enabled = false;
                 barcodeTextBox.Enabled = false;
-                string alasan = tutup ? "Periode telah ditutup" : "Periode belum tersedia";
-                XtraMessageBox.Show($"{alasan}, transaksi tidak dapat dilakukan.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show($"{cek.Judul}: {cek.Pesan}\nTransaksi tidak dapat dilakukan. {PeriodeGuard.HubungiAdmin}", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -457,31 +461,18 @@ namespace Penjualan.UC
 
         private void blbibayar_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));
-            int remise;
-            if (tgl <= 15)
+            try
             {
-                remise = 1;
+                var cekPeriode = PeriodeGuard.Cek(Convert.ToDateTime(detanggal.Text));
+                if (!cekPeriode.Terbuka)
+                {
+                    XtraMessageBox.Show($"{cekPeriode.Judul}: {cekPeriode.Pesan}\nTransaksi tidak dapat dilakukan. {PeriodeGuard.HubungiAdmin}", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                remise = 2;
-            }
-            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
-            MaxPeriodeFinder periodemax = new();
-            var maxperiode = periodemax.GetMaxPeriode();
-            if (tutup)
-            {
-                XtraMessageBox.Show("Periode telah ditutup,transaksi tidak dapat dilakukan", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            if (periode > maxperiode)
-            {
-                XtraMessageBox.Show("Input transaksi dibatasi pada periode yang valid", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Periode tidak dapat diperiksa: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             //if (maxperiode - periode >= 2)

@@ -43,9 +43,6 @@ namespace BackOffice.UC
             DaftarBarang = controller.GetBarang(isaktif);
             DaftarDiskon = controller.GetDiskon();
             gridControl1.DataSource = DaftarBarang;
-            // Stretch columns to fill the full grid width (no empty gap on the right).
-            // With this on, the explicit widths below act as relative weights.
-            gridView1.OptionsView.ColumnAutoWidth = true;
             gridView1.Columns[0].Visible = false;
             gridView1.Columns["KATEGORI"].Visible = false;
             gridView1.Columns["KATEGORI_ID"].Visible = false;

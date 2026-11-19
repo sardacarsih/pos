@@ -1,4 +1,5 @@
 ﻿using BackOffice.Interface;
+using Kopkar.Shared;
 using BackOffice.Model;
 using Dapper;
 using DevExpress.XtraMap.Native;
@@ -148,6 +149,9 @@ namespace BackOffice.DataLayer
 
             try
             {
+                // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Insert master records
                 string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN,PENDING) " +
                                                 "VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN,:PENDING) " +
@@ -188,6 +192,9 @@ namespace BackOffice.DataLayer
 
             try
             {
+                // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
+                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
+
                 // Insert master record
                 string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN) VALUES " +
                                                 "(:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN) RETURNING ID_PENJUALAN INTO :penjualanId";
@@ -325,7 +332,7 @@ namespace BackOffice.DataLayer
             _command.Parameters.Add("rekap_NIK", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
            // _command.Parameters.Add("tagihan_waserda", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
-            _command.Parameters.Add(":p_periode", OracleDbType.Int16).Value = p_periode;
+            _command.Parameters.Add(":p_periode", OracleDbType.Int32).Value = p_periode;
             _command.Parameters.Add(":p_remise", OracleDbType.Int16).Value = p_remise;
 
             OracleCommandBuilder sqlcmdbuilder = new();
@@ -361,7 +368,7 @@ namespace BackOffice.DataLayer
             string sampaiTanggalStr = p_sampaitanggal.ToString("dd-MMM-yyyy", enUS);
 
             // Tambahkan parameter
-            _command.Parameters.Add(":p_periode", OracleDbType.Int16).Value = p_periode;
+            _command.Parameters.Add(":p_periode", OracleDbType.Int32).Value = p_periode;
             _command.Parameters.Add(":p_remise", OracleDbType.Int16).Value = p_remise;
             _command.Parameters.Add(":p_tglAngsuran", OracleDbType.Date).Value = p_tglAngsuran;
             _command.Parameters.Add(":p_daritanggal", OracleDbType.Date).Value = p_daritanggal;
@@ -383,7 +390,7 @@ namespace BackOffice.DataLayer
             _command.Parameters.Add("rekap_NIK", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
             _command.Parameters.Add("tagihan_waserda", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
-            _command.Parameters.Add(":p_periode", OracleDbType.Int16).Value = p_periode;
+            _command.Parameters.Add(":p_periode", OracleDbType.Int32).Value = p_periode;
             _command.Parameters.Add(":p_remise", OracleDbType.Int16).Value = p_remise;
 
             OracleCommandBuilder sqlcmdbuilder = new();

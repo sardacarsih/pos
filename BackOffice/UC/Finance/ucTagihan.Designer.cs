@@ -35,6 +35,7 @@
             barManager1 = new DevExpress.XtraBars.BarManager(components);
             bar2 = new DevExpress.XtraBars.Bar();
             barStaticItem1 = new DevExpress.XtraBars.BarStaticItem();
+            biRangeTanggal = new DevExpress.XtraBars.BarStaticItem();
             bei_bulan = new DevExpress.XtraBars.BarEditItem();
             repositoryItemComboBox1 = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
             bei_tahun = new DevExpress.XtraBars.BarEditItem();
@@ -95,9 +96,9 @@
             barManager1.DockControls.Add(barDockControlLeft);
             barManager1.DockControls.Add(barDockControlRight);
             barManager1.Form = this;
-            barManager1.Items.AddRange(new DevExpress.XtraBars.BarItem[] { barStaticItem1, BLBICETAK, bei_bulan, bei_tahun, bei_remise, barEditItemRadio, barButtonItem1, barLargeButtonItem1 });
+            barManager1.Items.AddRange(new DevExpress.XtraBars.BarItem[] { barStaticItem1, BLBICETAK, bei_bulan, bei_tahun, bei_remise, barEditItemRadio, barButtonItem1, barLargeButtonItem1, biRangeTanggal });
             barManager1.MainMenu = bar2;
-            barManager1.MaxItemId = 11;
+            barManager1.MaxItemId = 12;
             barManager1.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] { repositoryItemLookUpEdit_Bulan, repositoryItemSpinEdit_Tahun, repositoryItemLookUpEdit_Remise, repositoryItemComboBox_Bulan, repositoryItemComboBox1, repositoryItemSpinEdit1, repositoryItemComboBox2, repositoryItemRadioGroup1 });
             // 
             // bar2
@@ -106,7 +107,7 @@
             bar2.DockCol = 0;
             bar2.DockRow = 0;
             bar2.DockStyle = DevExpress.XtraBars.BarDockStyle.Top;
-            bar2.LinksPersistInfo.AddRange(new DevExpress.XtraBars.LinkPersistInfo[] { new DevExpress.XtraBars.LinkPersistInfo(barStaticItem1), new DevExpress.XtraBars.LinkPersistInfo(bei_bulan), new DevExpress.XtraBars.LinkPersistInfo(bei_tahun), new DevExpress.XtraBars.LinkPersistInfo(bei_remise), new DevExpress.XtraBars.LinkPersistInfo(barEditItemRadio), new DevExpress.XtraBars.LinkPersistInfo(BLBICETAK), new DevExpress.XtraBars.LinkPersistInfo(barLargeButtonItem1) });
+            bar2.LinksPersistInfo.AddRange(new DevExpress.XtraBars.LinkPersistInfo[] { new DevExpress.XtraBars.LinkPersistInfo(barStaticItem1), new DevExpress.XtraBars.LinkPersistInfo(bei_bulan), new DevExpress.XtraBars.LinkPersistInfo(bei_tahun), new DevExpress.XtraBars.LinkPersistInfo(bei_remise), new DevExpress.XtraBars.LinkPersistInfo(biRangeTanggal, true), new DevExpress.XtraBars.LinkPersistInfo(barEditItemRadio), new DevExpress.XtraBars.LinkPersistInfo(BLBICETAK), new DevExpress.XtraBars.LinkPersistInfo(barLargeButtonItem1) });
             bar2.OptionsBar.MultiLine = true;
             bar2.OptionsBar.UseWholeRow = true;
             bar2.Text = "Main menu";
@@ -116,7 +117,14 @@
             barStaticItem1.Caption = "Periode";
             barStaticItem1.Id = 3;
             barStaticItem1.Name = "barStaticItem1";
-            // 
+            //
+            // biRangeTanggal
+            //
+            biRangeTanggal.Caption = "";
+            biRangeTanggal.Id = 11;
+            biRangeTanggal.Name = "biRangeTanggal";
+            biRangeTanggal.PaintStyle = DevExpress.XtraBars.BarItemPaintStyle.Caption;
+            //
             // bei_bulan
             // 
             bei_bulan.Caption = "Bulan";
@@ -301,6 +309,7 @@
         private DevExpress.XtraBars.BarManager barManager1;
         private DevExpress.XtraBars.Bar bar2;
         private DevExpress.XtraBars.BarStaticItem barStaticItem1;
+        private DevExpress.XtraBars.BarStaticItem biRangeTanggal;
         private DevExpress.XtraEditors.Repository.RepositoryItemLookUpEdit repositoryItemLookUpEdit_Bulan;
         private DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit repositoryItemSpinEdit_Tahun;
         private DevExpress.XtraEditors.Repository.RepositoryItemLookUpEdit repositoryItemLookUpEdit_Remise;

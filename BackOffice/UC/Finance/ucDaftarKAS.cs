@@ -1,4 +1,4 @@
-﻿using BackOffice.BussinessLayer;
+using BackOffice.BussinessLayer;
 using BackOffice.DataLayer;
 using BackOffice.Laporan;
 using BackOffice.Model;
@@ -141,6 +141,7 @@ namespace BackOffice.UC
                 if(daftarTransaksiKAS != null)
                 {
                     gridControl1.DataSource = daftarTransaksiKAS;
+                    gridControl1.ForceInitialize();
 
                     //RepositoryItemCheckEdit edit = new()
                     //{

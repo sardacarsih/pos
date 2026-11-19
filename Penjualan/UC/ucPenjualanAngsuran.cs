@@ -3,6 +3,8 @@ using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraReports.UI;
 using Oracle.ManagedDataAccess.Client;
 using Penjualan.BusinessLayer;
+using Kopkar.Shared;
+using Penjualan.DataLayer;
 using Penjualan.Laporan;
 using Penjualan.Model;
 using System.Data;
@@ -456,6 +458,28 @@ namespace Penjualan.UC
             NewTransaction();
             Load_Pelanggan();
             Load_angsuran();
+            CheckPeriodeStatus();
+        }
+
+        // Periode bermasalah memblokir transaksi sejak awal (limit hutang bergantung pada periode); fail closed.
+        private void CheckPeriodeStatus()
+        {
+            PeriodeCek cek;
+            try
+            {
+                cek = PeriodeGuard.Cek(DateTime.Today);
+            }
+            catch (Exception ex)
+            {
+                cek = new PeriodeCek(PeriodeKode.TidakAda, "Periode tidak dapat diperiksa: " + ex.Message);
+            }
+
+            if (!cek.Terbuka)
+            {
+                blbisimpan.Enabled = false;
+                barcodeTextBox.Enabled = false;
+                XtraMessageBox.Show($"{cek.Judul}: {cek.Pesan}\nTransaksi tidak dapat dilakukan. {PeriodeGuard.HubungiAdmin}", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
 
         private void Load_angsuran()

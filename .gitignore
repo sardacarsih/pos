@@ -67,3 +67,7 @@ DevExpress*.lic
 __pycache__/
 *.py[cod]
 *.egg-info/
+/google-services.json
+
+# Kunci service account Firebase (rahasia, hanya di server)
+*-firebase-adminsdk-*.json

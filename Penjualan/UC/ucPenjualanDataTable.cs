@@ -441,32 +441,25 @@ namespace Penjualan.UC
 
         private void blbibayar_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));
-            int remise;
-            if (tgl <= 15)
+            int periode;
+            try
             {
-                remise = 1;
+                var tglTransaksi = Convert.ToDateTime(detanggal.Text);
+                var cekPeriode = Kopkar.Shared.PeriodeGuard.Cek(tglTransaksi);
+                if (!cekPeriode.Terbuka)
+                {
+                    XtraMessageBox.Show($"{cekPeriode.Judul}: {cekPeriode.Pesan}\nTransaksi tidak dapat dilakukan. {Kopkar.Shared.PeriodeGuard.HubungiAdmin}", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                periode = Kopkar.Shared.PeriodeGuard.PeriodeUntukTanggal(tglTransaksi) ?? 0;
             }
-            else
+            catch (Exception ex)
             {
-                remise = 2;
-            }
-            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
-            if (tutup)
-            {
-                XtraMessageBox.Show("Periode telah ditutup,transaksi tidak dapat dilakukan","Info",MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Periode tidak dapat diperiksa: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             MaxPeriodeFinder periodemax = new();
             var maxperiode = periodemax.GetMaxPeriode();
-            if(periode> maxperiode)
-            {
-                XtraMessageBox.Show("Input transaksi dibatasi pada periode yang valid", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
             if (maxperiode- periode >= 2)
             {
                 XtraMessageBox.Show("Input transaksi mundur ditolak", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);

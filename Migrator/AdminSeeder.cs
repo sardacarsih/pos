@@ -8,7 +8,8 @@ namespace Migrator
     /// </summary>
     public static class AdminSeeder
     {
-        public static void Seed(string connectionString, string username, string password)
+        /// <returns>true bila user baru dibuat, false bila sudah ada.</returns>
+        public static bool Seed(string connectionString, string username, string password)
         {
             username = username.Trim().ToLowerInvariant();
             var repo = new AuthRepository(connectionString);
@@ -16,7 +17,7 @@ namespace Migrator
             if (repo.UsernameExists(username))
             {
                 Console.WriteLine($"  [skip ] user '{username}' sudah ada.");
-                return;
+                return false;
             }
 
             RoleInfo adminRole = repo.ListRoles()
@@ -33,6 +34,32 @@ namespace Migrator
             }
 
             Console.WriteLine($"  [done ] user admin '{username}' dibuat, akses ADMIN ke {apps.Count} aplikasi.");
+            return true;
+        }
+
+        /// <summary>
+        /// Reset password user yang sudah ada (PBKDF2 yang sama dengan BackOffice) sekaligus
+        /// mengaktifkan dan membuka kunci akun. Role dan akses tidak diubah.
+        /// </summary>
+        /// <returns>false bila user tidak ditemukan.</returns>
+        public static bool Reset(string connectionString, string username, string password)
+        {
+            username = username.Trim().ToLowerInvariant();
+            var repo = new AuthRepository(connectionString);
+
+            UserAccount? user = repo.ListUsers()
+                .FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+            if (user is null)
+            {
+                Console.WriteLine($"  [fail ] user '{username}' tidak ditemukan.");
+                return false;
+            }
+
+            repo.UpdatePassword(user.UserId, new PasswordCryptographyPbkdf2().GetHashPassword(password));
+            repo.SetActive(user.UserId, true);
+            repo.SetLocked(user.UserId, false); // juga mereset counter gagal login
+            Console.WriteLine($"  [done ] password '{username}' direset; akun diaktifkan dan dibuka kuncinya.");
+            return true;
         }
     }
 }

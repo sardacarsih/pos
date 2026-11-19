@@ -1,4 +1,4 @@
-﻿using BackOffice.Controller;
+using BackOffice.Controller;
 using BackOffice.Laporan;
 using BackOffice.Model;
 using DevExpress.XtraGrid.Columns;
@@ -30,6 +30,7 @@ namespace BackOffice.UC.Persediaan
             var tahun = (int)spinEdit1.Value;
             StockOpnameList = controller.DaftarStockOpname(tahun);
             gridControl1.DataSource = StockOpnameList;
+            gridControl1.ForceInitialize();
 
             gridView1.Columns["BULAN"].GroupIndex = 0;
             gridView1.Columns["TOTAL"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;

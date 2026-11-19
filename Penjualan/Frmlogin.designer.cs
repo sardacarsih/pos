@@ -248,7 +248,8 @@ namespace Penjualan
             simpleButton1.UseVisualStyleBackColor = false;
             simpleButton1.Click += SimpleButton1_Click;
 
-            AcceptButton = Login;
+            // No AcceptButton: Enter is handled per-field (userid -> password -> login)
+            // via the KeyDown handlers, so it must reach the editors instead of the button.
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             BackColor = Color.FromArgb(234, 242, 255);

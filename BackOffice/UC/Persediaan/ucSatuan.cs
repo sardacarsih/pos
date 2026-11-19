@@ -1,4 +1,4 @@
-﻿
+
 using BackOffice.DataLayer;
 using DevExpress.Utils.About;
 using DevExpress.XtraCharts.Designer.Native;
@@ -98,6 +98,7 @@ namespace BackOffice.UC
         {
             var sat = Satuan();
             gridControl1.DataSource = sat;
+            gridControl1.ForceInitialize();
             gridView1.Columns["ID"].Visible = false;
             gridView1.BestFitColumns();
         }
