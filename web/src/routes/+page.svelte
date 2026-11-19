@@ -14,6 +14,7 @@
   import Kas from '$lib/Kas.svelte';
   import Pinjaman from '$lib/Pinjaman.svelte';
   import PinjamanSaya from '$lib/PinjamanSaya.svelte';
+  import Supplier from '$lib/Supplier.svelte';
   import { sinkronPembelian } from '$lib/pembelianOffline';
   import type { User } from '$lib/types';
   import Shop from '$lib/Shop.svelte'; import General from '$lib/General.svelte'; import Admin from '$lib/Admin.svelte'; import Users from '$lib/Users.svelte'; import TagihanRekap from '$lib/TagihanRekap.svelte';
@@ -159,6 +160,8 @@
     <main class="content" id="konten" tabindex="-1" aria-labelledby="judul-halaman" bind:this={mainEl}>
       {#if view === 'pembelian' && bisaBeli(user)}
         {#key user.id}<Pembelian {user} online={terhubung}/>{/key}
+      {:else if view === 'supplier' && bisaBeli(user) && !modeLokal}
+        {#key user.id}<Supplier userId={user.id} online={terhubung}/>{/key}
       {:else if view === 'hutang-supplier' && user.role === 'ADMIN'}
         {#key user.id}<PembelianRiwayat {user} online={terhubung} hutang/>{/key}
       {:else if view === 'kas' && user.role === 'ADMIN'}

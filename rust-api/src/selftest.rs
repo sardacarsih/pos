@@ -9,7 +9,7 @@ use oracle::Connection;
 
 use crate::{
     auth::Role,
-    db::{dashboard, faktur, katalog, opname, opt, pembelian, user},
+    db::{dashboard, faktur, katalog, opname, opt, pembelian, supplier, user},
     error::{AppError, AppResult},
 };
 
@@ -148,6 +148,15 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         };
         pembelian::riwayat(conn, &petugas, &filter)?;
         Ok("Kueri dengan filter petugas berhasil".into())
+    }));
+    h.push(cek("daftar supplier dan filter", || {
+        let semua = supplier::daftar(conn, &supplier::Filter::default())?;
+        let aktif = supplier::daftar(conn, &supplier::Filter {
+            q: semua.items.first().map(|s| s.kode.clone()),
+            aktif: Some(true),
+            page: Some(1),
+        })?;
+        Ok(format!("{} baris, {} cocok dengan filter", semua.items.len(), aktif.items.len()))
     }));
     h.push(cek("skema MOB_IDEMPOTENCY.OPERASI muat 'OPNAME_DOK'", || {
         let n: i64 = conn.query_row_as(

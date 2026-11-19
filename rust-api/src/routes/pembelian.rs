@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
 };
 use oracle::Connection;
 use serde_json::{Value, json};
@@ -9,16 +9,16 @@ use serde_json::{Value, json};
 use super::{AppState, Auth, idempotency_key};
 use crate::{
     auth::Role,
-    db::{self, pembelian as beli},
+    db::{self, pembelian as beli, supplier},
     error::AppResult,
 };
 
-async fn jalankan(
+async fn jalankan<T: Send + 'static>(
     s: AppState,
     a: Auth,
     admin: bool,
-    f: impl FnOnce(&Connection, &beli::Operator) -> AppResult<Value> + Send + 'static,
-) -> AppResult<Json<Value>> {
+    f: impl FnOnce(&Connection, &beli::Operator) -> AppResult<T> + Send + 'static,
+) -> AppResult<Json<T>> {
     let roles: &[Role] = if admin {
         &[Role::Admin]
     } else {
@@ -35,6 +35,32 @@ async fn jalankan(
 
 pub async fn referensi(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
     jalankan(s, a, false, |c, _| beli::referensi(c)).await
+}
+
+pub async fn daftar_supplier(
+    State(s): State<AppState>,
+    a: Auth,
+    Query(filter): Query<supplier::Filter>,
+) -> AppResult<Json<supplier::Halaman>> {
+    jalankan(s, a, false, move |c, _| supplier::daftar(c, &filter)).await
+}
+
+pub async fn buat_supplier(
+    State(s): State<AppState>,
+    a: Auth,
+    Json(req): Json<supplier::Baru>,
+) -> AppResult<(StatusCode, Json<supplier::Supplier>)> {
+    let hasil = jalankan(s, a, false, move |c, _| supplier::buat(c, &req)).await?;
+    Ok((StatusCode::CREATED, hasil))
+}
+
+pub async fn ubah_supplier(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(kode): Path<String>,
+    Json(req): Json<supplier::Ubah>,
+) -> AppResult<Json<supplier::Supplier>> {
+    jalankan(s, a, false, move |c, _| supplier::ubah(c, &kode, &req)).await
 }
 
 pub async fn riwayat(

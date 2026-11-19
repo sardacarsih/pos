@@ -12,6 +12,7 @@ pub mod pinjaman;
 pub mod profil;
 pub mod push;
 pub mod rekap;
+pub mod supplier;
 pub mod tagihan_rekap;
 pub mod user;
 
@@ -59,7 +60,7 @@ where
 
 /// Buat tabel MOB_*; ORA-00955 (sudah ada) diabaikan sehingga aman diulang.
 pub fn migrate(conn: &Connection) -> AppResult<usize> {
-    let sql = include_str!("schema.sql");
+    let sql = include_str!("schema.sql").replace("\r\n", "\n");
     let mut done = 0;
     for stmt in sql.split("\n/\n") {
         let stmt: String = stmt
