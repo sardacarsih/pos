@@ -150,7 +150,7 @@ fn alokasi_nomor(conn: &Connection, tahun: i32) -> AppResult<String> {
 
 /// Klaim kunci idempotensi. `None` = kunci baru (lanjutkan); `Some(nomor)` = permintaan ulang, pakai dokumen itu.
 /// Permintaan paralel dengan kunci sama menunggu di INSERT lalu jatuh ke ORA-00001.
-fn klaim_kunci(conn: &Connection, user_id: i64, operasi: &str, key: &str, hash: &str) -> AppResult<Option<String>> {
+pub(crate) fn klaim_kunci(conn: &Connection, user_id: i64, operasi: &str, key: &str, hash: &str) -> AppResult<Option<String>> {
     match conn.execute_named(
         "INSERT INTO MOB_IDEMPOTENCY (USER_ID, OPERASI, IDEMPOTENCY_KEY, PAYLOAD_HASH) VALUES (:u, :o, :k, :h)",
         &[("u", &user_id), ("o", &operasi), ("k", &key), ("h", &hash)],

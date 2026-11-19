@@ -589,6 +589,32 @@ pub async fn produk_satuan_ganti(
     Ok(Json(satuan_json(&v)))
 }
 
+/// Buat produk baru; kode item otomatis. Header `Idempotency-Key` wajib (permintaan ulang aman).
+pub async fn produk_buat(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<UbahProdukReq>,
+) -> AppResult<(StatusCode, Json<katalog::ProdukAdmin>)> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    let key = super::idempotency_key(&headers)?;
+    let p = katalog::UbahProduk {
+        nama: req.nama,
+        barcode: req.barcode.unwrap_or_default(),
+        satuan: req.satuan,
+        kategori_id: req.kategori_id,
+        harga: req.harga,
+        beli: req.beli,
+        aktif: true,
+    };
+    let baru = db::run(&s.pool, move |c| katalog::buat_produk(c, uid, &key, &p)).await?;
+    tracing::info!(admin = %admin, produk = baru.id, kode = %baru.kode, nama = %baru.nama, "produk dibuat");
+    Ok((StatusCode::CREATED, Json(baru)))
+}
+
 /// Hapus permanen produk tanpa riwayat (422 PRODUK_BERTRANSAKSI bila sudah dipakai).
 pub async fn produk_hapus(State(s): State<AppState>, a: Auth, Path(id): Path<i64>) -> AppResult<StatusCode> {
     let admin = a.peran(ADMIN)?.usr.clone();
