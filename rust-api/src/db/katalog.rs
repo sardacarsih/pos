@@ -464,6 +464,20 @@ pub fn cari_pelanggan(
     Ok(Halaman { items, ada_lagi })
 }
 
+/// Semua anggota aktif yang belum punya akun mobile, urut unit kerja lalu nama (pembuatan akun massal).
+pub fn semua_belum_akun(conn: &Connection) -> AppResult<Vec<Pelanggan>> {
+    let sql = format!(
+        "SELECT {} {PEL_FROM} AND NOT EXISTS (SELECT 1 FROM MOB_USER U WHERE U.NIK = A.NIK) \
+         ORDER BY K.NAMA, A.NAMA_PELANGGAN, A.NIK",
+        pel_cols()
+    );
+    let mut out = Vec::new();
+    for r in conn.query(&sql, &[])? {
+        out.push(pel_map(&r?)?);
+    }
+    Ok(out)
+}
+
 /// Pelanggan aktif menurut NIK (kartu anggota / barcode NIK / simpan faktur).
 pub fn pelanggan_by_nik(conn: &Connection, nik: &str) -> AppResult<Option<Pelanggan>> {
     let sql = format!("SELECT {} {PEL_FROM} AND A.NIK = :nik", pel_cols());

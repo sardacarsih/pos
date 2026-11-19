@@ -9,6 +9,9 @@ proyek C# tidak diubah. Tabel baru berprefiks `MOB_*` (user, sesi, kategori per 
 3. `cargo run -- migrate`, lalu `cargo run -- user-add --username admin --nama "Admin" --role ADMIN`
    (password sementara dicetak sekali; wajib diganti saat login pertama), lalu `cargo run`.
 4. HTTPS: dihentikan di reverse proxy (Caddy/nginx); set `POS_TRUST_PROXY=true`. Server tidak melayani TLS sendiri.
+   Akun semua anggota aktif sekaligus: `cargo run -- user-add-anggota --dry-run` (hitung saja), lalu
+   `cargo run -- user-add-anggota --xlsx anggota.xlsx` (username = NIK; daftar password sementara per unit kerja,
+   wajib ganti saat login pertama). File berisi password: hapus setelah dibagikan.
 5. Mobile: `flutter run --dart-define=API_URL=https://alamat-server`.
 
 ## Identitas
@@ -25,7 +28,7 @@ Jalankan `cargo run -- migrate` sebelum menjalankan API versi ini. Migrasi memer
 
 ## Deploy produksi
 
-`.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema.
+`.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema. `pos-api selftest` menjalankan query baca saja terhadap database yang dikonfigurasi (dipanggil otomatis oleh deploy sebelum biner ditukar). Urutan lengkap (preflight, smoke test, rollback, web) ada di [`docs/deploy-produksi.md`](../docs/deploy-produksi.md); `-DryRun` melatih test + build tanpa SSH.
 
 ## Endpoint (`/api/v1`)
 auth: `login`, `refresh`, `logout`, `ganti-password`, `GET /me` · kasir: `periode/status`, `transaksi/nomor`, `barang`,
