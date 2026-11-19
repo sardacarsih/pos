@@ -101,6 +101,11 @@ namespace Penjualan
                         "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
+                catch (InvalidOperationException ex)
+                {
+                    XtraMessageBox.Show(ex.Message, "Faktur tidak dapat disimpan", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
                 //cetak
                 //CetakFaktur();
                 XtraMessageBox.Show("Faktur Penjualan berhasil diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);

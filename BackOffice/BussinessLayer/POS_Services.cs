@@ -39,9 +39,9 @@ namespace BackOffice.BussinessLayer
         {
             repository.InsertFaktur_Penjualan_Angsuran(faktur_header, ListItemsPenjualan, DaftarWaktuTagihan, creditCheck);
         }
-        public static decimal? GetPeriodCreditSpend(string nik, string status, DateTime date, string? excludeNoTransaksi = null)
+        public static void GantiFakturPenjualan(DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items, List<DTOAngsuranKreditBarang>? angsuran)
         {
-            return repository.GetPeriodCreditSpend(nik, status, date, excludeNoTransaksi);
+            repository.GantiFakturPenjualan(header, items, angsuran);
         }
         public static void UpdateTransactionNumber(string transactionNumber)
         {
