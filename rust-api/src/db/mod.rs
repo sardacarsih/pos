@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod desktop_migrations;
 pub mod faktur;
 pub mod foto;
+pub mod kas;
 pub mod katalog;
 pub mod opname;
 pub mod pembelian;
@@ -84,6 +85,7 @@ pub fn migrate(conn: &Connection) -> AppResult<usize> {
     }
     conn.commit()?;
     done += pembelian::migrate(conn)?;
+    done += kas::migrate(conn)?;
     Ok(done)
 }
 
