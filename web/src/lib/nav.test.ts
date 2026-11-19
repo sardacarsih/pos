@@ -30,13 +30,14 @@ describe('struktur menu', () => {
   it('kasir dan anggota tidak melihat menu admin', () => {
     for (const p of ['KASIR', 'ANGGOTA'] as Role[]) {
       const ids = semuaItem(menuUntuk(p)).map(i => i.id);
-      for (const admin of ['users', 'produk', 'stok', 'opname', 'harga', 'kategori', 'urut', 'rekap', 'tagihan-rekap', 'pembelian', 'hutang-supplier', 'kas', 'supplier']) expect(ids).not.toContain(admin);
+      for (const admin of ['users', 'produk', 'stok', 'opname', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas']) expect(ids).not.toContain(admin);
     }
   });
-  it('Admin dan Petugas bisa mengakses Supplier saat online', () => {
-    expect(semuaItem(menuUntuk('ADMIN')).map(i => i.id)).toContain('supplier');
-    expect(semuaItem(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian', 'supplier']);
-    expect(itemUtama(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian', 'supplier']);
+  it('Supplier dan hutang menjadi tab di Pembelian; menu pengadaan hanya Pembelian', () => {
+    const admin = semuaItem(menuUntuk('ADMIN')).map(i => i.id);
+    for (const pindah of ['kategori', 'urut', 'supplier', 'hutang-supplier']) expect(admin).not.toContain(pindah);
+    expect(semuaItem(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian']);
+    expect(itemUtama(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian']);
     expect(semuaItem(MENU_OFFLINE).map(i => i.id)).toEqual(['pembelian']);
   });
   it('label view mengikuti menu peran', () => {

@@ -10,11 +10,9 @@
   import AdminOpname from '$lib/AdminOpname.svelte';
   import { api, ApiError, login, logout, restore, clearSession, sesiPembelianOffline } from '$lib/api';
   import Pembelian from '$lib/Pembelian.svelte';
-  import PembelianRiwayat from '$lib/PembelianRiwayat.svelte';
   import Kas from '$lib/Kas.svelte';
   import Pinjaman from '$lib/Pinjaman.svelte';
   import PinjamanSaya from '$lib/PinjamanSaya.svelte';
-  import Supplier from '$lib/Supplier.svelte';
   import { sinkronPembelian } from '$lib/pembelianOffline';
   import type { User } from '$lib/types';
   import Shop from '$lib/Shop.svelte'; import General from '$lib/General.svelte'; import Admin from '$lib/Admin.svelte'; import Users from '$lib/Users.svelte'; import TagihanRekap from '$lib/TagihanRekap.svelte';
@@ -160,10 +158,6 @@
     <main class="content" id="konten" tabindex="-1" aria-labelledby="judul-halaman" bind:this={mainEl}>
       {#if view === 'pembelian' && bisaBeli(user)}
         {#key user.id}<Pembelian {user} online={terhubung}/>{/key}
-      {:else if view === 'supplier' && bisaBeli(user) && !modeLokal}
-        {#key user.id}<Supplier userId={user.id} online={terhubung}/>{/key}
-      {:else if view === 'hutang-supplier' && user.role === 'ADMIN'}
-        {#key user.id}<PembelianRiwayat {user} online={terhubung} hutang/>{/key}
       {:else if view === 'kas' && user.role === 'ADMIN'}
         {#key user.id}<Kas {user}/>{/key}
       {:else if view === 'pinjaman' && user.role === 'ADMIN'}
@@ -174,7 +168,7 @@
       {:else if user.role === 'ADMIN' && view === 'users'}<Users currentUserId={user.id}/>
       {:else if user.role === 'ADMIN' && view === 'tagihan-rekap'}<TagihanRekap/>
       {:else if user.role === 'ADMIN' && view === 'opname'}<AdminOpname bind:this={opname}/>
-      {:else if user.role === 'ADMIN' && ['produk','stok','harga','kategori','urut','rekap'].includes(view)}<Admin {view}/>
+      {:else if user.role === 'ADMIN' && ['produk','stok','harga','rekap'].includes(view)}<Admin {view}/>
       {:else}<General {user} {view} on:go={(e) => view = e.detail}/>
       {/if}
     </main>

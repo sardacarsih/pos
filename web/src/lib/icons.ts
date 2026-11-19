@@ -6,8 +6,6 @@ import Package from '@lucide/svelte/icons/package';
 import PackageX from '@lucide/svelte/icons/package-x';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 import TrendingDown from '@lucide/svelte/icons/trending-down';
-import Tags from '@lucide/svelte/icons/tags';
-import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down';
 import ChartColumn from '@lucide/svelte/icons/chart-column';
 import Scale from '@lucide/svelte/icons/scale';
 import UserRound from '@lucide/svelte/icons/user-round';
@@ -18,11 +16,10 @@ import IdCard from '@lucide/svelte/icons/id-card';
 import PackagePlus from '@lucide/svelte/icons/package-plus';
 import Landmark from '@lucide/svelte/icons/landmark';
 import HandCoins from '@lucide/svelte/icons/hand-coins';
-import Truck from '@lucide/svelte/icons/truck';
 import type { NamaIkon } from './nav';
 
 export const IKON: Record<NamaIkon, Component<any>> = {
   beranda: LayoutDashboard, pengguna: Users, produk: Package, stokHabis: PackageX, opname: ClipboardCheck,
-  hargaRendah: TrendingDown, kategori: Tags, urutan: ArrowUpDown, rekap: ChartColumn, tagihan: Scale,
-  profil: UserRound, kasir: ScanBarcode, belanja: ShoppingBasket, riwayat: ReceiptText, kartu: IdCard, pembelian: PackagePlus, kas: Landmark, pinjaman: HandCoins, supplier: Truck
+  hargaRendah: TrendingDown, rekap: ChartColumn, tagihan: Scale,
+  profil: UserRound, kasir: ScanBarcode, belanja: ShoppingBasket, riwayat: ReceiptText, kartu: IdCard, pembelian: PackagePlus, kas: Landmark, pinjaman: HandCoins
 };
