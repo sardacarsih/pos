@@ -2,6 +2,9 @@ pub mod admin;
 pub mod anggota;
 pub mod auth;
 pub mod kasir;
+pub mod kas;
+pub mod pembelian;
+pub mod pinjaman;
 pub mod profil;
 pub mod push;
 
@@ -143,9 +146,12 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/refresh", post(auth::refresh))
+        .route("/api/v1/web/auth/login", post(auth::login_web))
+        .route("/api/v1/web/auth/refresh", post(auth::refresh_web))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/ganti-password", post(auth::ganti_password))
         .route("/api/v1/me", get(auth::me))
+        .route("/api/v1/web/me", get(auth::me_web))
         .route("/api/v1/push/device", put(push::register).delete(push::remove))
         // profil sendiri (semua role)
         .route("/api/v1/profil", get(profil::lihat).put(profil::ubah))
@@ -182,6 +188,32 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/saya/transaksi/{no}", get(anggota::detail))
         // admin
         .route("/api/v1/admin/users", get(admin::list).post(admin::buat))
+        .route("/api/v1/web/admin/users", get(admin::list_web).post(admin::buat_web))
+        .route("/api/v1/pembelian/referensi", get(pembelian::referensi))
+        .route("/api/v1/pembelian", get(pembelian::riwayat).post(pembelian::posting))
+        .route("/api/v1/pembelian/{no}", get(pembelian::detail))
+        .route("/api/v1/pembelian/{no}/batal", post(pembelian::batal))
+        .route("/api/v1/hutang-supplier", get(pembelian::hutang))
+        .route("/api/v1/kas/akun", get(kas::akun).post(kas::akun_buat))
+        .route("/api/v1/kas/akun/{id}", put(kas::akun_ubah))
+        .route("/api/v1/kas/buku", get(kas::buku))
+        .route("/api/v1/kas/mutasi", post(kas::manual))
+        .route("/api/v1/kas/mutasi/{id}/batal", post(kas::batal))
+        .route("/api/v1/kas/transfer", post(kas::transfer))
+        .route("/api/v1/kas/tarik", post(kas::tarik))
+        .route("/api/v1/saya/pinjaman", get(pinjaman::saya).post(pinjaman::ajukan))
+        .route("/api/v1/saya/pinjaman/simulasi", post(pinjaman::simulasi))
+        .route("/api/v1/saya/pinjaman/{id}/batal", post(pinjaman::batal))
+        .route("/api/v1/pinjaman", get(pinjaman::daftar))
+        .route("/api/v1/pinjaman/antrian", get(pinjaman::antrian))
+        .route("/api/v1/pinjaman/pengaturan", get(pinjaman::pengaturan))
+        .route("/api/v1/pinjaman/pengaturan/hak", put(pinjaman::hak))
+        .route("/api/v1/pinjaman/pengaturan/maks", put(pinjaman::maks))
+        .route("/api/v1/pinjaman/plafon/{periode}", put(pinjaman::plafon))
+        .route("/api/v1/pinjaman/{id}", get(pinjaman::detail))
+        .route("/api/v1/pinjaman/{id}/{aksi}", post(pinjaman::proses))
+        .route("/api/v1/hutang-supplier/{no}/pembayaran", post(pembelian::bayar))
+        .route("/api/v1/hutang-supplier/{no}/pembayaran/{id}/balik", post(pembelian::balik))
         .route(
             "/api/v1/admin/users/{id}/reset-password",
             post(admin::reset_password),
@@ -206,7 +238,7 @@ pub fn router(state: AppState) -> Router {
             get(admin::rekap_transaksi),
         )
         .route("/api/v1/admin/faktur/{no}", get(admin::faktur_admin))
-        .route("/api/v1/admin/produk", get(admin::produk_list))
+        .route("/api/v1/admin/produk", get(admin::produk_list).post(admin::produk_buat))
         .route("/api/v1/admin/produk/{id}", put(admin::produk_ubah).delete(admin::produk_hapus))
         .route("/api/v1/admin/produk/{id}/jejak", get(admin::produk_jejak))
         .route("/api/v1/admin/produk/{id}/satuan", get(admin::produk_satuan).put(admin::produk_satuan_ganti))

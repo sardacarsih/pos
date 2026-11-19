@@ -548,3 +548,79 @@ class RincianPenjualan {
   final List<RincianKasir> perKasir;
   final List<RincianHari> harian;
 }
+
+// ---- pinjaman anggota ----
+
+int _bulat(Object? v) => (v as num? ?? 0).round();
+
+class AturanPinjaman {
+  final double bunga;
+  final int maksTenor, maksPinjaman; // maksPinjaman 0 = tanpa batas
+  AturanPinjaman({required this.bunga, required this.maksTenor, required this.maksPinjaman});
+  factory AturanPinjaman.fromJson(Map<String, dynamic> j) => AturanPinjaman(
+    bunga: (j['bunga'] as num).toDouble(),
+    maksTenor: j['maks_tenor'] as int,
+    maksPinjaman: j['maks_pinjaman'] as int,
+  );
+}
+
+class PengajuanPinjaman {
+  final int id, jumlah, tenor, angsuran;
+  final int? antrian;
+  final String status, keperluan, tglAju;
+  final String? noTransaksi, alasan;
+  PengajuanPinjaman({required this.id, required this.jumlah, required this.tenor, required this.angsuran, this.antrian,
+      required this.status, required this.keperluan, required this.tglAju, this.noTransaksi, this.alasan});
+  factory PengajuanPinjaman.fromJson(Map<String, dynamic> j) => PengajuanPinjaman(
+    id: j['id'] as int,
+    jumlah: j['jumlah'] as int,
+    tenor: j['tenor'] as int,
+    angsuran: _bulat(j['angsuran']),
+    antrian: j['antrian'] as int?,
+    status: j['status'] as String,
+    keperluan: j['keperluan'] as String,
+    tglAju: (j['tgl_aju'] as String? ?? '').split('T').first,
+    noTransaksi: j['no_transaksi'] as String?,
+    alasan: j['alasan'] as String?,
+  );
+  bool get berjalan => const ['DIAJUKAN', 'DIVERIFIKASI', 'DISETUJUI'].contains(status);
+}
+
+class PinjamanAktif {
+  final String noTransaksi, tanggal;
+  final int pinjaman, tenor, angsuran, angsuranLewat;
+  PinjamanAktif({required this.noTransaksi, required this.tanggal, required this.pinjaman, required this.tenor,
+      required this.angsuran, required this.angsuranLewat});
+  factory PinjamanAktif.fromJson(Map<String, dynamic> j) => PinjamanAktif(
+    noTransaksi: j['no_transaksi'] as String,
+    tanggal: j['tanggal'] as String,
+    pinjaman: j['pinjaman'] as int,
+    tenor: j['tenor'] as int,
+    angsuran: _bulat(j['angsuran']),
+    angsuranLewat: j['angsuran_lewat'] as int,
+  );
+}
+
+class PinjamanSaya {
+  final AturanPinjaman aturan;
+  final List<PengajuanPinjaman> pengajuan;
+  final List<PinjamanAktif> aktif;
+  PinjamanSaya({required this.aturan, required this.pengajuan, required this.aktif});
+  factory PinjamanSaya.fromJson(Map<String, dynamic> j) => PinjamanSaya(
+    aturan: AturanPinjaman.fromJson(j['aturan'] as Map<String, dynamic>),
+    pengajuan: [for (final p in j['pengajuan'] as List) PengajuanPinjaman.fromJson(p as Map<String, dynamic>)],
+    aktif: [for (final p in j['pinjaman_aktif'] as List) PinjamanAktif.fromJson(p as Map<String, dynamic>)],
+  );
+}
+
+class BarisAngsuran {
+  final int ke, angsuran, sisa;
+  final String jatuhTempo;
+  BarisAngsuran({required this.ke, required this.angsuran, required this.sisa, required this.jatuhTempo});
+  factory BarisAngsuran.fromJson(Map<String, dynamic> j) => BarisAngsuran(
+    ke: j['ke'] as int,
+    angsuran: _bulat(j['angsuran']),
+    sisa: _bulat(j['saldo_akhir']),
+    jatuhTempo: j['jatuh_tempo'] as String,
+  );
+}

@@ -28,6 +28,14 @@ Jalankan `cargo run -- migrate` sebelum menjalankan API versi ini. Migrasi memer
 
 ## Deploy produksi
 
+Untuk rilis Pembelian Web, jalankan `pos-api migrate` dan `pos-api selftest` di staging sebelum mengganti API. Gunakan pemilik tabel Oracle yang juga dipakai BackOffice agar migrasi dapat membuat trigger pada `POS_PEMBELIAN` dan `POS_PEMBELIANDETAIL`. Trigger melindungi faktur web aktif sehingga koreksi dilakukan dari web. Verifikasi pembelian lama dari BackOffice dan cocokkan stok serta hutang dengan faktur web uji sebelum merilis web.
+
+Untuk tes transaksi Oracle, arahkan `POS_TEST_ORACLE_PEMBELIAN` ke skema **kosong dan sekali pakai** dengan format `user/password@connect`, lalu jalankan `cargo test --test pembelian_oracle -- --nocapture`. Tes mengisi skema dengan tabel dan data contoh. Gunakan skema yang bisa dibuang setelah tes.
+
+Modul Kas & Bank (`/api/v1/kas/*`, ADMIN): tabel `MOB_KAS_AKUN` dan `MOB_KAS_MUTASI`, tanpa trigger. Mutasi dari modul lain masuk lewat `POST /api/v1/kas/tarik` (penjualan tunai per hari, `MOB_BELI_BAYAR`, `FIN_PINJAMAN`) yang hanya mencatat selisih, sehingga aman diulang dan menghasilkan koreksi bila transaksi asal berubah. Tes Oracle: `POS_TEST_ORACLE_KAS` (skema kosong sekali pakai), `cargo test --test kas_oracle -- --nocapture`.
+
+Modul Pinjaman: anggota mengajukan lewat `/api/v1/saya/pinjaman` (NIK dari token); pengurus ADMIN memproses lewat `/api/v1/pinjaman/{id}/{verifikasi|setujui|tolak|cairkan}` sesuai hak tahap di `MOB_PINJAMAN_HAK` (satu pengajuan wajib ditangani orang berbeda per tahap). Pengajuan disetujui antre FIFO; pencairan hanya untuk kepala antrian bila sisa `MOB_PINJAMAN_PLAFON` periode (plafon − `SUM(FIN_PINJAMAN.PINJAMAN)` periode berjalan) cukup. Pencairan menulis `FIN_PINJAMAN` + `FIN_PINJAMAN_DETAIL` (nomor `P-yy-nnnnnn`, anuitas sama dengan BackOffice), jadi tagihan dan tarik KAS tidak berubah. Aturan: `FIN_SETTINGS` BUNGA_EFEKTIF, MAXANGSURAN, MAX_PINJAMAN (0 = tanpa batas). Tes Oracle: `POS_TEST_ORACLE_PINJAMAN`, `cargo test --test pinjaman_oracle`.
+
 `.\rust-api\tools\deploy-api.ps1` (dari root repo): test, build release, kirim lewat SSH ke `.tmp`, cocokkan sha256, cadangkan ke `pos-api-release.prev.exe`, tukar biner, restart layanan `KopkarPosApi`, health check, dan rollback otomatis bila gagal. Jalankan `pos-api migrate` terpisah bila rilis memuat perubahan skema. `pos-api selftest` menjalankan query baca saja terhadap database yang dikonfigurasi (dipanggil otomatis oleh deploy sebelum biner ditukar). Urutan lengkap (preflight, smoke test, rollback, web) ada di [`docs/deploy-produksi.md`](../docs/deploy-produksi.md); `-DryRun` melatih test + build tanpa SSH.
 
 ## Endpoint (`/api/v1`)

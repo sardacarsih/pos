@@ -43,6 +43,12 @@ pub fn username_dari_nik(nik: &str) -> String {
 }
 
 pub async fn list(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user::UserInfo>>> {
+    let Json(mut users) = list_web(State(s), a).await?;
+    users.retain(|u| u.role != Role::Pembelian);
+    Ok(Json(users))
+}
+
+pub async fn list_web(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user::UserInfo>>> {
     a.peran(ADMIN)?;
     Ok(Json(db::run(&s.pool, user::list_users).await?))
 }
@@ -106,7 +112,7 @@ pub fn validasi_buat(req: &BuatReq, default_nik: &str) -> AppResult<ValidBuat> {
         (Role::Anggota, None) => {
             return Err(AppError::validation("Akun anggota wajib memiliki NIK"));
         }
-        (Role::Kasir | Role::Admin, Some(_)) => {
+        (Role::Kasir | Role::Admin | Role::Pembelian, Some(_)) => {
             return Err(AppError::validation("NIK hanya untuk akun anggota"));
         }
         _ => {}
@@ -140,6 +146,14 @@ pub async fn buat(
     a: Auth,
     Json(req): Json<BuatReq>,
 ) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    if req.role == Role::Pembelian {
+        return Err(AppError::validation("Akun petugas pembelian dibuat melalui POS Web"));
+    }
+    buat_web(State(s), a, Json(req)).await
+}
+
+pub async fn buat_web(State(s): State<AppState>, a: Auth, Json(req): Json<BuatReq>) -> AppResult<Json<Value>> {
     a.peran(ADMIN)?;
     let v = validasi_buat(&req, &s.cfg.default_nik)?;
     let tmp = password::temp_password();
@@ -587,6 +601,32 @@ pub async fn produk_satuan_ganti(
     let v = db::run(&s.pool, move |c| katalog::ganti_satuan(c, id, &daftar)).await?;
     tracing::info!(admin = %admin, produk = id, jumlah = v.len(), "satuan jual produk diubah");
     Ok(Json(satuan_json(&v)))
+}
+
+/// Buat produk baru; kode item otomatis. Header `Idempotency-Key` wajib (permintaan ulang aman).
+pub async fn produk_buat(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<UbahProdukReq>,
+) -> AppResult<(StatusCode, Json<katalog::ProdukAdmin>)> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    let key = super::idempotency_key(&headers)?;
+    let p = katalog::UbahProduk {
+        nama: req.nama,
+        barcode: req.barcode.unwrap_or_default(),
+        satuan: req.satuan,
+        kategori_id: req.kategori_id,
+        harga: req.harga,
+        beli: req.beli,
+        aktif: true,
+    };
+    let baru = db::run(&s.pool, move |c| katalog::buat_produk(c, uid, &key, &p)).await?;
+    tracing::info!(admin = %admin, produk = baru.id, kode = %baru.kode, nama = %baru.nama, "produk dibuat");
+    Ok((StatusCode::CREATED, Json(baru)))
 }
 
 /// Hapus permanen produk tanpa riwayat (422 PRODUK_BERTRANSAKSI bila sudah dipakai).

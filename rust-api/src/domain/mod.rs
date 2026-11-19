@@ -3,4 +3,5 @@ pub mod angsuran;
 pub mod credit_limit;
 pub mod faktur;
 pub mod nomor;
+pub mod pinjaman;
 pub mod potongan;

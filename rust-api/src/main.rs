@@ -7,7 +7,7 @@ use pos_api::{
     routes::{self, AppState},
 };
 
-const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN [--nik NIK]\n  pos-api user-add-anggota --xlsx FILE.xlsx | --dry-run   (akun semua anggota aktif yang belum punya akun)";
+const USAGE: &str = "Pemakaian:\n  pos-api [serve]\n  pos-api migrate\n  pos-api selftest   (query baca saja; keluar kode 1 bila ada yang GAGAL)\n  pos-api user-add --username U --nama N --role KASIR|ANGGOTA|ADMIN|PEMBELIAN [--nik NIK]\n  pos-api user-add-anggota --xlsx FILE.xlsx | --dry-run   (akun semua anggota aktif yang belum punya akun)";
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()

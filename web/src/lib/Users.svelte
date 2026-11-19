@@ -23,25 +23,25 @@
 
   type Tab = 'sistem' | 'anggota';
   type Status = '' | 'aktif' | 'nonaktif' | 'terkunci';
-  interface Account { id: number; username: string; nama: string; role: 'ADMIN' | 'KASIR' | 'ANGGOTA'; nik: string | null; aktif: boolean; terkunci: boolean }
+  interface Account { id: number; username: string; nama: string; role: 'ADMIN' | 'KASIR' | 'ANGGOTA' | 'PEMBELIAN'; nik: string | null; aktif: boolean; terkunci: boolean }
   interface Member { nik: string; nama: string; unit_nama: string }
   interface MemberPage { items: Member[]; ada_lagi: boolean }
   interface TemporaryPassword { password_sementara: string }
   type AccountAction = { kind: 'confirm'; action: 'reset' | 'status'; account: Account };
   type Dialog = { kind: 'create' } | AccountAction | { kind: 'password'; username: string; value: string };
 
-  const roles = { ADMIN: 'Admin', KASIR: 'Kasir', ANGGOTA: 'Anggota' };
+  const roles = { ADMIN: 'Admin', KASIR: 'Kasir', ANGGOTA: 'Anggota', PEMBELIAN: 'Petugas pembelian' };
   let accounts: Account[] = [];
   let tab: Tab = 'sistem', status: Status = '', search = '';
   let loading = true, busy = false, listError = '', notice = '';
   let dialog: Dialog | null = null, dialogError = '';
   let dialogEl: HTMLDialogElement, searchInput: HTMLInputElement;
   let previouslyFocused: HTMLElement | null = null;
-  let username = '', name = '', role: 'ADMIN' | 'KASIR' = 'KASIR';
+  let username = '', name = '', role: 'ADMIN' | 'KASIR' | 'PEMBELIAN' = 'KASIR';
   let members: Member[] = [], selected: Member | null = null, memberSearch = '', submittedSearch = '';
   let memberPage = 1, memberMore = false, memberLoading = false, memberError = '', retryNext = false, requestId = 0;
 
-  $: systemAccounts = accounts.filter(account => account.role === 'ADMIN' || account.role === 'KASIR');
+  $: systemAccounts = accounts.filter(account => account.role !== 'ANGGOTA');
   $: memberAccounts = accounts.filter(account => account.role === 'ANGGOTA');
   $: tabAccounts = tab === 'sistem' ? systemAccounts : memberAccounts;
   $: term = search.trim().toLowerCase();
@@ -68,7 +68,7 @@
     listError = '';
     loading = true;
     try {
-      accounts = await api<Account[]>('/admin/users');
+      accounts = await api<Account[]>('/web/admin/users');
     } catch (e) {
       listError = (e as Error).message;
     } finally {
@@ -162,7 +162,7 @@
       const body = tab === 'anggota' && selected
         ? { username: memberUsername, nama: selected.nama, role: 'ANGGOTA', nik: selected.nik }
         : { username: username.trim().toLowerCase(), nama: name.trim(), role };
-      const result = await api<TemporaryPassword>('/admin/users', { method: 'POST', body });
+      const result = await api<TemporaryPassword>('/web/admin/users', { method: 'POST', body });
       await present({ kind: 'password', username: body.username, value: result.password_sementara });
       await loadAccounts();
     } catch (e) {
@@ -346,7 +346,7 @@
           <form class="account-form" on:submit|preventDefault={addUser}>
             <label>Nama <input data-initial-focus bind:value={name} required maxlength="100"/></label>
             <label>Username <input bind:value={username} required minlength="3" maxlength="50" autocapitalize="none" spellcheck="false"/></label>
-            <label>Peran <select bind:value={role}><option value="KASIR">Kasir</option><option value="ADMIN">Admin</option></select></label>
+            <label>Peran <select bind:value={role}><option value="KASIR">Kasir</option><option value="ADMIN">Admin</option><option value="PEMBELIAN">Petugas pembelian</option></select></label>
             <div class="dialog-actions">
               <button type="button" class="button secondary-action" on:click={() => cancelDialog()} disabled={busy}>Batal</button>
               <button class="button primary-action" disabled={busy}><UserPlus size={17} aria-hidden="true"/> {busy ? 'Menyimpan…' : 'Buat pengguna'}</button>

@@ -24,14 +24,17 @@ describe('struktur menu', () => {
   }
   it('menu admin dikelompokkan dan lencana hanya pada item pantau', () => {
     const m = menuUntuk('ADMIN');
-    expect(m.kelompok.map(k => k.judul)).toEqual(['Ringkasan', 'Pantau', 'Katalog & stok', 'Anggota & keuangan', 'Pengelolaan', 'Akun']);
+    expect(m.kelompok.map(k => k.judul)).toEqual(['Ringkasan', 'Pantau', 'Katalog & stok', 'Pengadaan', 'Anggota & keuangan', 'Pengelolaan', 'Akun']);
     expect(semuaItem(m).filter(i => i.badge).map(i => i.id)).toEqual(['stok', 'harga']);
   });
   it('kasir dan anggota tidak melihat menu admin', () => {
     for (const p of ['KASIR', 'ANGGOTA'] as Role[]) {
       const ids = semuaItem(menuUntuk(p)).map(i => i.id);
-      for (const admin of ['users', 'produk', 'stok', 'opname', 'harga', 'kategori', 'urut', 'rekap', 'tagihan-rekap']) expect(ids).not.toContain(admin);
+      for (const admin of ['users', 'produk', 'stok', 'opname', 'harga', 'kategori', 'urut', 'rekap', 'tagihan-rekap', 'pembelian', 'hutang-supplier', 'kas']) expect(ids).not.toContain(admin);
     }
+  });
+  it('petugas pembelian hanya mendapat menu pembelian', () => {
+    expect(semuaItem(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian']);
   });
   it('label view mengikuti menu peran', () => {
     expect(labelView(menuUntuk('KASIR'), 'belanja')).toBe('Kasir');

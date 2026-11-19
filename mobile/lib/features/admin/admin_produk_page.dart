@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api.dart';
+import '../../core/checkout.dart' show newCheckoutKey;
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/beranda_widgets.dart' show statusMargin;
@@ -16,7 +17,7 @@ import '../../core/katalog.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 
-/// Kelola produk (master POS_PRODUCT): cari, filter aktif, ubah, nonaktifkan. Tidak ada tambah/hapus.
+/// Kelola produk (master POS_PRODUCT): cari, filter aktif, tambah, ubah, nonaktifkan, hapus (bila tanpa riwayat).
 class AdminProdukPage extends ConsumerStatefulWidget {
   const AdminProdukPage({super.key, this.hargaRendah = false});
 
@@ -237,6 +238,145 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     } on ApiException catch (e) {
       if (mounted) _pesan(e.pesan);
     }
+  }
+
+  /// Produk baru: kode item dibuat server. Kunci idempotensi dibuat sekali per dialog agar retry tidak membuat ganda.
+  Future<void> _tambah() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final nama = TextEditingController();
+    final barcode = TextEditingController();
+    final satuan = TextEditingController(text: 'PCS');
+    final harga = TextEditingController();
+    final beli = TextEditingController();
+    var kategoriId = _kategori.isEmpty ? '' : _kategori.first.id;
+    final kunci = newCheckoutKey();
+    String? galat;
+    var sibuk = false;
+    final baru = await showDialog<ProdukAdmin>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: const Text('Tambah produk'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nama,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Nama'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: barcode,
+                  decoration: const InputDecoration(labelText: 'Barcode (opsional)'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: satuan,
+                  decoration: const InputDecoration(labelText: 'Satuan'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _kategori.any((k) => k.id == kategoriId) ? kategoriId : null,
+                  isExpanded: true,
+                  items: [
+                    for (final k in _kategori)
+                      DropdownMenuItem(
+                        value: k.id,
+                        child: Text(k.nama, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => set(() => kategoriId = v ?? kategoriId),
+                  decoration: const InputDecoration(labelText: 'Kategori'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: harga,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Harga jual (Rp)'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: beli,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Harga beli (Rp)'),
+                ),
+                if (galat != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      galat!,
+                      style: TextStyle(color: Theme.of(c).colorScheme.error),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: sibuk ? null : () => Navigator.pop(c),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: sibuk
+                  ? null
+                  : () async {
+                      final h = digitsToInt(harga.text), b = digitsToInt(beli.text);
+                      final salah = cekProdukBaru(
+                        nama: nama.text,
+                        satuan: satuan.text,
+                        kategoriId: kategoriId,
+                        harga: h,
+                        beli: b,
+                      );
+                      if (salah != null) {
+                        set(() => galat = salah);
+                        return;
+                      }
+                      set(() {
+                        sibuk = true;
+                        galat = null;
+                      });
+                      try {
+                        final p = await ref.read(apiProvider).buatProduk(
+                          nama: nama.text.trim(),
+                          barcode: barcode.text.trim(),
+                          satuan: satuan.text.trim(),
+                          kategoriId: kategoriId,
+                          harga: h,
+                          beli: b,
+                          idempotencyKey: kunci,
+                        );
+                        if (c.mounted) Navigator.pop(c, p);
+                      } on ApiException catch (e) {
+                        set(() {
+                          sibuk = false;
+                          galat = e.pesan;
+                        });
+                      }
+                    },
+              child: Text(sibuk ? 'Menyimpan…' : 'Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+    // Dialog masih beranimasi tutup & memakai controller; dispose langsung memicu assertion.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      for (final c in [nama, barcode, satuan, harga, beli]) {
+        c.dispose();
+      }
+    });
+    if (baru == null || !mounted) return;
+    setState(() {
+      // Daftar ber-filter: tampilkan produk baru hanya bila cocok dengan filter aktif.
+      if (_aktif != 'N' && !widget.hargaRendah) _items.insert(0, baru);
+    });
+    _pesan('Produk ${baru.nama} ditambahkan (${baru.kode})');
   }
 
   Future<void> _edit(ProdukAdmin p) async {
@@ -480,6 +620,13 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   // Dipakai sebagai tab di AdminKatalogPage: header, profil, dan keluar ada di halaman induk.
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.transparent,
+    floatingActionButton: widget.hargaRendah
+        ? null
+        : FloatingActionButton.extended(
+            onPressed: _tambah,
+            icon: const Icon(Icons.add),
+            label: const Text('Tambah produk'),
+          ),
     body: Column(
       children: [
         Padding(
