@@ -37,13 +37,13 @@ namespace Penjualan.Tests.Integration
         };
 
         /// <summary>Runs the validation in its own transaction and returns any thrown exception (rolled back).</summary>
-        private Exception? RunValidation(CreditLimitCheck check)
+        private Exception? RunValidation(CreditLimitCheck check, string? nomor = null)
         {
             using var conn = _fx.Open();
             using var tx = conn.BeginTransaction();
             try
             {
-                return Record.Exception(() => FakturPenjualan.ValidateCreditLimit(conn, tx, check));
+                return Record.Exception(() => FakturPenjualan.ValidateCreditLimit(conn, tx, check, nomor));
             }
             finally
             {
@@ -91,6 +91,24 @@ namespace Penjualan.Tests.Integration
 
             // 800,000 + 200,000 = 1,000,000 == limit (boundary inclusive)
             Assert.Null(RunValidation(Check(200_000)));
+        }
+
+        [SkippableFact]
+        public void Edit_UsesStoredAmount_ExcludesSelf_AndIncludesLastDay()
+        {
+            Skip.IfNot(_fx.Available, _fx.SkipReason);
+            _fx.ClearData();
+            _fx.SeedMember(Nik, 1_000_000);
+            _fx.SeedPeriode(Periode, DecFrom, DecTo, DecFrom, DecTo);
+            _fx.SeedSale(Nik, TxnDate, 600_000, "W-99-000001");
+            _fx.SeedSale(Nik, DecTo.AddHours(23), 400_000);
+
+            Assert.Null(RunValidation(Check(25_000), "W-99-000001"));
+
+            _fx.SeedSale(Nik, TxnDate, 1);
+            var ex = Assert.IsType<CreditLimitExceededException>(RunValidation(Check(25_000), "W-99-000001"));
+            Assert.Equal(400_001m, ex.CurrentDebt);
+            Assert.Equal(600_000m, ex.InvoiceAmount);
         }
 
         [SkippableFact]

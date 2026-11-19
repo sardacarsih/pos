@@ -84,14 +84,15 @@ namespace Penjualan.Tests.Integration
                 ("bd", Fmt(bulananFrom)), ("bs", Fmt(bulananTo)));
         }
 
-        public void SeedSale(string nik, DateTime tanggal, decimal total)
+        public void SeedSale(string nik, DateTime tanggal, decimal total, string? nomor = null)
         {
             using var conn = Open();
             using var cmd = new OracleCommand(
-                "INSERT INTO POS_PENJUALAN (NIK, TANGGAL, TOTAL) VALUES (:nik, :tgl, :total)", conn);
+                "INSERT INTO POS_PENJUALAN (NIK, TANGGAL, TOTAL, NO_TRANSAKSI) VALUES (:nik, :tgl, :total, :nomor)", conn);
             cmd.Parameters.Add("nik", OracleDbType.Varchar2).Value = nik;
             cmd.Parameters.Add("tgl", OracleDbType.Date).Value = tanggal;
             cmd.Parameters.Add("total", OracleDbType.Decimal).Value = total;
+            cmd.Parameters.Add("nomor", OracleDbType.Varchar2).Value = (object?)nomor ?? DBNull.Value;
             cmd.ExecuteNonQuery();
         }
 
@@ -106,7 +107,7 @@ namespace Penjualan.Tests.Integration
                 R1DARI VARCHAR2(20), R1SAMPAI VARCHAR2(20),
                 R2DARI VARCHAR2(20), R2SAMPAI VARCHAR2(20),
                 BDARI VARCHAR2(20), BSAMPAI VARCHAR2(20))");
-            Exec(conn, "CREATE TABLE POS_PENJUALAN (NIK VARCHAR2(20), TANGGAL DATE, TOTAL NUMBER)");
+            Exec(conn, "CREATE TABLE POS_PENJUALAN (NIK VARCHAR2(20), TANGGAL DATE, TOTAL NUMBER, NO_TRANSAKSI VARCHAR2(30) UNIQUE)");
         }
 
         private static bool TableExists(OracleConnection conn, string table)

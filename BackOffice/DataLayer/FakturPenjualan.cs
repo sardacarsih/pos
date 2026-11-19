@@ -1,4 +1,5 @@
-﻿using BackOffice.Interface;
+using BackOffice.BussinessLayer;
+using BackOffice.Interface;
 using Kopkar.Shared;
 using BackOffice.Model;
 using Dapper;
@@ -136,107 +137,189 @@ namespace BackOffice.DataLayer
             DeletedCommand.Parameters.Add("notransaksi", notransaksi);
             DeletedCommand.ExecuteNonQuery();
         }
-        /// <summary>
-        /// BATAS
-        /// </summary>
-        /// <param name="faktur_header"></param>
-        /// <param name="ListItemsPenjualan"></param>
-        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan)
+        public void InsertFaktur_Penjualan(DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items, CreditLimitCheck? creditCheck = null)
+        {
+            SimpanFakturPenjualan(header, items, null, creditCheck, gantiFaktur: false);
+        }
+
+        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items, List<DTOAngsuranKreditBarang> angsuran, CreditLimitCheck? creditCheck = null)
+        {
+            SimpanFakturPenjualan(header, items, angsuran, creditCheck, gantiFaktur: false);
+        }
+
+        public void GantiFakturPenjualan(DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items, List<DTOAngsuranKreditBarang>? angsuran)
+        {
+            var creditCheck = new CreditLimitCheck
+            {
+                NIK = header.NIK,
+                STATUS = header.STATUS,
+                TransactionDate = header.TANGGAL,
+                InvoiceAmount = header.TOTAL
+            };
+            SimpanFakturPenjualan(header, items, angsuran, creditCheck, gantiFaktur: true);
+        }
+
+        private static void SimpanFakturPenjualan(
+            DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items,
+            List<DTOAngsuranKreditBarang>? angsuran, CreditLimitCheck? creditCheck, bool gantiFaktur)
         {
             using OracleConnection conn = new(global.connectionString);
             conn.Open();
-            OracleTransaction transaction = conn.BeginTransaction();
+            using OracleTransaction transaction = conn.BeginTransaction();
 
             try
             {
-                // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
-                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
-
-                // Insert master records
-                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN,PENDING) " +
-                                                "VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN,:PENDING) " +
-                                                "RETURNING ID_PENJUALAN INTO :penjualanId";
-
-                var masterParameters = new DynamicParameters(faktur_header);
-                masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
-
-                int rowsAffected = conn.Execute(insertFakturJual_Master, masterParameters, transaction);
-
-                Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
-
-                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA) " +
-                    "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
-
-                foreach (var detail in ListItemsPenjualan)
+                PeriodeGuard.Pastikan(conn, transaction, header.TANGGAL);
+                if (creditCheck != null)
                 {
-                    detail.ID_PENJUALAN = newPenjualanId;
-                    detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
+                    ValidateCreditLimit(conn, transaction, creditCheck, gantiFaktur ? header.NO_TRANSAKSI : null);
                 }
-                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
+
+                if (gantiFaktur)
+                {
+                    // Penggantian header, detail, dan angsuran harus berhasil atau batal bersama.
+                    int deleted = conn.Execute("DELETE FROM POS_PENJUALAN WHERE NO_TRANSAKSI=:nomor",
+                        new { nomor = header.NO_TRANSAKSI }, transaction);
+                    if (deleted != 1)
+                    {
+                        throw new InvalidOperationException("Faktur penjualan tidak ditemukan atau nomor faktur ganda.");
+                    }
+                }
+
+                string kolomPending = angsuran == null ? ",PENDING" : "";
+                string nilaiPending = angsuran == null ? ",:PENDING" : "";
+                string insertMaster = $"""
+                    INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN{kolomPending})
+                    VALUES (:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN{nilaiPending})
+                    RETURNING ID_PENJUALAN INTO :penjualanId
+                    """;
+
+                var master = new DynamicParameters(header);
+                master.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                conn.Execute(insertMaster, master, transaction);
+                int penjualanId = master.Get<int>("penjualanId");
+
+                const string insertDetail = """
+                    INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP, HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA)
+                    VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP, :HARGA_BARANG, :JUMLAH_BARANG, :BRUTO, :POTONGAN, :TOTAL_HARGA)
+                    """;
+
+                foreach (var detail in items)
+                {
+                    detail.ID_PENJUALAN = penjualanId;
+                    detail.NO_TRANSAKSI = header.NO_TRANSAKSI;
+                }
+                conn.Execute(insertDetail, items, transaction);
+
+                if (angsuran != null)
+                {
+                    const string insertAngsuran = """
+                        INSERT INTO POS_KREDIT_ANGSURAN (PERIODE, NO_TRANSAKSI, TANGGALJATUHTEMPO, ANGSURANKE, SALDOAWAL, ANGSURAN, SALDOAKHIR)
+                        VALUES (:PERIODE, :NO_TRANSAKSI, :TANGGALJATUHTEMPO, :ANGSURANKE, :SALDOAWAL, :ANGSURAN, :SALDOAKHIR)
+                        """;
+                    foreach (var jadwal in angsuran)
+                    {
+                        jadwal.NO_TRANSAKSI = header.NO_TRANSAKSI;
+                    }
+                    conn.Execute(insertAngsuran, angsuran, transaction);
+                }
 
                 transaction.Commit();
             }
-            catch (Exception)
+            catch
             {
                 transaction.Rollback();
                 throw;
             }
         }
 
+        // ----- Credit limit (mirrors Penjualan.DataLayer.FakturPenjualan) -----
 
-        public void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan)
+        // Resolve the member's accounting-period window from POS_PERIODE for the period
+        // (yyyyMM) of the given date. BULANAN members use the monthly window; remise members
+        // use the full remise span. Returns null when the period is not configured.
+        private static (DateTime Dari, DateTime Sampai)? ResolvePeriodWindow(
+            OracleConnection conn, OracleTransaction? transaction, DateTime date, string status)
         {
-            using OracleConnection conn = new(global.connectionString);
-            conn.Open();
-            OracleTransaction transaction = conn.BeginTransaction();
+            // Periode dicari dari rentang tanggal (BDARI..BSAMPAI), bukan bulan kalender.
+            int? ditemukan = PeriodeGuard.PeriodeUntukTanggal(conn, transaction, date);
+            if (ditemukan == null) return null;
+            int periode = ditemukan.Value;
+            bool bulanan = string.Equals(status, "BULANAN", StringComparison.OrdinalIgnoreCase);
 
-            try
+            string sql = bulanan
+                ? @"SELECT TO_DATE(BDARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(BSAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode"
+                : @"SELECT TO_DATE(R1DARI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH'),
+                           TO_DATE(R2SAMPAI, 'DD-MON-YYYY', 'NLS_DATE_LANGUAGE = ENGLISH')
+                    FROM POS_PERIODE WHERE PERIODE = :periode";
+
+            using var cmd = new OracleCommand(sql, conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("periode", OracleDbType.Int32).Value = periode;
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1))
             {
-                // Periode harus terbuka (dicari dari rentang tanggal POS_PERIODE); cek di transaksi yang sama.
-                PeriodeGuard.Pastikan(conn, transaction, faktur_header.TANGGAL);
-
-                // Insert master record
-                string insertFakturJual_Master = "INSERT INTO POS_PENJUALAN (NO_TRANSAKSI, TANGGAL, JAM, KASIR, NAMA_KASIR, ID_PELANGGAN, NIK, NAMA_PELANGGAN, UNIT_KERJA, STATUS, BRUTO, POTONGAN, TOTAL, JENIS_BAYAR, KET_BAYAR, TENOR, ANGSURAN) VALUES " +
-                                                "(:NO_TRANSAKSI, :TANGGAL, :JAM, :KASIR, :NAMA_KASIR, :ID_PELANGGAN, :NIK, :NAMA_PELANGGAN, :UNIT_KERJA, :STATUS, :BRUTO, :POTONGAN, :TOTAL, :JENIS_BAYAR, :KET_BAYAR, :TENOR, :ANGSURAN) RETURNING ID_PENJUALAN INTO :penjualanId";
-
-                var masterParameters = new DynamicParameters(faktur_header);
-                masterParameters.Add("penjualanId", dbType: DbType.Int32, direction: ParameterDirection.Output);
-
-                int rowsAffected = conn.Execute(insertFakturJual_Master, masterParameters, transaction);
-
-                Int32 newPenjualanId = masterParameters.Get<Int32>("penjualanId");
-
-                // Insert sales details
-                string insertFakturJual_Detail = "INSERT INTO POS_PENJUALAN_DETAIL (ID_PENJUALAN, NO_TRANSAKSI, BARIS, PRODUCT_ID, KODE_BARANG, BARCODE, NAMA_BARANG, SATUAN, HPP,HARGA_BARANG, JUMLAH_BARANG, BRUTO, POTONGAN, TOTAL_HARGA) " +
-                                                 "VALUES (:ID_PENJUALAN, :NO_TRANSAKSI, :BARIS, :PRODUCT_ID, :KODE_BARANG, :BARCODE, :NAMA_BARANG, :SATUAN, :HPP,:HARGA_BARANG, :JUMLAH_BARANG, :BRUTO, :POTONGAN, :TOTAL_HARGA)";
-
-                foreach (var detail in ListItemsPenjualan)
-                {
-                    detail.ID_PENJUALAN = newPenjualanId;
-                    detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                }
-                conn.Execute(insertFakturJual_Detail, ListItemsPenjualan, transaction);
-
-                // Insert credit installment information
-                string insertTagihanKredit = "INSERT INTO POS_KREDIT_ANGSURAN (PERIODE, NO_TRANSAKSI, TANGGALJATUHTEMPO, ANGSURANKE, SALDOAWAL,ANGSURAN,SALDOAKHIR) " +
-                                             "VALUES (:PERIODE, :NO_TRANSAKSI, :TANGGALJATUHTEMPO, :ANGSURANKE, :SALDOAWAL,:ANGSURAN,:SALDOAKHIR)";
-
-                foreach (var detail in DaftarWaktuTagihan)
-                {
-                    detail.NO_TRANSAKSI = faktur_header.NO_TRANSAKSI;
-                }
-                conn.Execute(insertTagihanKredit, DaftarWaktuTagihan, transaction);
-
-                transaction.Commit();
+                return (reader.GetDateTime(0), reader.GetDateTime(1));
             }
-            catch (Exception)
-            {
-                transaction.Rollback();
-                throw; // Rethrow the exception to be handled by the caller
-            }
+            return null;
         }
 
-        
+        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window,
+        // optionally excluding a faktur (used when re-checking an edit of an existing faktur).
+        private static decimal SumPeriodSpend(
+            OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai,
+            string? excludeNoTransaksi = null)
+        {
+            string sql = "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL >= :Dari AND TANGGAL < :Sampai";
+            if (!string.IsNullOrEmpty(excludeNoTransaksi))
+                sql += " AND (NO_TRANSAKSI IS NULL OR NO_TRANSAKSI <> :Exclude)";
+
+            using var cmd = new OracleCommand(sql, conn);
+            if (transaction != null) cmd.Transaction = transaction;
+            cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
+            cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
+            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai.Date.AddDays(1);
+            if (!string.IsNullOrEmpty(excludeNoTransaksi))
+                cmd.Parameters.Add("Exclude", OracleDbType.Varchar2).Value = excludeNoTransaksi;
+
+            return Convert.ToDecimal(cmd.ExecuteScalar());
+        }
+
+        internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck,
+            string? excludeNoTransaksi = null)
+        {
+            // Lock the member row, read the authoritative limit, and serialize concurrent sales.
+            decimal limit;
+            using (var limitCmd = new OracleCommand(
+                "SELECT NVL(LIMIT_HUTANG, 0) FROM FIN_ANGGOTA WHERE NIK = :Nik FOR UPDATE", conn))
+            {
+                limitCmd.Transaction = transaction;
+                limitCmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = creditCheck.NIK;
+                object? result = limitCmd.ExecuteScalar();
+                if (result == null)
+                    throw new InvalidOperationException(
+                        $"Anggota dengan NIK '{creditCheck.NIK}' tidak ditemukan; limit hutang tidak dapat diperiksa.");
+                limit = Convert.ToDecimal(result);
+            }
+
+            if (limit == 0)
+                return; // 0 = unlimited
+
+            var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
+            if (window == null)
+                throw new InvalidOperationException(
+                    $"Periode {creditCheck.TransactionDate:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
+
+            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai, excludeNoTransaksi);
+
+            if (CreditLimitPolicy.IsExceeded(periodSpend, creditCheck.InvoiceAmount, limit))
+            {
+                throw new CreditLimitExceededException(periodSpend, creditCheck.InvoiceAmount, limit);
+            }
+        }
 
         public void UpdateTransactionNumber(string transactionNumber)
         {

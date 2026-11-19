@@ -2,6 +2,7 @@
 using BackOffice.DataLayer;
 using BackOffice.Model;
 using BackOffice.View;
+using Kopkar.Shared;
 using Dapper;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Views.Grid;
@@ -18,7 +19,6 @@ namespace BackOffice.UC
         private string ket_pembayaran = string.Empty;
         string NIK, STATUS, UNIT_KERJA;
         int ID;
-        double LIMIT_HUTANG;
         bool ispending = false;
         List<DTOPRODUCTS> Barang;
         private BindingList<TransactionDataJual> transactionDataList;
@@ -618,38 +618,6 @@ namespace BackOffice.UC
                 XtraMessageBox.Show("Nama Pelaggan tidak boleh kosong", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            var tahun = Convert.ToDateTime(detanggal.Text).Year;
-            var bulan = Convert.ToDateTime(detanggal.Text).Month;
-            var tgl = Convert.ToDateTime(detanggal.Text).Day;
-            var periode = Convert.ToInt32(tahun.ToString() + bulan.ToString("00"));
-            int remise;
-            if (tgl <= 15)
-            {
-                remise = 1;
-            }
-            else
-            {
-                remise = 2;
-            }
-            bool tutup = Tools_Services.GetRemiseStatus(periode, remise);
-            MaxPeriodeFinder periodemax = new();
-            var maxperiode = periodemax.GetMaxPeriode();
-            if (tutup)
-            {
-                XtraMessageBox.Show("Periode telah ditutup,transaksi tidak dapat dilakukan", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            if (periode > maxperiode)
-            {
-                XtraMessageBox.Show("Input transaksi dibatasi pada periode yang valid", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            //if (maxperiode - periode >= 2)
-            //{
-            //    XtraMessageBox.Show("Input transaksi mundur ditolak", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            //    return;
-            //}
             if (total < 0)
             {
                 XtraMessageBox.Show("Total Transaksi Minus", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -672,9 +640,8 @@ namespace BackOffice.UC
                 NAMA_KASIR = _namaKasirAsli,
                 BRUTO = VBruto,
                 POTONGAN = VPotongan,
-                TOTAL = VTotal,
-                TENOR= (int)leangsuran.EditValue
-        };
+                TOTAL = VTotal
+            };
 
 
             List<DTOFakturPenjualanDetail> ListItemsPenjualan = GetItemPenjualanData();
@@ -698,22 +665,34 @@ namespace BackOffice.UC
             FakturPenjualanHeader.TENOR = tenor;
             FakturPenjualanHeader.ANGSURAN = Math.Floor(FakturPenjualanHeader.TOTAL / FakturPenjualanHeader.TENOR);
             FakturPenjualanHeader.PENDING = "T";
-            //menghapus faktur penjualan,detail penjualan dan daftar angsuran penjualan kredit
-            controller.HapusFakturPenjualan(FakturPenjualanHeader.NO_TRANSAKSI);
-            if (tenor == 1)
+
+            try
             {
-
-                POS_Services.InsertFaktur_Penjualan(FakturPenjualanHeader, ListItemsPenjualan);
+                var jadwal = tenor == 1
+                    ? null
+                    : CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI,
+                        FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, tenor);
+                POS_Services.GantiFakturPenjualan(FakturPenjualanHeader, ListItemsPenjualan, jadwal);
             }
-            else
+            catch (CreditLimitExceededException ex)
             {
-                // controller.HapusFakturPenjualanAngsuran(FakturPenjualanHeader.NO_TRANSAKSI);
-                List<DTOAngsuranKreditBarang> Daftar_Tagihan_Kredit_Barang = CalculateAngsuranKreditBarang(FakturPenjualanHeader.NO_TRANSAKSI, FakturPenjualanHeader.TANGGAL, FakturPenjualanHeader.TOTAL, FakturPenjualanHeader.TENOR);
-
-                POS_Services.InsertFaktur_Penjualan_Angsuran(FakturPenjualanHeader, ListItemsPenjualan, Daftar_Tagihan_Kredit_Barang);
-
+                XtraMessageBox.Show(
+                    $"Faktur tidak dapat disimpan karena limit hutang pelanggan telah terlampaui.\n\n" +
+                    $"Hutang Saat Ini     : Rp. {ex.CurrentDebt:N0}\n" +
+                    $"Jumlah Faktur       : Rp. {ex.InvoiceAmount:N0}\n" +
+                    $"Batas Limit Hutang  : Rp. {ex.Limit:N0}",
+                    "Limit Hutang Melebihi Batas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
-            XtraMessageBox.Show("Faktur Penjualan berhail diupdate", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex, "Gagal mengubah faktur penjualan {Nomor}", FakturPenjualanHeader.NO_TRANSAKSI);
+                string pesan = ex is InvalidOperationException ? ex.Message : "Faktur gagal disimpan. Faktur lama tetap tersimpan.";
+                XtraMessageBox.Show(pesan, "Gagal menyimpan faktur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            XtraMessageBox.Show("Faktur Penjualan berhasil diubah", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         public static List<DTOAngsuranKreditBarang> CalculateAngsuranKreditBarang(string nomortransaksi, DateTime tanggalBelanja, decimal jumlahBelanja, int waktuangsuran)
         {

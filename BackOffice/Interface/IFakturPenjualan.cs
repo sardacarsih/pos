@@ -6,8 +6,9 @@ namespace BackOffice.Interface
 {
     public interface IFakturPenjualan
     {
-        void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan);
-        void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan);
+        void InsertFaktur_Penjualan(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, CreditLimitCheck? creditCheck = null);
+        void InsertFaktur_Penjualan_Angsuran(DTOFakturPenjualanHeader faktur_header, List<DTOFakturPenjualanDetail> ListItemsPenjualan, List<DTOAngsuranKreditBarang> DaftarWaktuTagihan, CreditLimitCheck? creditCheck = null);
+        void GantiFakturPenjualan(DTOFakturPenjualanHeader header, List<DTOFakturPenjualanDetail> items, List<DTOAngsuranKreditBarang>? angsuran);
         void UpdateTransactionNumber(string transactionNumber);
         
 

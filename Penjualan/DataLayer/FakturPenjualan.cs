@@ -266,25 +266,42 @@ namespace Penjualan.DataLayer
             return productInfo;
         }
 
-        public void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header)
+        public void UpdateFakturPenjualan(DTOFakturPenjualanHeader faktur_header, CreditLimitCheck? creditCheck = null)
         {
             using OracleConnection connection = new(Global.connectionString);
+            connection.Open();
+            using OracleTransaction transaction = connection.BeginTransaction();
 
-            connection.Execute(@"UPDATE POS_PENJUALAN
-                        SET NIK = :newNik, ID_PELANGGAN = :newID,
-                            NAMA_PELANGGAN = :newNamaPelanggan,
-                            STATUS = :newStatus,
-                            UNIT_KERJA = :newUnitKerja
-                        WHERE NO_TRANSAKSI = :transactionNumber",
-                new
+            try
+            {
+                if (creditCheck != null)
                 {
-                    newNik = faktur_header.NIK,
-                    newID = faktur_header.ID_PELANGGAN,
-                    newNamaPelanggan = faktur_header.NAMA_PELANGGAN,
-                    newStatus = faktur_header.STATUS,
-                    newUnitKerja = faktur_header.UNIT_KERJA,
-                    transactionNumber = faktur_header.NO_TRANSAKSI
-                });
+                    ValidateCreditLimit(connection, transaction, creditCheck, faktur_header.NO_TRANSAKSI);
+                }
+
+                connection.Execute(@"UPDATE POS_PENJUALAN
+                            SET NIK = :newNik, ID_PELANGGAN = :newID,
+                                NAMA_PELANGGAN = :newNamaPelanggan,
+                                STATUS = :newStatus,
+                                UNIT_KERJA = :newUnitKerja
+                            WHERE NO_TRANSAKSI = :transactionNumber",
+                    new
+                    {
+                        newNik = faktur_header.NIK,
+                        newID = faktur_header.ID_PELANGGAN,
+                        newNamaPelanggan = faktur_header.NAMA_PELANGGAN,
+                        newStatus = faktur_header.STATUS,
+                        newUnitKerja = faktur_header.UNIT_KERJA,
+                        transactionNumber = faktur_header.NO_TRANSAKSI
+                    }, transaction);
+
+                transaction.Commit();
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
         public string GenerateTransactionNumber(DateTime date)
@@ -375,16 +392,26 @@ namespace Penjualan.DataLayer
             return null;
         }
 
-        // Sum the member's credit spend (POS_PENJUALAN.TOTAL) within a period window.
+        // Hitung belanja selama rentang periode, termasuk hari terakhir.
         private static decimal SumPeriodSpend(
-            OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai)
+            OracleConnection conn, OracleTransaction? transaction, string nik, DateTime dari, DateTime sampai,
+            string? nomorFaktur = null)
         {
-            using var cmd = new OracleCommand(
-                "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL BETWEEN :Dari AND :Sampai", conn);
+            string sql = "SELECT NVL(SUM(TOTAL), 0) FROM POS_PENJUALAN WHERE NIK = :Nik AND TANGGAL >= :Dari AND TANGGAL < :Sampai";
+            if (nomorFaktur != null)
+            {
+                sql += " AND (NO_TRANSAKSI IS NULL OR NO_TRANSAKSI <> :Nomor)";
+            }
+
+            using var cmd = new OracleCommand(sql, conn);
             if (transaction != null) cmd.Transaction = transaction;
             cmd.Parameters.Add("Nik", OracleDbType.Varchar2).Value = nik;
             cmd.Parameters.Add("Dari", OracleDbType.Date).Value = dari;
-            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai;
+            cmd.Parameters.Add("Sampai", OracleDbType.Date).Value = sampai.Date.AddDays(1);
+            if (nomorFaktur != null)
+            {
+                cmd.Parameters.Add("Nomor", OracleDbType.Varchar2).Value = nomorFaktur;
+            }
             return Convert.ToDecimal(cmd.ExecuteScalar());
         }
 
@@ -400,7 +427,8 @@ namespace Penjualan.DataLayer
             return SumPeriodSpend(connection, null, nik, window.Value.Dari, window.Value.Sampai);
         }
 
-        internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction, CreditLimitCheck creditCheck)
+        internal static void ValidateCreditLimit(OracleConnection conn, OracleTransaction transaction,
+            CreditLimitCheck creditCheck, string? nomorFaktur = null)
         {
             // Lock the member row first. This serializes concurrent sales for the same
             // member (so the limit holds even on a first purchase) and lets us read the
@@ -422,18 +450,36 @@ namespace Penjualan.DataLayer
             if (limit == 0)
                 return;
 
-            // Per-period spending cap: existing credit spend in the period + this invoice
-            // must not exceed the limit. The cap resets each period.
-            var window = ResolvePeriodWindow(conn, transaction, creditCheck.TransactionDate, creditCheck.STATUS);
+            DateTime tanggal = creditCheck.TransactionDate;
+            decimal total = creditCheck.InvoiceAmount;
+            if (nomorFaktur != null)
+            {
+                using var cmd = new OracleCommand(
+                    "SELECT TANGGAL, TOTAL FROM POS_PENJUALAN WHERE NO_TRANSAKSI = :Nomor FOR UPDATE", conn)
+                {
+                    Transaction = transaction
+                };
+                cmd.Parameters.Add("Nomor", OracleDbType.Varchar2).Value = nomorFaktur;
+                using var faktur = cmd.ExecuteReader();
+                if (!faktur.Read())
+                {
+                    throw new InvalidOperationException("Faktur penjualan tidak ditemukan.");
+                }
+                tanggal = faktur.GetDateTime(0);
+                total = faktur.GetDecimal(1);
+            }
+
+            var window = ResolvePeriodWindow(conn, transaction, tanggal, creditCheck.STATUS);
             if (window == null)
                 throw new InvalidOperationException(
-                    $"Periode {creditCheck.TransactionDate:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
+                    $"Periode {tanggal:yyyyMM} belum dikonfigurasi di POS_PERIODE; limit hutang tidak dapat diperiksa.");
 
-            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK, window.Value.Dari, window.Value.Sampai);
+            decimal periodSpend = SumPeriodSpend(conn, transaction, creditCheck.NIK,
+                window.Value.Dari, window.Value.Sampai, nomorFaktur);
 
-            if (CreditLimitPolicy.IsExceeded(periodSpend, creditCheck.InvoiceAmount, limit))
+            if (CreditLimitPolicy.IsExceeded(periodSpend, total, limit))
             {
-                throw new CreditLimitExceededException(periodSpend, creditCheck.InvoiceAmount, limit);
+                throw new CreditLimitExceededException(periodSpend, total, limit);
             }
         }
 
