@@ -8,7 +8,8 @@ use chrono::{Datelike, Duration, NaiveDate};
 use oracle::Connection;
 
 use crate::{
-    db::{dashboard, faktur, katalog, opname, pembelian, user},
+    auth::Role,
+    db::{dashboard, faktur, katalog, opname, opt, pembelian, user},
     error::{AppError, AppResult},
 };
 
@@ -108,6 +109,45 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
             return Err(AppError::Internal(format!("NO_TRANSAKSI pembelian memerlukan 12 karakter, tersedia {lebar}")));
         }
         Ok("Kedua trigger valid dan seri web muat".into())
+    }));
+    let admin = pembelian::Operator {
+        id: 0,
+        username: String::new(),
+        nama: String::new(),
+        role: Role::Admin,
+    };
+    h.push(cek("detail faktur pembelian backoffice", || {
+        let nomor: Option<String> = opt(conn.query_row_as(
+            "SELECT b.NO_TRANSAKSI FROM POS_PEMBELIAN b
+             WHERE b.NO_TRANSAKSI IS NOT NULL AND b.TANGGAL IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM MOB_BELI w WHERE w.PURCHASE_ID=b.PURCHASE_ID)
+             ORDER BY b.TANGGAL DESC, b.NO_TRANSAKSI DESC FETCH FIRST 1 ROW ONLY",
+            &[],
+        ))?;
+        let Some(nomor) = nomor else {
+            return match pembelian::detail(conn, &admin, "~SELFTEST~") {
+                Err(AppError::NotFound(_)) => Ok("Belum ada faktur backoffice".into()),
+                Err(e) => Err(e),
+                Ok(_) => Err(AppError::Internal("Nomor uji faktur seharusnya tidak ditemukan".into())),
+            };
+        };
+        let detail = pembelian::detail(conn, &admin, &nomor)?;
+        let baris = detail["baris"].as_array().filter(|_| detail["asal"] == "BACKOFFICE")
+            .ok_or_else(|| AppError::Internal("Detail faktur backoffice tidak lengkap".into()))?;
+        Ok(format!("{nomor}, {} baris", baris.len()))
+    }));
+    h.push(cek("riwayat petugas pembelian", || {
+        let petugas = pembelian::Operator { role: Role::Pembelian, ..admin };
+        let filter = pembelian::Filter {
+            q: None,
+            supplier: None,
+            dari: None,
+            sampai: None,
+            page: None,
+            terlambat: None,
+        };
+        pembelian::riwayat(conn, &petugas, &filter)?;
+        Ok("Kueri dengan filter petugas berhasil".into())
     }));
     h.push(cek("skema MOB_IDEMPOTENCY.OPERASI muat 'OPNAME_DOK'", || {
         let n: i64 = conn.query_row_as(

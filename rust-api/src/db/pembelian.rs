@@ -876,8 +876,8 @@ fn daftar(c: &Connection, u: &Operator, filter: &Filter, khusus_hutang: bool) ->
     let mut b = Binds::default();
     b.add("offset_param", (page - 1) * 30);
     let sumber = if u.role == Role::Pembelian {
-        b.add("uid", u.id);
-        format!("{WEB} WHERE b.USER_ID=TO_NUMBER(:uid)")
+        b.add("operator_id", u.id);
+        format!("{WEB} WHERE b.USER_ID=TO_NUMBER(:operator_id)")
     } else if khusus_hutang {
         WEB.to_owned()
     } else {
@@ -959,9 +959,9 @@ pub fn detail(c: &Connection, u: &Operator, no: &str) -> AppResult<Value> {
     let select = format!("SELECT NO_TRANSAKSI,SUPPLIER_ID,SUPPLIER_NAMA,NO_FAKTUR,TANGGAL_FAKTUR,TANGGAL_TERIMA,
         JATUH_TEMPO,JENIS,{},{},{},USER_NAMA,USER_ID,POSTED,BATAL,BATAL_NAMA,BATAL_ALASAN,BAYAR,ASAL FROM",
         tm("BRUTO"), tm("POTONGAN"), tm("TOTAL"));
-    let sql = format!("{select} ({WEB}) WHERE NO_TRANSAKSI=:no AND (:admin=1 OR USER_ID=:uid)");
+    let sql = format!("{select} ({WEB}) WHERE NO_TRANSAKSI=:no AND (:admin=1 OR USER_ID=:operator_id)");
     let admin = i64::from(u.role == Role::Admin);
-    let web = opt(c.query_row_named(&sql, &[("no", &no), ("admin", &admin), ("uid", &u.id)]))?;
+    let web = opt(c.query_row_named(&sql, &[("no", &no), ("admin", &admin), ("operator_id", &u.id)]))?;
     let (r, is_web) = if let Some(r) = web {
         (r, true)
     } else if admin == 1 {
