@@ -10,6 +10,7 @@ pub enum Role {
     Kasir,
     Admin,
     Anggota,
+    Pembelian,
 }
 
 impl Role {
@@ -18,6 +19,7 @@ impl Role {
             Role::Kasir => "KASIR",
             Role::Admin => "ADMIN",
             Role::Anggota => "ANGGOTA",
+            Role::Pembelian => "PEMBELIAN",
         }
     }
 }
@@ -29,6 +31,7 @@ impl FromStr for Role {
             "KASIR" => Ok(Role::Kasir),
             "ADMIN" => Ok(Role::Admin),
             "ANGGOTA" => Ok(Role::Anggota),
+            "PEMBELIAN" => Ok(Role::Pembelian),
             _ => Err(format!("role tidak dikenal: {s}")),
         }
     }

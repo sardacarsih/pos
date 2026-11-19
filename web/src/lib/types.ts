@@ -1,4 +1,4 @@
-export type Role = 'KASIR' | 'ANGGOTA' | 'ADMIN';
+export type Role = 'KASIR' | 'ANGGOTA' | 'ADMIN' | 'PEMBELIAN';
 export interface User { id: number; role: Role; nama: string; nik: string | null; default_nik: string; ganti_password: boolean }
 export interface Product { id: number; nama: string; kode: string; barcode: string; satuan: string; harga: number; stok: number | null; kategori_id: string; kategori: string; foto: number | null; satuan_lain?: Satuan[] }
 export interface Satuan { satuan: string; isi: number; harga: number; barcode: string }

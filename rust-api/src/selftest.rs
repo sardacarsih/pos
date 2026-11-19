@@ -8,7 +8,7 @@ use chrono::{Datelike, Duration, NaiveDate};
 use oracle::Connection;
 
 use crate::{
-    db::{dashboard, faktur, katalog, opname, user},
+    db::{dashboard, faktur, katalog, opname, pembelian, user},
     error::{AppError, AppResult},
 };
 
@@ -72,11 +72,16 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     let mut h: Vec<Hasil> = Vec::new();
 
     // Skema yang dibutuhkan fitur baru, termasuk jalur TULIS opname (diverifikasi lewat metadata, tanpa menulis).
-    let skema: [(&str, &[&str]); 16] = [
+    let skema: &[(&str, &[&str])] = &[
         ("POS_PRODUCT", &["PRODUCTID", "KODE_ITEM", "BARCODE", "PRODUCTNAME", "SATUAN", "PRICE", "BELI", "KATEGORI_ID", "AKTIF"]),
         ("POS_KATEGORI", &["KODE", "KATEGORI"]),
         ("POS_STOCK", &["KODE_BARANG", "TANGGAL", "QUANTITY"]),
-        ("POS_PEMBELIANDETAIL", &["PURCHASE_ID", "KODE_BARANG", "QUANTITY"]),
+        ("POS_SUPPLIER", &["KODE", "NAMA", "AKTIF"]),
+        ("POS_PEMBELIAN", &["PURCHASE_ID", "NO_TRANSAKSI", "TANGGAL", "SUPPLIER_ID", "BRUTO", "POTONGAN", "TOTAL", "TERMIN", "USERID", "NAMA_USER"]),
+        ("POS_PEMBELIANDETAIL", &["PURCHASE_ID", "NO_TRANSAKSI", "BARIS", "PRODUCT_ID", "KODE_BARANG", "NAMA_BARANG", "SATUAN", "QUANTITY", "HARGA_BELI", "BRUTO", "POTONGAN", "TOTAL"]),
+        ("MOB_BELI", &["NO_TRANSAKSI", "PURCHASE_ID", "NO_FAKTUR", "BATAL_AT"]),
+        ("MOB_BELI_BARIS", &["NO_TRANSAKSI", "BARIS", "ISI", "QTY"]),
+        ("MOB_BELI_BAYAR", &["ID", "NO_TRANSAKSI", "NOMINAL", "BALIK_ID"]),
         ("POS_PENJUALAN", &["NO_TRANSAKSI", "TANGGAL", "TOTAL", "JENIS_BAYAR", "KASIR", "NAMA_KASIR"]),
         ("POS_PENJUALAN_DETAIL", &["NO_TRANSAKSI", "KODE_BARANG", "NAMA_BARANG", "JUMLAH_BARANG", "ISI", "TOTAL_HARGA"]),
         ("POS_PRODUCT_SATUAN", &["PRODUCT_ID", "SATUAN", "ISI", "HARGA", "BARCODE"]),
@@ -93,6 +98,17 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     for (tabel, kolom) in skema {
         h.push(cek(format!("skema {tabel}"), || cek_kolom(conn, tabel, kolom)));
     }
+    h.push(cek("proteksi dan seri pembelian web", || {
+        pembelian::cek_guard(conn)?;
+        let lebar: i64 = conn.query_row_as(
+            "SELECT NVL(MIN(CHAR_LENGTH), 0) FROM USER_TAB_COLUMNS
+             WHERE TABLE_NAME IN ('POS_PEMBELIAN','POS_PEMBELIANDETAIL') AND COLUMN_NAME='NO_TRANSAKSI'", &[],
+        )?;
+        if lebar < "BW-26-000001".len() as i64 {
+            return Err(AppError::Internal(format!("NO_TRANSAKSI pembelian memerlukan 12 karakter, tersedia {lebar}")));
+        }
+        Ok("Kedua trigger valid dan seri web muat".into())
+    }));
     h.push(cek("skema MOB_IDEMPOTENCY.OPERASI muat 'OPNAME_DOK'", || {
         let n: i64 = conn.query_row_as(
             "SELECT NVL(MAX(CHAR_LENGTH), 0) FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = 'MOB_IDEMPOTENCY' AND COLUMN_NAME = 'OPERASI'",

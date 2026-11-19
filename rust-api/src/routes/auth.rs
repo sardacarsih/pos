@@ -69,6 +69,14 @@ pub async fn login(
     ClientIp(ip): ClientIp,
     Json(req): Json<LoginReq>,
 ) -> AppResult<Json<TokenResp>> {
+    login_untuk(s, ip, req, false).await
+}
+
+pub async fn login_web(State(s): State<AppState>, ClientIp(ip): ClientIp, Json(req): Json<LoginReq>) -> AppResult<Json<TokenResp>> {
+    login_untuk(s, ip, req, true).await
+}
+
+async fn login_untuk(s: AppState, ip: String, req: LoginReq, web: bool) -> AppResult<Json<TokenResp>> {
     if !s.limiter.allow(&ip) {
         return Err(AppError::TooMany(
             "Terlalu banyak percobaan. Coba lagi sebentar lagi.".into(),
@@ -97,6 +105,9 @@ pub async fn login(
         }
         if !password::verify(&req.password, &u.hash) || !u.active {
             user::register_failure(c, u.id)?;
+            return Err(AppError::LoginGagal);
+        }
+        if u.role == Role::Pembelian && !web {
             return Err(AppError::LoginGagal);
         }
         user::reset_failures(c, u.id)?;
@@ -135,6 +146,14 @@ pub async fn refresh(
     ClientIp(ip): ClientIp,
     Json(req): Json<RefreshReq>,
 ) -> AppResult<Json<TokenResp>> {
+    refresh_untuk(s, ip, req, false).await
+}
+
+pub async fn refresh_web(State(s): State<AppState>, ClientIp(ip): ClientIp, Json(req): Json<RefreshReq>) -> AppResult<Json<TokenResp>> {
+    refresh_untuk(s, ip, req, true).await
+}
+
+async fn refresh_untuk(s: AppState, ip: String, req: RefreshReq, web: bool) -> AppResult<Json<TokenResp>> {
     if !s.limiter.allow(&ip) {
         return Err(AppError::TooMany(
             "Terlalu banyak percobaan. Coba lagi sebentar lagi.".into(),
@@ -152,13 +171,13 @@ pub async fn refresh(
         if ses.expired {
             return Err(AppError::Unauthorized);
         }
+        let u = user::find_by_id(c, ses.user_id)?
+            .filter(|u| u.active && (web || u.role != Role::Pembelian))
+            .ok_or(AppError::Unauthorized)?;
         if !user::consume_session(c, ses.id)? {
             user::revoke_family(c, &ses.family)?;
             return Err(AppError::Unauthorized);
         }
-        let u = user::find_by_id(c, ses.user_id)?
-            .filter(|u| u.active)
-            .ok_or(AppError::Unauthorized)?;
         let (plain, new_hash) = token::new_refresh();
         let device = req.device_id.unwrap_or_default();
         user::create_session(
@@ -235,6 +254,17 @@ pub async fn me(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
         "id": a.0.sub, "username": a.0.usr, "nama": a.0.nama, "role": a.0.role,
         "nik": a.0.nik, "ganti_password": a.0.ganti, "kategori_diizinkan": kat,
         "default_nik": s.cfg.default_nik,
+    })))
+}
+
+pub async fn me_web(State(s): State<AppState>, a: Auth) -> AppResult<Json<Value>> {
+    let id = a.0.sub;
+    let u = db::run(&s.pool, move |c| {
+        user::find_by_id(c, id)?.filter(|u| u.active).ok_or(AppError::Unauthorized)
+    }).await?;
+    Ok(Json(json!({
+        "id": u.id, "username": u.username, "nama": u.full_name, "role": u.role,
+        "nik": u.nik, "ganti_password": u.must_change, "default_nik": s.cfg.default_nik,
     })))
 }
 

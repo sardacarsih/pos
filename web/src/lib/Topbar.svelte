@@ -12,6 +12,8 @@
   export let peran: string;
   export let dark = false;
   export let online = true;
+  export let pembelianOffline = false;
+  export let tampilProfil = true;
   export let periode: StatusPeriode | null = null;
   /** true bila halaman sudah tergulir: tampilkan bayangan. */
   export let tergulir = false;
@@ -29,13 +31,13 @@
 
   <div class="tb-end">
     <!-- Wilayah status selalu ada di DOM agar perubahan teksnya diumumkan pembaca layar. -->
-    <span class="sr-only" role="status">{online ? '' : 'Koneksi terputus. Transaksi memerlukan koneksi internet.'}</span>
+    <span class="sr-only" role="status">{online ? '' : pembelianOffline ? 'Koneksi terputus. Pembelian dapat diantrekan.' : 'Koneksi terputus. Transaksi memerlukan koneksi internet.'}</span>
     {#if !online}
-      <span class="tb-chip warn" aria-hidden="true" title="Koneksi terputus. Transaksi memerlukan koneksi internet."><WifiOff size={14} /> Offline<span class="tb-lebar"> · transaksi memerlukan internet</span></span>
+      <span class="tb-chip warn" aria-hidden="true"><WifiOff size={14} /> Offline<span class="tb-lebar"> · {pembelianOffline ? 'pembelian masuk antrean' : 'transaksi memerlukan internet'}</span></span>
     {/if}
     {#if periode}
       <span class="tb-chip tb-periode {periode.tingkat}" title={periode.judul}>{periode.label}</span>
     {/if}
-    <UserMenu {nama} {peran} {dark} on:profil={() => dispatch('profil')} on:tema={() => dispatch('tema')} on:keluar={() => dispatch('keluar')} />
+    <UserMenu {nama} {peran} {dark} {tampilProfil} on:profil={() => dispatch('profil')} on:tema={() => dispatch('tema')} on:keluar={() => dispatch('keluar')} />
   </div>
 </header>

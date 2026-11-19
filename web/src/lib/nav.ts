@@ -3,7 +3,7 @@ import type { Role } from './types';
 
 export type NamaIkon =
   | 'beranda' | 'pengguna' | 'produk' | 'stokHabis' | 'opname' | 'hargaRendah' | 'kategori' | 'urutan'
-  | 'rekap' | 'tagihan' | 'profil' | 'kasir' | 'belanja' | 'riwayat' | 'kartu';
+  | 'rekap' | 'tagihan' | 'profil' | 'kasir' | 'belanja' | 'riwayat' | 'kartu' | 'pembelian';
 
 export type JenisBadge = 'stok_habis' | 'harga_rendah';
 
@@ -21,11 +21,15 @@ export type Badge = Partial<Record<JenisBadge, number>>;
 export const MAKS_BOTTOM_NAV = 5;
 
 /** Semua id view yang dikenali router di +page.svelte. */
-export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'produk', 'stok', 'opname', 'harga', 'kategori', 'urut', 'rekap', 'tagihan-rekap'] as const;
+export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'produk', 'stok', 'opname', 'harga', 'kategori', 'urut', 'rekap', 'tagihan-rekap', 'pembelian', 'hutang-supplier'] as const;
 
 const AKUN: Kelompok = { judul: 'Akun', item: [{ id: 'profil', label: 'Profil', ikon: 'profil' }] };
+const PEMBELIAN: ItemMenu = { id: 'pembelian', label: 'Pembelian', ikon: 'pembelian' };
+
+export const MENU_OFFLINE: Menu = { kelompok: [{ judul: null, item: [PEMBELIAN] }], utama: ['pembelian'] };
 
 const MENU: Record<Role, Menu> = {
+  PEMBELIAN: MENU_OFFLINE,
   KASIR: {
     kelompok: [
       { judul: null, item: [{ id: 'dashboard', label: 'Beranda', ikon: 'beranda' }, { id: 'belanja', label: 'Kasir', ikon: 'kasir' }, { id: 'riwayat', label: 'Riwayat', ikon: 'riwayat' }] },
@@ -45,6 +49,7 @@ const MENU: Record<Role, Menu> = {
       { judul: 'Ringkasan', item: [{ id: 'dashboard', label: 'Beranda', ikon: 'beranda' }] },
       { judul: 'Pantau', item: [{ id: 'stok', label: 'Stok habis', ikon: 'stokHabis', badge: 'stok_habis' }, { id: 'harga', label: 'Harga ≤ HPP', ikon: 'hargaRendah', badge: 'harga_rendah' }] },
       { judul: 'Katalog & stok', item: [{ id: 'opname', label: 'Stock opname', pendek: 'Opname', ikon: 'opname' }, { id: 'produk', label: 'Katalog produk', ikon: 'produk' }, { id: 'kategori', label: 'Kategori', ikon: 'kategori' }, { id: 'urut', label: 'Urutan produk', ikon: 'urutan' }] },
+      { judul: 'Pengadaan', item: [PEMBELIAN, { id: 'hutang-supplier', label: 'Hutang Supplier', pendek: 'Hutang', ikon: 'tagihan' }] },
       { judul: 'Anggota & keuangan', item: [{ id: 'rekap', label: 'Rekap anggota', pendek: 'Rekap', ikon: 'rekap' }, { id: 'tagihan-rekap', label: 'Tagihan vs Rekap', ikon: 'tagihan' }] },
       { judul: 'Pengelolaan', item: [{ id: 'users', label: 'Pengguna', ikon: 'pengguna' }] },
       AKUN

@@ -43,6 +43,12 @@ pub fn username_dari_nik(nik: &str) -> String {
 }
 
 pub async fn list(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user::UserInfo>>> {
+    let Json(mut users) = list_web(State(s), a).await?;
+    users.retain(|u| u.role != Role::Pembelian);
+    Ok(Json(users))
+}
+
+pub async fn list_web(State(s): State<AppState>, a: Auth) -> AppResult<Json<Vec<user::UserInfo>>> {
     a.peran(ADMIN)?;
     Ok(Json(db::run(&s.pool, user::list_users).await?))
 }
@@ -106,7 +112,7 @@ pub fn validasi_buat(req: &BuatReq, default_nik: &str) -> AppResult<ValidBuat> {
         (Role::Anggota, None) => {
             return Err(AppError::validation("Akun anggota wajib memiliki NIK"));
         }
-        (Role::Kasir | Role::Admin, Some(_)) => {
+        (Role::Kasir | Role::Admin | Role::Pembelian, Some(_)) => {
             return Err(AppError::validation("NIK hanya untuk akun anggota"));
         }
         _ => {}
@@ -140,6 +146,14 @@ pub async fn buat(
     a: Auth,
     Json(req): Json<BuatReq>,
 ) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    if req.role == Role::Pembelian {
+        return Err(AppError::validation("Akun petugas pembelian dibuat melalui POS Web"));
+    }
+    buat_web(State(s), a, Json(req)).await
+}
+
+pub async fn buat_web(State(s): State<AppState>, a: Auth, Json(req): Json<BuatReq>) -> AppResult<Json<Value>> {
     a.peran(ADMIN)?;
     let v = validasi_buat(&req, &s.cfg.default_nik)?;
     let tmp = password::temp_password();
