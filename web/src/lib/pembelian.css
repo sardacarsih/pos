@@ -9,6 +9,7 @@
   --beli-err: #982e29;
   --beli-err-bg: #fbe8e4;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .dark .beli {
@@ -25,8 +26,8 @@
 .beli :is(button, input, select):focus-visible { outline: 2px solid var(--beli-focus); outline-offset: 2px; }
 .beli h2 { font-size: 1.08rem; letter-spacing: -.025em; }
 .beli p { margin-block: 8px; }
-.beli-tab { display: flex; gap: 5px; border-bottom: 1px solid var(--beli-line); }
-.beli-tab button { display: flex; align-items: center; gap: 7px; padding: 11px 14px; min-height: 44px; font-weight: 700; text-align: left; }
+.beli-tab { display: flex; gap: 5px; border-bottom: 1px solid var(--beli-line); overflow-x: auto; }
+.beli-tab button { display: flex; align-items: center; gap: 7px; padding: 11px 14px; min-height: 44px; font-weight: 700; text-align: left; white-space: nowrap; }
 .beli-tab button[aria-selected=true] { border-bottom: 3px solid var(--beli-focus); color: var(--beli-focus); }
 .beli-tab span { border-radius: 30px; background: var(--beli-warn-bg); color: var(--beli-warn); padding: 2px 7px; font-size: .75rem; }
 .beli-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(235px, 285px); align-items: start; gap: 16px; }
@@ -50,7 +51,7 @@
 .beli-scan [aria-selected=true] button, .beli-scan button:hover { background: var(--beli-soft); }
 .beli-petunjuk { font-size: .78rem; color: var(--beli-muted); }
 .beli-petunjuk kbd { display: inline-block; margin: 2px 0; padding: 1px 4px; border: 1px solid var(--beli-line); border-radius: 4px; }
-.beli-gulir { overflow: auto; margin: 10px 0; }
+.beli-gulir { overflow: auto; margin: 10px 0; position: relative; }
 .beli-tabel { width: 100%; border-collapse: collapse; font-size: .88rem; text-align: left; }
 .beli-tabel thead { background: var(--beli-soft); }
 .beli-tabel :is(td, th) { border-bottom: 1px solid var(--beli-line); padding: 9px; vertical-align: middle; }

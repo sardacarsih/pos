@@ -1,4 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { tabBeli } from './pembelian';
+
+describe('tabBeli', () => {
+  it('ADMIN mendapat 5 tab termasuk hutang; PEMBELIAN 4 tanpa hutang', () => {
+    expect(tabBeli('ADMIN').map(t => t.id)).toEqual(['input', 'antrean', 'riwayat', 'supplier', 'hutang']);
+    expect(tabBeli('PEMBELIAN').map(t => t.id)).toEqual(['input', 'antrean', 'riwayat', 'supplier']);
+    expect(tabBeli('KASIR').map(t => t.id)).toEqual(['input', 'antrean', 'riwayat', 'supplier']);
+  });
+});
 import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, bacaRupiahPecahan, cariBarang, formatJumlahBeli, payloadBeli, rpBeli, totalBeli,
   type BarangBeli, type DrafBeli } from './pembelian';
 
