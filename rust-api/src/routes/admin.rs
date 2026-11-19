@@ -292,6 +292,54 @@ pub async fn semua_kategori(
     Ok(Json(db::run(&s.pool, katalog::semua_kategori).await?))
 }
 
+#[derive(Deserialize)]
+pub struct KategoriBaru {
+    nama: String,
+}
+
+pub async fn buat_kategori(
+    State(s): State<AppState>,
+    a: Auth,
+    Json(req): Json<KategoriBaru>,
+) -> AppResult<(StatusCode, Json<katalog::Kategori>)> {
+    a.peran(ADMIN)?;
+    let k = db::run(&s.pool, move |c| katalog::kategori_buat(c, &req.nama)).await?;
+    Ok((StatusCode::CREATED, Json(k)))
+}
+
+pub async fn ubah_kategori(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<String>,
+    Json(req): Json<KategoriBaru>,
+) -> AppResult<StatusCode> {
+    a.peran(ADMIN)?;
+    db::run(&s.pool, move |c| katalog::kategori_ubah(c, &id, &req.nama)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn hapus_kategori(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<String>,
+) -> AppResult<StatusCode> {
+    a.peran(ADMIN)?;
+    db::run(&s.pool, move |c| katalog::kategori_hapus(c, &id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn kategori_jejak(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let (k, n) = db::run(&s.pool, move |c| katalog::kategori_jejak(c, &id)).await?;
+    Ok(Json(json!({
+        "id": k.id, "nama": k.nama, "bisa_hapus": n == 0, "jumlah_produk": n
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::username_valid;

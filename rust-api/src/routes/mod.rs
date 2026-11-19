@@ -229,7 +229,15 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/admin/kategori-tampil",
             get(admin::kategori_tampil).put(admin::set_kategori_tampil),
         )
-        .route("/api/v1/admin/kategori", get(admin::semua_kategori))
+        .route(
+            "/api/v1/admin/kategori",
+            get(admin::semua_kategori).post(admin::buat_kategori),
+        )
+        .route(
+            "/api/v1/admin/kategori/{id}",
+            put(admin::ubah_kategori).delete(admin::hapus_kategori),
+        )
+        .route("/api/v1/admin/kategori/{id}/jejak", get(admin::kategori_jejak))
         .route("/api/v1/admin/dashboard", get(admin::dashboard))
         .route("/api/v1/admin/dashboard/stok-habis", get(admin::dashboard_stok_habis))
         .route("/api/v1/admin/menu-badge", get(admin::menu_badge))
