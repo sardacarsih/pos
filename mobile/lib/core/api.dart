@@ -766,6 +766,7 @@ class ApiClient {
     required int harga,
     required int beli,
     required String idempotencyKey,
+    List<IsianSatuanJual> satuanLain = const [],
   }) async => ProdukAdmin.fromJson(
     await post(
       '/api/v1/admin/produk',
@@ -777,6 +778,16 @@ class ApiClient {
         'harga': harga,
         'beli': beli,
         'aktif': true,
+        if (satuanLain.isNotEmpty)
+          'satuan_lain': [
+            for (final s in satuanLain)
+              {
+                'satuan': s.satuan,
+                'isi': s.isi,
+                'harga': s.harga,
+                'barcode': s.barcode.isEmpty ? null : s.barcode,
+              },
+          ],
       },
       headers: {'Idempotency-Key': idempotencyKey},
     ) as Map<String, dynamic>,
