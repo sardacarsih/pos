@@ -94,6 +94,8 @@ namespace BackOffice
             accordionControlElement9.Visible = false;
             accordionControlElement33.Visible = false;
             accordionControlElement23.Visible = false;
+            // Stub KAS / BANK desktop tidak pernah menyimpan; modul Kas & Bank ada di POS Web.
+            accordionControlElement26.Visible = false;
         }
 
         private void ApplySidebarIcons()

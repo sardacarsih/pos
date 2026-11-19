@@ -16,10 +16,11 @@ import ShoppingBasket from '@lucide/svelte/icons/shopping-basket';
 import ReceiptText from '@lucide/svelte/icons/receipt-text';
 import IdCard from '@lucide/svelte/icons/id-card';
 import PackagePlus from '@lucide/svelte/icons/package-plus';
+import Landmark from '@lucide/svelte/icons/landmark';
 import type { NamaIkon } from './nav';
 
 export const IKON: Record<NamaIkon, Component<any>> = {
   beranda: LayoutDashboard, pengguna: Users, produk: Package, stokHabis: PackageX, opname: ClipboardCheck,
   hargaRendah: TrendingDown, kategori: Tags, urutan: ArrowUpDown, rekap: ChartColumn, tagihan: Scale,
-  profil: UserRound, kasir: ScanBarcode, belanja: ShoppingBasket, riwayat: ReceiptText, kartu: IdCard, pembelian: PackagePlus
+  profil: UserRound, kasir: ScanBarcode, belanja: ShoppingBasket, riwayat: ReceiptText, kartu: IdCard, pembelian: PackagePlus, kas: Landmark
 };

@@ -2,6 +2,7 @@ pub mod admin;
 pub mod anggota;
 pub mod auth;
 pub mod kasir;
+pub mod kas;
 pub mod pembelian;
 pub mod profil;
 pub mod push;
@@ -192,6 +193,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/pembelian/{no}", get(pembelian::detail))
         .route("/api/v1/pembelian/{no}/batal", post(pembelian::batal))
         .route("/api/v1/hutang-supplier", get(pembelian::hutang))
+        .route("/api/v1/kas/akun", get(kas::akun).post(kas::akun_buat))
+        .route("/api/v1/kas/akun/{id}", put(kas::akun_ubah))
+        .route("/api/v1/kas/buku", get(kas::buku))
+        .route("/api/v1/kas/mutasi", post(kas::manual))
+        .route("/api/v1/kas/mutasi/{id}/batal", post(kas::batal))
+        .route("/api/v1/kas/transfer", post(kas::transfer))
+        .route("/api/v1/kas/tarik", post(kas::tarik))
         .route("/api/v1/hutang-supplier/{no}/pembayaran", post(pembelian::bayar))
         .route("/api/v1/hutang-supplier/{no}/pembayaran/{id}/balik", post(pembelian::balik))
         .route(

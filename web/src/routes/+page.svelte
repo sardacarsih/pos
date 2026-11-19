@@ -11,6 +11,7 @@
   import { api, ApiError, login, logout, restore, clearSession, sesiPembelianOffline } from '$lib/api';
   import Pembelian from '$lib/Pembelian.svelte';
   import PembelianRiwayat from '$lib/PembelianRiwayat.svelte';
+  import Kas from '$lib/Kas.svelte';
   import { sinkronPembelian } from '$lib/pembelianOffline';
   import type { User } from '$lib/types';
   import Shop from '$lib/Shop.svelte'; import General from '$lib/General.svelte'; import Admin from '$lib/Admin.svelte'; import Users from '$lib/Users.svelte'; import TagihanRekap from '$lib/TagihanRekap.svelte';
@@ -157,6 +158,8 @@
         {#key user.id}<Pembelian {user} online={terhubung}/>{/key}
       {:else if view === 'hutang-supplier' && user.role === 'ADMIN'}
         {#key user.id}<PembelianRiwayat {user} online={terhubung} hutang/>{/key}
+      {:else if view === 'kas' && user.role === 'ADMIN'}
+        {#key user.id}<Kas {user}/>{/key}
       {:else if view === 'belanja'}<Shop {user}/>
       {:else if user.role === 'ADMIN' && view === 'users'}<Users currentUserId={user.id}/>
       {:else if user.role === 'ADMIN' && view === 'tagihan-rekap'}<TagihanRekap/>
