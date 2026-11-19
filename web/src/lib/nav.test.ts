@@ -24,18 +24,24 @@ describe('struktur menu', () => {
   }
   it('menu admin dikelompokkan dan lencana hanya pada item pantau', () => {
     const m = menuUntuk('ADMIN');
-    expect(m.kelompok.map(k => k.judul)).toEqual(['Ringkasan', 'Pantau', 'Katalog & stok', 'Pengadaan', 'Anggota & keuangan', 'Pengelolaan', 'Akun']);
-    expect(semuaItem(m).filter(i => i.badge).map(i => i.id)).toEqual(['stok', 'harga']);
+    expect(m.kelompok.map(k => k.judul)).toEqual(['Ringkasan', 'Pantau', 'Katalog', 'Pengadaan', 'Anggota & keuangan', 'Pengelolaan', 'Akun']);
+    expect(semuaItem(m).filter(i => i.badge).map(i => i.id)).toEqual(['persediaan', 'harga']);
   });
   it('kasir dan anggota tidak melihat menu admin', () => {
     for (const p of ['KASIR', 'ANGGOTA'] as Role[]) {
       const ids = semuaItem(menuUntuk(p)).map(i => i.id);
-      for (const admin of ['users', 'produk', 'stok', 'opname', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas']) expect(ids).not.toContain(admin);
+      for (const admin of ['users', 'produk', 'persediaan', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas']) expect(ids).not.toContain(admin);
     }
   });
-  it('Supplier dan hutang menjadi tab di Pembelian; menu pengadaan hanya Pembelian', () => {
+  it('Stok habis dan Stock opname menjadi tab di Persediaan; menu lama dihapus', () => {
     const admin = semuaItem(menuUntuk('ADMIN')).map(i => i.id);
-    for (const pindah of ['kategori', 'urut', 'supplier', 'hutang-supplier']) expect(admin).not.toContain(pindah);
+    for (const pindah of ['kategori', 'urut', 'supplier', 'hutang-supplier', 'stok', 'opname']) expect(admin).not.toContain(pindah);
+    const sedia = semuaItem(menuUntuk('ADMIN')).find(i => i.id === 'persediaan')!;
+    expect(sedia).toEqual({ id: 'persediaan', label: 'Persediaan', pendek: 'Stok', ikon: 'stokHabis', badge: 'stok_habis' });
+    expect((VIEW_DIKENAL as readonly string[])).toContain('persediaan');
+    expect((VIEW_DIKENAL as readonly string[])).not.toContain('stok');
+    expect((VIEW_DIKENAL as readonly string[])).not.toContain('opname');
+    expect(menuUntuk('ADMIN').utama).toEqual(['dashboard', 'persediaan', 'rekap']);
     expect(semuaItem(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian']);
     expect(itemUtama(menuUntuk('PEMBELIAN')).map(i => i.id)).toEqual(['pembelian']);
     expect(semuaItem(MENU_OFFLINE).map(i => i.id)).toEqual(['pembelian']);
@@ -59,12 +65,12 @@ describe('lencana', () => {
     expect(labelBadge(2500)).toBe('99+');
   });
   it('jumlah dan teks aksesibel mengikuti jenis lencana item', () => {
-    const stok = semuaItem(menuUntuk('ADMIN')).find(i => i.id === 'stok')!;
+    const sedia = semuaItem(menuUntuk('ADMIN')).find(i => i.id === 'persediaan')!;
     const beranda = semuaItem(menuUntuk('ADMIN')).find(i => i.id === 'dashboard')!;
-    expect(jumlahBadge(stok, { stok_habis: 12, harga_rendah: 3 })).toBe(12);
+    expect(jumlahBadge(sedia, { stok_habis: 12, harga_rendah: 3 })).toBe(12);
     expect(jumlahBadge(beranda, { stok_habis: 12 })).toBe(0);
-    expect(jumlahBadge(stok, {})).toBe(0);
-    expect(ariaBadge(stok, 12)).toBe('Stok habis, 12 produk perlu perhatian');
-    expect(ariaBadge(stok, 0)).toBe('Stok habis');
+    expect(jumlahBadge(sedia, {})).toBe(0);
+    expect(ariaBadge(sedia, 12)).toBe('Persediaan, 12 produk perlu perhatian');
+    expect(ariaBadge(sedia, 0)).toBe('Persediaan');
   });
 });

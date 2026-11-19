@@ -7,7 +7,8 @@
   import EyeOff from '@lucide/svelte/icons/eye-off';
   import { onMount, tick } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
-  import AdminOpname from '$lib/AdminOpname.svelte';
+  import Persediaan from '$lib/Persediaan.svelte';
+  import type { TabSedia } from '$lib/persediaan';
   import { api, ApiError, login, logout, restore, clearSession, sesiPembelianOffline } from '$lib/api';
   import Pembelian from '$lib/Pembelian.svelte';
   import Kas from '$lib/Kas.svelte';
@@ -125,18 +126,20 @@
     finally { busy = false; }
   }
   async function changePassword() { busy = true; error = ''; try { await api('/auth/ganti-password',{method:'POST',body:{password_lama:password,password_baru:newPassword}}); clearSession(); user = null; password = newPassword = ''; error = 'Password berhasil diganti. Silakan login kembali.'; } catch(e) { error = (e as Error).message; } finally { busy = false; } }
-  let opname: AdminOpname | undefined;
+  let persediaan: Persediaan | undefined;
+  let tabAwal: TabSedia = 'kartu';
   function pilihView(tujuan: string) {
     if (modeLokal && tujuan !== 'pembelian') return;
-    if (tujuan !== view && opname && !opname.bolehKeluar()) return;
+    if (tujuan === 'stok' || tujuan === 'opname') { tabAwal = tujuan === 'stok' ? 'habis' : 'opname'; tujuan = 'persediaan'; }
+    if (tujuan !== view && persediaan && !persediaan.bolehKeluar()) return;
     if (tujuan === 'pembelian' && !online && bisaBeli(user)) { bukaLokal(); return; }
     view = tujuan;
   }
   beforeNavigate(({ willUnload, cancel }) => {
-    if (!willUnload && opname && !opname.bolehKeluar()) cancel();
+    if (!willUnload && persediaan && !persediaan.bolehKeluar()) cancel();
   });
   async function signOut() {
-    if (opname && !opname.bolehKeluar()) return;
+    if (persediaan && !persediaan.bolehKeluar()) return;
     user = null; modeLokal = false; view = 'dashboard'; badge = {}; periode = null;
     try { await logout(); } catch { /* Sesi lokal sudah dikunci. */ }
   }
@@ -167,9 +170,9 @@
       {:else if view === 'belanja'}<Shop {user}/>
       {:else if user.role === 'ADMIN' && view === 'users'}<Users currentUserId={user.id}/>
       {:else if user.role === 'ADMIN' && view === 'tagihan-rekap'}<TagihanRekap/>
-      {:else if user.role === 'ADMIN' && view === 'opname'}<AdminOpname bind:this={opname}/>
-      {:else if user.role === 'ADMIN' && ['produk','stok','harga','rekap'].includes(view)}<Admin {view}/>
-      {:else}<General {user} {view} on:go={(e) => view = e.detail}/>
+      {:else if user.role === 'ADMIN' && view === 'persediaan'}<Persediaan bind:this={persediaan} {tabAwal}/>
+      {:else if user.role === 'ADMIN' && ['produk','harga','rekap'].includes(view)}<Admin {view}/>
+      {:else}<General {user} {view} on:go={(e) => pilihView(e.detail)}/>
       {/if}
     </main>
   </div>

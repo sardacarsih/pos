@@ -5,8 +5,8 @@ import { menuUntuk } from './nav';
 describe('breadcrumb', () => {
   it('admin: peran lalu kelompok menu', () => {
     const m = menuUntuk('ADMIN');
-    expect(jejak(m, 'opname', 'ADMIN')).toEqual(['Admin', 'Katalog & stok']);
-    expect(jejak(m, 'stok', 'ADMIN')).toEqual(['Admin', 'Pantau']);
+    expect(jejak(m, 'persediaan', 'ADMIN')).toEqual(['Admin', 'Pantau']);
+    expect(jejak(m, 'produk', 'ADMIN')).toEqual(['Admin', 'Katalog']);
     expect(jejak(m, 'users', 'ADMIN')).toEqual(['Admin', 'Pengelolaan']);
     expect(jejak(m, 'profil', 'ADMIN')).toEqual(['Admin', 'Akun']);
   });
