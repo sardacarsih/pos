@@ -1024,6 +1024,41 @@ fn valuasi_dan_stok_minimum() {
     assert!(persediaan::set_stok_min(&c, 1, Some(d("1.00001"))).is_err());
     assert!(matches!(persediaan::set_stok_min(&c, 999, Some(d("1"))), Err(AppError::NotFound(_))));
 
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, BARCODE, PRODUCTNAME, BELI, AKTIF) VALUES (4, 'VL-D', '123456', 'Produk Nol', NULL, 'Y')", &[]).unwrap();
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, BELI, AKTIF) VALUES (5, 'VL-E', 'Produk Negatif', 12.5, 'Y')", &[]).unwrap();
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, BELI, AKTIF) VALUES (6, 'VL-F', 'Produk Nonaktif', 10, 'N')", &[]).unwrap();
+    for (kode, qty) in [("VL-E", -3), ("VL-F", 5)] {
+        c.execute_named(
+            "INSERT INTO POS_STOCK (KODE_BARANG, TANGGAL, QUANTITY, HPP) VALUES (:k, TO_DATE(:d,'YYYY-MM-DD'), :q, 0)",
+            &[("k", &kode), ("d", &awal.format("%Y-%m-%d").to_string()), ("q", &qty)],
+        ).unwrap();
+    }
+    c.commit().unwrap();
+
+    let pertama = persediaan::valuasi_item(&c, None, awal, hari, 1, 3).unwrap();
+    let berikutnya = persediaan::valuasi_item(&c, None, awal, hari, 2, 3).unwrap();
+    assert!(pertama.ada_lagi && !berikutnya.ada_lagi);
+    let items: Vec<_> = pertama.items.into_iter().chain(berikutnya.items).collect();
+    assert_eq!(items.iter().map(|i| i.id).collect::<Vec<_>>(), [5, 4, 1, 2, 3]);
+    let v = persediaan::valuasi(&c, None, awal, hari).unwrap();
+    assert_eq!(items.len() as i64, v.total_produk);
+    assert_eq!(items.iter().map(|i| i.nilai).sum::<Decimal>(), v.total_nilai);
+    assert_eq!(items.iter().filter(|i| i.tanpa_hpp).count() as i64, v.tanpa_hpp);
+    let negatif = &items[0];
+    assert_eq!((negatif.stok, negatif.hpp, negatif.nilai), (d("-3"), d("12.5"), d("-37.5")));
+    let kosong = &items[1];
+    assert_eq!((kosong.stok, kosong.hpp, kosong.nilai), (Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
+    assert!(kosong.tanpa_hpp && items[3].tanpa_hpp);
+    assert_eq!(kosong.kategori, "Tanpa kategori");
+    for (q, id) in [(" produk negatif ", 5), ("vl-b", 2), ("123456", 4)] {
+        let h = persediaan::valuasi_item(&c, Some(q), awal, hari, 1, 10).unwrap();
+        assert_eq!(h.items.iter().map(|i| i.id).collect::<Vec<_>>(), [id]);
+    }
+    for q in ["123", "VL-F", "%"] {
+        let h = persediaan::valuasi_item(&c, Some(q), awal, hari, 1, 10).unwrap();
+        assert!(h.items.is_empty() && !h.ada_lagi);
+    }
+
     bersihkan_user(&c, 0);
     c.execute("DELETE FROM MOB_STOK_SESUAI", &[]).unwrap();
     c.commit().unwrap();

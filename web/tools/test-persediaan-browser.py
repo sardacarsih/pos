@@ -1,4 +1,4 @@
-"""Uji module Persediaan (5 tab, kartu stok, opname cepat, penyesuaian + balik, valuasi/ambang,
+"""Uji module Persediaan (6 tab, kartu stok, opname cepat, penyesuaian + balik, valuasi item/ambang,
 peran, dirty-guard opname, lebar numerik + mode gelap) dengan API tiruan. Jalankan terhadap build Web lokal."""
 
 import base64
@@ -22,6 +22,11 @@ BARANG = [
 def test_persediaan(url):
     tulis = []
     kartu_params = []
+    valuasi_item_params = []
+    valuasi_items = [
+        dict(BARANG[0], stok="5", hpp="30000", nilai="150000", tanpa_hpp=False),
+        dict(BARANG[1], stok="0", hpp="0", nilai="0", tanpa_hpp=True),
+    ]
     akun = {"id": 17, "role": "ADMIN", "nama": "Admin Uji", "ganti_password": False}
     dialog_jawab = {"aksi": "accept"}
     sesuai = [{"id": 9001, "kode": "BRG-101", "nama": "Gula Pasir", "tanggal": HARI, "qty": "5",
@@ -82,6 +87,15 @@ def test_persediaan(url):
             route.fulfill(json={"total_nilai": "150000", "total_produk": 2, "tanpa_hpp": 1, "jumlah_stok_minim": 1,
                                 "per_kategori": [{"kategori": "Sembako", "jumlah_produk": 2, "total_qty": "5",
                                                   "nilai": "150000", "tanpa_hpp": 1}]})
+        elif path == "/admin/persediaan/valuasi-item":
+            valuasi_item_params.append(qs)
+            page = int(qs["page"])
+            if page == 2 and sum(p["page"] == "2" for p in valuasi_item_params) == 1:
+                route.fulfill(status=500, json={"pesan": "Gagal memuat valuasi item"})
+            else:
+                q = qs.get("q", "").lower()
+                items = [b for b in valuasi_items if q in b["nama"].lower() or q in b["kode"].lower()]
+                route.fulfill(json={"items": items[page - 1:page], "ada_lagi": len(items) > page, "page": page})
         elif path == "/admin/persediaan/stok-minimum":
             items = [dict(BARANG[1], stok="0", stok_min=ambang["102"])] if ambang["102"] else []
             route.fulfill(json={"items": items, "ada_lagi": False, "page": 1, "jumlah": len(items)})
@@ -132,7 +146,7 @@ def test_persediaan(url):
         sidebar.get_by_role("button", name=re.compile("^Persediaan")).click()
 
         tablist = page.get_by_role("tablist", name="Persediaan")
-        expect(tablist.get_by_role("tab")).to_have_count(5)
+        expect(tablist.get_by_role("tab")).to_have_count(6)
         kartu = tablist.get_by_role("tab", name="Kartu stok", exact=True)
         expect(kartu).to_have_attribute("aria-selected", "true")
         kartu.press("ArrowRight")
@@ -143,9 +157,40 @@ def test_persediaan(url):
         expect(kartu).to_be_focused()
         expect(kartu).to_have_attribute("aria-selected", "true")
         page.keyboard.press("End")
+        valuasi_item_tab = tablist.get_by_role("tab", name="Valuasi Item", exact=True)
+        expect(valuasi_item_tab).to_be_focused()
+        expect(valuasi_item_tab).to_have_attribute("aria-selected", "true")
+        page.keyboard.press("ArrowLeft")
         valuasi_tab = tablist.get_by_role("tab", name="Valuasi & alert", exact=True)
         expect(valuasi_tab).to_be_focused()
         expect(valuasi_tab).to_have_attribute("aria-selected", "true")
+
+        valuasi_item_tab.click()
+        panel_item = page.get_by_role("tabpanel", name="Valuasi Item")
+        tabel_item = panel_item.get_by_role("table", name="Valuasi per item")
+        gula = tabel_item.get_by_role("row", name=re.compile("Gula Pasir"))
+        expect(gula.get_by_role("cell", name="5 kg", exact=True)).to_be_visible()
+        expect(gula.get_by_role("cell", name="Rp 30.000", exact=True)).to_be_visible()
+        expect(gula.get_by_role("cell", name="Rp 150.000", exact=True)).to_be_visible()
+        assert valuasi_item_params[-1] == {"page": "1", "size": "50"}, valuasi_item_params
+        panel_item.get_by_role("button", name="Muat lebih banyak").click()
+        expect(panel_item.get_by_role("alert")).to_have_text("Gagal memuat valuasi item")
+        expect(gula).to_be_visible()
+        panel_item.get_by_role("button", name="Coba lagi").click()
+        kopi = tabel_item.get_by_role("row", name=re.compile("Kopi Bubuk"))
+        expect(kopi.get_by_role("cell", name="Tanpa HPP", exact=True)).to_be_visible()
+        expect(kopi.get_by_role("cell", name="Rp 0", exact=True)).to_be_visible()
+        expect(gula).to_be_visible()
+        assert valuasi_item_params[-2:] == [{"page": "2", "size": "50"}] * 2, valuasi_item_params
+        cari_item = panel_item.get_by_label("Cari item valuasi")
+        cari_item.fill(" BRG-102 ")
+        cari_item.press("Enter")
+        expect(kopi).to_be_visible()
+        expect(gula).to_have_count(0)
+        assert valuasi_item_params[-1] == {"q": "BRG-102", "page": "1", "size": "50"}, valuasi_item_params
+        cari_item.fill("tidak ada")
+        cari_item.press("Enter")
+        expect(panel_item.get_by_text("Tidak ada produk yang cocok.")).to_be_visible()
 
         # Kartu stok: mutasi, saldo, parameter paginasi.
         kartu.click()
@@ -245,7 +290,7 @@ def test_persediaan(url):
                 page.get_by_role("button", name="Mode gelap").first.click()
             for lebar in (375, 768, 1440):
                 page.set_viewport_size({"width": lebar, "height": 900})
-                for nama_tab in ("Kartu stok", "Stok habis", "Stock opname", "Penyesuaian", "Valuasi & alert"):
+                for nama_tab in ("Kartu stok", "Stok habis", "Stock opname", "Penyesuaian", "Valuasi & alert", "Valuasi Item"):
                     tablist.get_by_role("tab", name=nama_tab, exact=True).click()
                     if nama_tab == "Kartu stok" and page.get_by_role("button", name="Ganti produk").count() == 0:
                         pilih_produk_kartu(page)
@@ -269,7 +314,7 @@ def test_persediaan(url):
             assert halaman.get_by_role("tablist", name="Persediaan").count() == 0, peran
             halaman.close()
         browser.close()
-    print("Persediaan: 5 tab keyboard, kartu+paginasi, opname cepat, penyesuaian+balik, valuasi+ambang, peran, dirty-guard, lebar numerik + gelap lulus.")
+    print("Persediaan: 6 tab keyboard, kartu+paginasi, opname cepat, penyesuaian+balik, valuasi item+ambang, peran, dirty-guard, lebar numerik + gelap lulus.")
 
 
 if __name__ == "__main__":

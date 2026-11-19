@@ -271,6 +271,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/v1/admin/persediaan/sesuaikan/{id}/balik", post(persediaan::balik))
         .route("/api/v1/admin/persediaan/valuasi", get(persediaan::valuasi))
+        .route("/api/v1/admin/persediaan/valuasi-item", get(persediaan::valuasi_item))
         .route("/api/v1/admin/persediaan/stok-minimum", get(persediaan::stok_minimum))
         .route("/api/v1/admin/persediaan/stok-min/{produk_id}", put(persediaan::set_stok_min))
         .route(

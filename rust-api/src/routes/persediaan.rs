@@ -9,7 +9,7 @@ use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{AppState, Auth, Paging, idempotency_key};
+use super::{AppState, Auth, Paging, halaman, idempotency_key};
 use crate::{
     auth::Role,
     db::{self, persediaan},
@@ -117,6 +117,18 @@ pub async fn valuasi(State(s): State<AppState>, a: Auth, Query(q): Query<Valuasi
     })
     .await?;
     Ok(Json(h))
+}
+
+pub async fn valuasi_item(State(s): State<AppState>, a: Auth, Query(pg): Query<Paging>) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let (page, size) = (pg.page(), pg.size());
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        let awal = NaiveDate::from_ymd_opt(hari.year(), 1, 1).expect("1 Jan");
+        persediaan::valuasi_item(c, pg.q.as_deref(), awal, hari, page, size)
+    })
+    .await?;
+    Ok(halaman(h.items, h.ada_lagi, page))
 }
 
 #[derive(Deserialize)]
