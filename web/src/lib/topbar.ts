@@ -2,7 +2,7 @@
 import type { Role } from './types';
 import type { Menu } from './nav';
 
-export const NAMA_PERAN: Record<Role, string> = { KASIR: 'Kasir', ANGGOTA: 'Anggota', ADMIN: 'Admin' };
+export const NAMA_PERAN: Record<Role, string> = { KASIR: 'Kasir', ANGGOTA: 'Anggota', ADMIN: 'Admin', PEMBELIAN: 'Petugas pembelian' };
 
 /** Kelompok menu yang tidak ditampilkan di breadcrumb karena redundan dengan judul halaman. */
 const KELOMPOK_DISEMBUNYIKAN = ['Ringkasan'];

@@ -295,6 +295,7 @@ pub fn dashboard_admin(conn: &Connection) -> AppResult<DashboardAdmin> {
             crate::auth::Role::Admin => user.admin += 1,
             crate::auth::Role::Kasir => user.kasir += 1,
             crate::auth::Role::Anggota => user.anggota += 1,
+            crate::auth::Role::Pembelian => continue,
         }
         if !u.aktif {
             user.nonaktif += 1;

@@ -1,6 +1,6 @@
 # Kopkar POS Web
 
-Aplikasi SvelteKit untuk kasir, anggota, dan admin; memakai API Rust yang sama dengan aplikasi Flutter. Aplikasi ini terpisah dari web Flutter dan tidak menyediakan transaksi offline atau PWA.
+Aplikasi SvelteKit untuk kasir, anggota, admin, dan petugas pembelian. POS Web memakai API Rust yang juga dipakai aplikasi Flutter. Mode offline tersedia untuk input dan antrean pembelian.
 
 ## Pengembangan
 
@@ -12,6 +12,18 @@ bun run dev
 ```
 
 Buka alamat yang dicetak Vite. Permintaan `/api` diteruskan ke `http://127.0.0.1:8080`; ubah target lokal dengan environment `API_PROXY_TARGET` jika diperlukan. Jalankan `bun run check`, `bun run test`, dan `bun run build` untuk verifikasi. Hasil build statis ada di `build/`.
+
+## Pembelian
+
+Pembelian tersedia di POS Web untuk Admin dan Petugas pembelian. Admin dapat membuat akun petugas dari **Pengguna**, serta mengelola pembayaran dan koreksi di **Hutang Supplier**. Saldo dimulai dari faktur web dan riwayat BackOffice diberi status **Saldo belum dilacak**.
+
+Pembelian memakai supplier aktif pada master BackOffice. Sinkronkan penerimaan sebelum menjalankan opname untuk barang yang sama. Jika faktur salah, balik pembayaran yang sudah tercatat, batalkan faktur dengan alasan, lalu buat faktur pengganti selama periode penerimaan masih terbuka.
+
+Siapkan perangkat dengan login online dan membuka **Pembelian** hingga katalog tersedia. Gunakan scanner USB/Bluetooth mode keyboard dengan akhiran Enter, atau pilih **Scan dengan kamera** dan izinkan akses kamera. Kamera memerlukan HTTPS atau localhost. Barcode barang dan kemasan dicocokkan dengan katalog lokal, termasuk saat offline. Isi barang, tekan Enter untuk berpindah antarkolom, dan tekan Ctrl+Enter untuk meninjau faktur. Saat koneksi pulih, biarkan POS Web terbuka atau pilih **Coba lagi** di tab **Antrean**. Faktur berstatus **Tersinkron** telah diterima server.
+
+Jika browser ditutup saat offline, pemulihan memerlukan sesi yang masih tersimpan dan terakhir diverifikasi dalam delapan jam. Gunakan pilihan **Ingat saya** hanya pada perangkat tepercaya. Antrean berada di profil browser dan perangkat yang dipakai untuk input. Periksa antrean sebelum menghapus data situs atau berpindah perangkat.
+
+Untuk smoke test browser dengan API tiruan, jalankan `bun run build` dan sajikan hasilnya dengan `python -m http.server 4187 --bind 127.0.0.1 --directory build`. Di terminal lain, jalankan `python tools/test-pembelian-browser.py` dengan Python Playwright dan Chromium. Verifikasi service worker dan scanner fisik juga di staging melalui HTTPS.
 
 ## Deploy produksi
 

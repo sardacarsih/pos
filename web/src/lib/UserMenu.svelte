@@ -10,6 +10,7 @@
   export let nama: string;
   export let peran: string;
   export let dark = false;
+  export let tampilProfil = true;
 
   const dispatch = createEventDispatcher<{ profil: void; tema: void; keluar: void }>();
   const idMenu = 'menu-pengguna';
@@ -69,7 +70,7 @@
   {#if terbuka}
     <div class="um-menu" id={idMenu} role="menu" aria-label="Menu pengguna" tabindex="-1" bind:this={daftar} on:keydown={tekanMenu}>
       <div class="um-head" role="presentation"><strong>{nama}</strong><small>{peran}</small></div>
-      <button class="um-item" role="menuitem" tabindex="-1" on:click={() => pilih('profil')}><UserRound size={18} aria-hidden="true" /><span>Profil</span></button>
+      {#if tampilProfil}<button class="um-item" role="menuitem" tabindex="-1" on:click={() => pilih('profil')}><UserRound size={18} aria-hidden="true" /><span>Profil</span></button>{/if}
       <button class="um-item" role="menuitem" tabindex="-1" on:click={() => pilih('tema')}>
         {#if dark}<Sun size={18} aria-hidden="true" />{:else}<Moon size={18} aria-hidden="true" />{/if}
         <span>{dark ? 'Mode terang' : 'Mode gelap'}</span>
