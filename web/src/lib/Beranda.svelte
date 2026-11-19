@@ -84,6 +84,7 @@
     !terbuka ? { tingkat: 'bahaya', judul: 'Periode tidak terbuka', teks: pesanPeriode, tuju: null } : null,
     (data.user?.terkunci || 0) > 0 ? { tingkat: 'peringatan', judul: `${data.user.terkunci} akun terkunci`, teks: 'Buka kunci di menu Pengguna.', tuju: 'users' } : null,
     (data.perhatian?.harga_rendah || 0) > 0 ? { tingkat: 'peringatan', judul: `${data.perhatian.harga_rendah} produk harga jual ≤ HPP`, teks: 'Periksa dan naikkan harga jual.', tuju: 'harga' } : null,
+    (data.perhatian?.tanpa_hpp || 0) > 0 ? { tingkat: 'peringatan', judul: `${data.perhatian.tanpa_hpp} produk belum ada harga beli`, teks: 'Isi harga beli agar margin dapat dipantau.', tuju: 'harga' } : null,
     (stokHabis || 0) > 0 ? { tingkat: 'peringatan', judul: `${stokHabis} produk stok habis`, teks: 'Lakukan opname atau pembelian.', tuju: 'stok' } : null
   ].filter(Boolean) : []) as Perhatian[];
   const labelPreset: [Preset, string][] = [['hari', 'Hari ini'], ['tujuh', '7 hari'], ['periode', 'Periode berjalan'], ['bebas', 'Pilih tanggal']];

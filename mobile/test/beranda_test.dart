@@ -256,4 +256,10 @@ void main() {
       handle.dispose();
     });
   });
+
+  test('statusMargin: tanpa HPP, rugi, impas', () {
+    expect(statusMargin(700, 0), (tanpaHpp: true, margin: null));
+    expect(statusMargin(900, 1000), (tanpaHpp: false, margin: -100));
+    expect(statusMargin(1000, 1000), (tanpaHpp: false, margin: 0));
+  });
 }

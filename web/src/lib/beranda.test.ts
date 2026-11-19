@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { delta, hariSingkat, jumlahHari, persenJenis, persenTerpakai, proporsi, rentangPreset, singkat, statusLimit, tambahHari, teksDelta, tinggiBatang, validasiRentang } from './beranda';
+import { delta, hariSingkat, jumlahHari, persenJenis, persenTerpakai, proporsi, rentangPreset, singkat, statusHarga, statusLimit, tambahHari, teksDelta, tinggiBatang, validasiRentang } from './beranda';
 
 describe('limit anggota', () => {
   it('status mengikuti batas 80% dan 100%', () => {
@@ -93,5 +93,15 @@ describe('rentang rincian penjualan', () => {
   it('persen jenis aman untuk total nol', () => {
     expect(persenJenis(1, 3)).toBe(33);
     expect(persenJenis(5, 0)).toBe(0);
+  });
+});
+
+describe('statusHarga', () => {
+  it('rugi, impas, dan tanpa HPP', () => {
+    expect(statusHarga(900, 1000)).toEqual({ tipe: 'rugi', margin: -100 });
+    expect(statusHarga(1000, 1000)).toEqual({ tipe: 'impas', margin: 0 });
+    expect(statusHarga(700, 0)).toEqual({ tipe: 'tanpa-hpp', margin: null });
+    expect(statusHarga(700, null)).toEqual({ tipe: 'tanpa-hpp', margin: null });
+    expect(statusHarga(700, -5)).toEqual({ tipe: 'tanpa-hpp', margin: null });
   });
 });

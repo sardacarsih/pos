@@ -72,7 +72,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     let mut h: Vec<Hasil> = Vec::new();
 
     // Skema yang dibutuhkan fitur baru, termasuk jalur TULIS opname (diverifikasi lewat metadata, tanpa menulis).
-    let skema: [(&str, &[&str]); 11] = [
+    let skema: [(&str, &[&str]); 15] = [
         ("POS_PRODUCT", &["PRODUCTID", "KODE_ITEM", "BARCODE", "PRODUCTNAME", "SATUAN", "PRICE", "BELI", "KATEGORI_ID", "AKTIF"]),
         ("POS_KATEGORI", &["KODE", "KATEGORI"]),
         ("POS_STOCK", &["KODE_BARANG", "TANGGAL", "QUANTITY"]),
@@ -83,6 +83,10 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         ("POS_STOCKOPNAME", &["NOMOR_SO", "TANGGAL", "KODE_BARANG", "JUMLAHSISTEM", "JUMLAHFISIK", "SELISIH", "HPP", "TOTAL"]),
         ("POS_TRANSACTION_COUNTER", &["TRANSACTION_CODE", "TRANSACTION_YEAR", "LAST_NUMBER"]),
         ("NOMOR_TRANSAKSI", &["KODE", "NOMOR"]),
+        ("POS_PENDING_DETAIL", &["KODE_BARANG"]),
+        ("POS_POTONGANBERDASARKANQTY", &["KODE_ITEM"]),
+        ("MOB_PRODUK_FOTO", &["PRODUCT_ID"]),
+        ("MOB_PRODUK_URUT", &["PRODUCT_ID"]),
         ("MOB_IDEMPOTENCY", &["USER_ID", "OPERASI", "IDEMPOTENCY_KEY", "RESOURCE_ID", "PAYLOAD_HASH"]),
     ];
     for (tabel, kolom) in skema {
@@ -103,7 +107,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     }));
     h.push(cek("dashboard admin (kemarin, tren, perhatian)", || {
         let d = dashboard::dashboard_admin(conn)?;
-        Ok(format!("hari ini {} transaksi, tren {} hari, harga<=HPP {}", d.ringkasan.jumlah, d.tren.len(), d.perhatian.harga_rendah))
+        Ok(format!("hari ini {} transaksi, tren {} hari, harga<=HPP {}, tanpa HPP {}", d.ringkasan.jumlah, d.tren.len(), d.perhatian.harga_rendah, d.perhatian.tanpa_hpp))
     }));
     h.push(cek("tren penjualan 7 hari", || Ok(format!("{} hari", dashboard::tren_penjualan(conn, hari, 7)?.len()))));
     for (nama, hari_lalu) in [("hari ini", 0), ("7 hari", 6), ("31 hari", 30)] {
@@ -125,7 +129,26 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     h.push(cek("harga jual <= HPP (hitung + daftar)", || {
         let n = katalog::jumlah_harga_rendah(conn)?;
         let d = katalog::daftar_produk_admin(conn, None, None, None, true, 1, 5)?;
-        Ok(format!("{n} produk, {} baris tampil", d.items.len()))
+        // Daftar tidak boleh memuat produk untung (BELI > 0 dan harga jual > BELI); yang tampil hanya rugi/impas atau tanpa HPP.
+        if let Some(p) = d.items.iter().find(|p| p.beli > 0 && p.harga > p.beli) {
+            return Err(AppError::Internal(format!("produk untung ikut tampil: {} (jual {} > beli {})", p.kode, p.harga, p.beli)));
+        }
+        // Rugi harus lebih dulu daripada tanpa HPP.
+        let urutan_benar = d.items.windows(2).all(|w| !(w[0].beli <= 0 && w[1].beli > 0));
+        if !urutan_benar {
+            return Err(AppError::Internal("urutan salah: produk tanpa HPP muncul sebelum yang rugi".into()));
+        }
+        Ok(format!("rugi {}, tanpa HPP {}, total daftar {}, {} baris tampil", n.rugi, n.tanpa_hpp, n.total(), d.items.len()))
+    }));
+    h.push(cek("riwayat pemakaian produk (jejak, baca saja)", || {
+        let id: Option<i64> = conn.query_row_as::<i64>("SELECT MIN(PRODUCTID) FROM POS_PRODUCT", &[]).ok();
+        match id {
+            Some(id) => {
+                let (p, j) = katalog::jejak_produk(conn, id)?;
+                Ok(format!("{} -> total {}, bisa hapus {}", p.kode, j.total(), j.bisa_hapus()))
+            }
+            None => Ok("tidak ada produk".into()),
+        }
     }));
     h.push(cek("daftar produk admin", || Ok(format!("{} baris", katalog::daftar_produk_admin(conn, None, None, None, false, 1, 5)?.items.len()))));
     h.push(cek("stok sistem (stok_map) satu produk", || {

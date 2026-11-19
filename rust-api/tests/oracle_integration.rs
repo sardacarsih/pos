@@ -84,9 +84,10 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     c.commit().unwrap();
 }
 
-const TABEL_POS: [&str; 11] = [
+const TABEL_POS: [&str; 13] = [
     "POS_PRODUCT", "POS_KATEGORI", "POS_STOCK", "POS_PEMBELIAN", "POS_PEMBELIANDETAIL", "POS_PENJUALAN",
     "POS_PENJUALAN_DETAIL", "POS_BARANGRUSAK", "POS_STOCKOPNAME", "POS_TRANSACTION_COUNTER", "NOMOR_TRANSAKSI",
+    "POS_PENDING_DETAIL", "POS_POTONGANBERDASARKANQTY",
 ];
 
 /// Membuat tabel POS_* minimal untuk uji stok/opname dan menghapusnya lagi (juga bila uji panik).
@@ -116,6 +117,8 @@ impl<'a> SkemaPos<'a> {
             "CREATE TABLE POS_STOCKOPNAME (NOMOR_SO VARCHAR2(20), TANGGAL DATE, KODE_BARANG VARCHAR2(30), JUMLAHSISTEM NUMBER, JUMLAHFISIK NUMBER, SELISIH NUMBER, HPP NUMBER, TOTAL NUMBER)",
             "CREATE TABLE POS_TRANSACTION_COUNTER (TRANSACTION_CODE VARCHAR2(30), TRANSACTION_YEAR NUMBER(4), LAST_NUMBER NUMBER, PRIMARY KEY (TRANSACTION_CODE, TRANSACTION_YEAR))",
             "CREATE TABLE NOMOR_TRANSAKSI (KODE VARCHAR2(30), NOMOR VARCHAR2(30))",
+            "CREATE TABLE POS_PENDING_DETAIL (NO_TRANSAKSI VARCHAR2(30), KODE_BARANG VARCHAR2(30), JUMLAH_BARANG NUMBER)",
+            "CREATE TABLE POS_POTONGANBERDASARKANQTY (KODE_ITEM VARCHAR2(30), QTY NUMBER)",
         ] {
             c.execute(ddl, &[]).unwrap();
         }
@@ -199,6 +202,51 @@ fn stok_habis_dan_opname_idempoten() {
 }
 
 #[test]
+fn hapus_produk_tanpa_riwayat_dan_tolak_berriwayat() {
+    use pos_api::{db::katalog, error::AppError};
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    db::migrate(&c).unwrap();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    for (id, kode) in [(1, "D-BERSIH"), (2, "D-JUAL"), (3, "D-STOK"), (4, "D-OPNAME"), (5, "D-PENDING")] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', 1000, 500, 1, 'Y')",
+            &[("i", &id), ("k", &kode)],
+        )
+        .unwrap();
+    }
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL VALUES ('T1', 'D-JUAL', 1)", &[]).unwrap();
+    c.execute("INSERT INTO POS_STOCK VALUES ('D-STOK', SYSDATE, 0, 0)", &[]).unwrap();
+    c.execute("INSERT INTO POS_STOCKOPNAME VALUES ('SO-1', SYSDATE, 'D-OPNAME', 1, 1, 0, 0, 0)", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENDING_DETAIL VALUES ('P1', 'D-PENDING', 1)", &[]).unwrap();
+    c.execute("INSERT INTO POS_POTONGANBERDASARKANQTY VALUES ('D-BERSIH', 5)", &[]).unwrap();
+    c.execute("INSERT INTO MOB_PRODUK_URUT VALUES (1, 1)", &[]).unwrap();
+    c.commit().unwrap();
+
+    let (_, j) = katalog::jejak_produk(&c, 1).unwrap();
+    assert!(j.bisa_hapus());
+    let p = katalog::hapus_produk(&c, 1).unwrap();
+    assert_eq!(p.kode, "D-BERSIH");
+    assert!(katalog::produk_admin_by_id(&c, 1).unwrap().is_none());
+    let sisa: i64 = c.query_row_as("SELECT COUNT(*) FROM MOB_PRODUK_URUT WHERE PRODUCT_ID = 1", &[]).unwrap();
+    assert_eq!(sisa, 0);
+    let potongan: i64 = c.query_row_as("SELECT COUNT(*) FROM POS_POTONGANBERDASARKANQTY", &[]).unwrap();
+    assert_eq!(potongan, 0);
+
+    for id in 2..=5 {
+        match katalog::hapus_produk(&c, id) {
+            Err(AppError::Rule { kode, .. }) => assert_eq!(kode, "PRODUK_BERTRANSAKSI"),
+            other => panic!("produk {id} harus ditolak: {other:?}"),
+        }
+        assert!(katalog::produk_admin_by_id(&c, id).unwrap().is_some());
+    }
+    assert!(matches!(katalog::hapus_produk(&c, 999), Err(AppError::NotFound(_))));
+}
+
+#[test]
 fn harga_rendah_menyaring_dan_mengurutkan() {
     use pos_api::db::katalog;
 
@@ -215,6 +263,7 @@ fn harga_rendah_menyaring_dan_mengurutkan() {
         (3, "H-UNTUNG", 1500, 1000, "Y"),
         (4, "H-BELI0", 0, 0, "Y"),
         (5, "H-NONAKTIF", 500, 1000, "N"),
+        (6, "H-NULL", 700, 0, "Y"), // BELI di-NULL-kan di bawah
     ] {
         c.execute_named(
             "INSERT INTO POS_PRODUCT VALUES (:i, :k, :k, :k, 'PCS', :h, :b, 1, :a)",
@@ -222,15 +271,18 @@ fn harga_rendah_menyaring_dan_mengurutkan() {
         )
         .unwrap();
     }
+    c.execute("UPDATE POS_PRODUCT SET BELI = NULL WHERE KODE_ITEM = 'H-NULL'", &[]).unwrap();
     c.commit().unwrap();
 
     let h = katalog::daftar_produk_admin(&c, None, None, None, true, 1, 10).unwrap();
     let kode: Vec<&str> = h.items.iter().map(|p| p.kode.as_str()).collect();
-    assert_eq!(kode, ["H-RUGI", "H-IMPAS"]); // paling rugi dulu; untung/beli 0/nonaktif tidak ada
-    assert_eq!(katalog::jumlah_harga_rendah(&c).unwrap(), 2);
+    // Rugi dulu (margin terkecil), lalu produk tanpa HPP; untung dan nonaktif tidak ada.
+    assert_eq!(kode, ["H-RUGI", "H-IMPAS", "H-BELI0", "H-NULL"]);
+    let hr = katalog::jumlah_harga_rendah(&c).unwrap();
+    assert_eq!((hr.rugi, hr.tanpa_hpp, hr.total()), (2, 2, 4));
     // Tanpa filter, semua produk tetap muncul (jalur lama tidak berubah).
     let semua = katalog::daftar_produk_admin(&c, None, None, None, false, 1, 10).unwrap();
-    assert_eq!(semua.items.len(), 5);
+    assert_eq!(semua.items.len(), 6);
 }
 
 #[test]
