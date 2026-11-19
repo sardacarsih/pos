@@ -289,7 +289,7 @@ def test_pembelian(url):
         }, percobaan
         tab_lain.close()
 
-        page.get_by_role("button", name="Hutang Supplier", exact=True).press("Enter")
+        page.get_by_role("tab", name="Hutang Supplier", exact=True).press("Enter")
         expect(page.get_by_role("heading", name="Saldo per supplier")).to_be_visible()
         expect(page.get_by_role("cell", name="Rp 65.000", exact=True).first).to_have_css("text-align", "right")
         page.get_by_role("button", name="INV-UJI", exact=True).press("Enter")
@@ -312,7 +312,6 @@ def test_pembelian(url):
         assert pembayaran[0]["metode"] == "TRANSFER"
         page.get_by_role("button", name="Tutup", exact=True).press("Enter")
 
-        page.get_by_role("button", name="Pembelian", exact=True).press("Enter")
         page.get_by_role("tab", name="Riwayat").press("Enter")
         page.get_by_role("checkbox", name="Perlu rekonsiliasi").press("Space")
         cari = page.get_by_role("button", name="Cari", exact=True)
@@ -334,7 +333,7 @@ def test_pembelian(url):
         page.get_by_role("button", name="Tutup", exact=True).press("Enter")
         expect(page.get_by_text("Tidak ada faktur yang cocok.", exact=True)).to_be_visible()
 
-        page.get_by_role("button", name="Hutang Supplier", exact=True).press("Enter")
+        page.get_by_role("tab", name="Hutang Supplier", exact=True).press("Enter")
         page.get_by_role("button", name=legacy_no, exact=True).press("Enter")
         page.get_by_role("button", name="Catat pembayaran").press("Enter")
         aksi = page.get_by_role("dialog", name="Catat pembayaran")
@@ -365,7 +364,8 @@ def test_pembelian(url):
         page.get_by_label("Password", exact=True).fill("test12345")
         page.get_by_role("button", name="Masuk", exact=True).press("Enter")
         expect(page.get_by_role("heading", name="Pembelian", exact=True)).to_be_visible()
-        expect(page.get_by_role("button", name="Hutang Supplier", exact=True)).to_have_count(0)
+        expect(page.get_by_role("tab", name="Hutang Supplier", exact=True)).to_have_count(0)
+        expect(page.get_by_role("tab", name="Supplier", exact=True)).to_have_count(1)
         page.get_by_role("tab", name="Antrean").press("Enter")
         expect(page.get_by_text("Belum ada pembelian di antrean ini.", exact=True)).to_be_visible()
         assert not errors, errors

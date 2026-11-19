@@ -73,7 +73,7 @@ def test_supplier(url):
             return page
 
         page = buka("petugas")
-        nav = page.get_by_role("button", name="Supplier", exact=True).first
+        nav = page.get_by_role("tab", name="Supplier", exact=True)
         nav.press("Enter")
         page.get_by_role("button", name="Berikutnya").press("Enter")
         expect(page.get_by_text("Halaman 2")).to_be_visible()
@@ -138,21 +138,25 @@ def test_supplier(url):
         page.keyboard.press("Escape")
         page.evaluate("delete navigator.onLine")
         page.evaluate("window.dispatchEvent(new Event('online'))")
-        page.get_by_role("button", name="Pembelian", exact=True).first.press("Enter")
+        page.get_by_role("tab", name="Input pembelian", exact=True).press("Enter")
         expect(page.get_by_role("combobox", name="Supplier").locator("option", has_text="NAMA DIUBAH")).to_have_count(1)
         page.evaluate("Object.defineProperty(navigator, 'onLine', {get: () => false, configurable: true})")
         page.evaluate("window.dispatchEvent(new Event('offline'))")
-        expect(nav).to_have_count(0)
+        expect(page.get_by_role("tab", name="Supplier", exact=True)).to_have_count(1)
+        page.get_by_role("tab", name="Supplier", exact=True).press("Enter")
+        expect(page.get_by_text("Sambungkan ke server untuk mengelola supplier.")).to_be_visible()
         page.context.close()
 
         admin = buka("admin")
-        admin.get_by_role("button", name="Supplier", exact=True).first.press("Enter")
+        admin.get_by_role("button", name="Pembelian", exact=True).first.press("Enter")
+        admin.get_by_role("tab", name="Supplier", exact=True).press("Enter")
         expect(admin.get_by_role("heading", name="Daftar supplier")).to_be_visible()
         admin.context.close()
         for akun in ("kasir", "anggota"):
             page = buka(akun)
             expect(page.get_by_role("main")).to_be_visible()
             expect(page.get_by_role("button", name="Supplier", exact=True)).to_have_count(0)
+            expect(page.get_by_role("button", name="Pembelian", exact=True)).to_have_count(0)
             page.context.close()
         browser.close()
     print("CRUD Supplier, keyboard, paginasi, izin menu, offline, dan katalog Pembelian lulus.")
