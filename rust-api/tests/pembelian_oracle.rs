@@ -497,6 +497,58 @@ fn pembelian_oracle_stok_jurnal_idempotensi_dan_koreksi() {
             ..
         })
     ));
+    // Satuan pembelian hanya satuan dasar (PCS) dan tambahan produk (BOX); stok masuk dalam satuan dasar.
+    c.execute("INSERT INTO POS_SATUAN (ID,SATUAN) VALUES (999,'KRT')", &[]).unwrap();
+    c.commit().unwrap();
+    let baris_beli = |satuan: &str, isi: &str, qty: &str, harga: i64| {
+        vec![b::BarisReq {
+            product_id: 1,
+            satuan: satuan.into(),
+            isi: isi.into(),
+            qty: qty.into(),
+            harga,
+            potongan: 0,
+        }]
+    };
+    // Satuan master yang bukan satuan produk ditolak, meski ada di POS_SATUAN.
+    req.baris = baris_beli("KRT", "24", "2", 24_000);
+    assert!(matches!(
+        b::posting(&c, &staff, &key(), &req),
+        Err(AppError::Rule { kode: "SATUAN_BERUBAH", .. })
+    ));
+    assert_eq!(stok(), Decimal::from(36));
+    let qty_hpp = |no: &str| -> (Decimal, Decimal) {
+        let (q, h) = c
+            .query_row_as_named::<(String, String)>(
+                "SELECT TO_CHAR(QUANTITY),TO_CHAR(HARGA_BELI) FROM POS_PEMBELIANDETAIL WHERE NO_TRANSAKSI=:no",
+                &[("no", &no)],
+            )
+            .unwrap();
+        (q.parse().unwrap(), h.parse().unwrap())
+    };
+    // Satuan dasar: isi 1, qty apa adanya.
+    req.no_faktur = "INV-PCS".into();
+    req.baris = baris_beli("PCS", "1", "5", 1_000);
+    let no_pcs = b::posting(&c, &staff, &key(), &req).unwrap();
+    assert_eq!(stok(), Decimal::from(41));
+    assert_eq!(qty_hpp(&no_pcs), (Decimal::from(5), Decimal::from(1_000)));
+    // Satuan tambahan: 2 BOX x 12 = 24 PCS, harga dasar 24.000 / 12.
+    req.no_faktur = "INV-BOX".into();
+    req.baris = baris_beli("BOX", "12", "2", 24_000);
+    let no_box = b::posting(&c, &staff, &key(), &req).unwrap();
+    assert_eq!(stok(), Decimal::from(65));
+    assert_eq!(qty_hpp(&no_box), (Decimal::from(24), Decimal::from(2_000)));
+    let baris = &b::detail(&c, &staff, &no_box).unwrap()["baris"][0];
+    assert_eq!((baris["satuan"].as_str(), baris["isi"].as_str(), baris["qty"].as_str()), (Some("BOX"), Some("12"), Some("2")));
+    // Harga beli terakhir BOX tersimpan dan dikirim di referensi.
+    let beli_box = b::referensi(&c).unwrap()["barang"][0]["satuan"][1]["beli"]
+        .as_str()
+        .unwrap()
+        .parse::<Decimal>()
+        .unwrap();
+    assert_eq!(beli_box, Decimal::from(24_000));
+    req.baris = baris_beli("BOX", "6", "2", 12_000);
+    req.no_faktur = "INV-2".into();
     c.execute(
         "INSERT INTO POS_STOCKOPNAME VALUES ('P1',TRUNC(SYSDATE),0)",
         &[],

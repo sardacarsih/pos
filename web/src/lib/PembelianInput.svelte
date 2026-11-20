@@ -4,8 +4,9 @@
   import Camera from '@lucide/svelte/icons/camera';
   import ScanBarcode from '@lucide/svelte/icons/scan-barcode';
   import Trash2 from '@lucide/svelte/icons/trash-2';
-  import { brutoBaris, cariBarang, cocokBarcode, formatJumlahBeli, metodeBayar, payloadBeli, rpBeli, totalBeli,
-    type DrafBeli, type PilihanBarang, type ReferensiBeli } from './pembelian';
+  import { brutoBaris, cariBarang, cocokBarcode, formatJumlahBeli, hargaAwalBeli, hargaDasar, metodeBayar, payloadBeli,
+    rpBeli, selisihHarga, stokMasuk, tambahQty, teksQtyDasar, totalBeli,
+    type DrafBeli, type PilihanBarang, type ReferensiBeli, type SatuanBeli } from './pembelian';
   import { inputAngkaPembelian } from './inputAngkaPembelian';
 
   export let draf: DrafBeli;
@@ -135,22 +136,34 @@
   }
 
   async function tambah(p: PilihanBarang) {
-    if (draf.baris.length >= 100) { galatScan = 'Pembelian maksimal 100 baris.'; return; }
     const { produk, satuan } = p;
-    const hargaAwal = Math.round(Number(produk.beli) * Number(satuan.isi));
-    draf.baris = [...draf.baris, {
-      id: crypto.randomUUID(), product_id: produk.id, kode: produk.kode, nama: produk.nama,
-      satuan: satuan.satuan, isi: satuan.isi, qty: '1', harga: hargaAwal > 0 ? hargaAwal : undefined, potongan: 0
-    }];
+    // Scan ulang barang + satuan yang sama menambah jumlah baris itu; satuan lain membuat baris baru.
+    const ada = draf.baris.findIndex(r => r.product_id === produk.id && r.satuan === satuan.satuan
+      && Number(r.isi) === Number(satuan.isi));
+    if (ada < 0 && draf.baris.length >= 100) { galatScan = 'Pembelian maksimal 100 baris.'; return; }
+    let fokus = ada;
+    if (ada >= 0) {
+      const qty = tambahQty(draf.baris[ada].qty);
+      if (!qty) { galatScan = 'Jumlah melebihi 999.999.'; return; }
+      draf.baris = draf.baris.map((r, n) => n === ada ? { ...r, qty } : r);
+      pesan = `${produk.nama}, ${satuan.satuan}, jumlah menjadi ${qty}.`;
+    } else {
+      const hargaAwal = hargaAwalBeli(produk, satuan);
+      draf.baris = [...draf.baris, {
+        id: crypto.randomUUID(), product_id: produk.id, kode: produk.kode, nama: produk.nama,
+        satuan: satuan.satuan, isi: satuan.isi, qty: '1', harga: hargaAwal > 0 ? hargaAwal : undefined, potongan: 0
+      }];
+      fokus = draf.baris.length - 1;
+      pesan = `${produk.nama}, ${satuan.satuan}, ditambahkan.`;
+    }
     scan = '';
     dariKamera = false;
     bukaPilihan = false;
     pilihanAktif = -1;
     galatScan = '';
-    pesan = `${produk.nama}, ${satuan.satuan}, ditambahkan.`;
     simpan();
     await tick();
-    const input = tabel.querySelector<HTMLInputElement>(`[data-baris="${draf.baris.length - 1}"] [data-kolom="qty"]`);
+    const input = tabel.querySelector<HTMLInputElement>(`[data-baris="${fokus}"] [data-kolom="qty"]`);
     input?.focus();
     input?.select();
   }
@@ -191,11 +204,19 @@
 
   function pilihUlang(i: number, satuan: string) {
     const b = draf.baris[i];
-    const opsi = barangAktif.get(b.product_id)?.satuan.find(s => s.satuan === satuan);
-    if (!opsi) return;
-    draf.baris = draf.baris.map((row, n) => i === n ? { ...row, satuan, isi: opsi.isi } : row);
+    const produk = barangAktif.get(b.product_id);
+    const opsi = produk?.satuan.find(s => s.satuan === satuan);
+    if (!produk || !opsi) return;
+    const harga = hargaAwalBeli(produk, opsi);
+    draf.baris = draf.baris.map((row, n) => i === n
+      ? { ...row, satuan, isi: opsi.isi, harga: harga > 0 ? harga : row.harga } : row);
     simpan();
   }
+
+  const aktifSatuan = (item: { satuan: SatuanBeli[] }, b: { satuan: string; isi: string }) =>
+    item.satuan.findIndex(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi));
+
+  $: ringkasStok = stokMasuk(draf.baris, barangAktif);
 
   function tinjau() {
     if (menyimpan || konfirmasi.open) return;
@@ -282,38 +303,60 @@
         <div class="sr-only" role="status">{pesan}</div>
         <div class="beli-gulir">
           <table class="beli-tabel beli-grid-barang" bind:this={tabel}>
-            <thead><tr><th>Barang / satuan</th><th class="beli-angka">Jumlah</th><th class="beli-angka">Harga beli</th><th class="beli-angka">Potongan</th><th class="beli-angka">Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
+            <thead><tr><th>Barang / satuan</th><th>Satuan</th><th class="beli-angka">Jumlah</th><th class="beli-angka">Harga beli / satuan</th><th class="beli-angka">Potongan</th><th class="beli-angka">Subtotal</th><th><span class="sr-only">Tindakan</span></th></tr></thead>
             <tbody>
               {#each draf.baris as b, i (b.id)}
                 {@const bruto = brutoBaris(b)}
                 {@const item = barangAktif.get(b.product_id)}
                 <tr data-baris={i}>
                   <th scope="row">
-                    <strong>{b.nama}</strong><small>{b.kode} · {b.satuan} × {formatJumlahBeli(b.isi)}</small>
-                    {#if !item?.satuan.some(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi))}
-                      {#if item}
-                        <select aria-label={'Pilih ulang satuan ' + b.nama} value="" on:change={(e) => pilihUlang(i, e.currentTarget.value)}>
-                          <option value="">Pilih ulang satuan</option>
-                          {#each item.satuan as s}<option value={s.satuan}>{s.satuan} × {formatJumlahBeli(s.isi)}</option>{/each}
-                        </select>
-                        <small>Periksa ulang harga per satuan.</small>
-                      {:else}<small>Barang sudah tidak tersedia</small>{/if}
-                    {/if}
+                    <strong>{b.nama}</strong><small>{b.kode}</small>
+                    {#if item}
+                      {@const cocok = item.satuan.some(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi))}
+                      {@const aktif = item.satuan.findIndex(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi))}
+                      {@const stokTxt = teksQtyDasar(b)}
+                      {@const hd = hargaDasar(b.harga, b.isi)}
+                      {#if !cocok}<small class="beli-peringatan">Satuan berubah di katalog. Pilih satuan dan periksa harga.</small>
+                      {:else if stokTxt}
+                        <small class="beli-konversi" aria-live="polite">
+                          <span>{#if Number(b.isi) !== 1}<span class="beli-rumus">{formatJumlahBeli(b.qty.replace('.', ','))} {b.satuan} × {formatJumlahBeli(b.isi)} =</span>{/if}<strong>{formatJumlahBeli(stokTxt)} {item.satuan[0].satuan}</strong> masuk stok</span>
+                          {#if hd !== null && Number(b.isi) !== 1}<span>{rpBeli(hd)} / {item.satuan[0].satuan}</span>{/if}
+                        </small>
+                      {/if}
+                    {:else}<small class="beli-peringatan">Barang sudah tidak tersedia</small>{/if}
                   </th>
-                  <td><input class="beli-angka" aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" required
+                  <td data-label="Satuan">
+                    {#if item && (item.satuan.length > 1 || aktifSatuan(item, b) < 0)}
+                      <select aria-label={'Satuan ' + b.nama} data-kolom="satuan" value={aktifSatuan(item, b) < 0 ? '' : b.satuan}
+                        on:change={(e) => pilihUlang(i, e.currentTarget.value)}>
+                        {#if aktifSatuan(item, b) < 0}<option value="">Pilih satuan</option>{/if}
+                        {#each item.satuan as s, n}<option value={s.satuan}>{s.satuan} {n === 0 ? '(dasar)' : '× ' + formatJumlahBeli(s.isi)}</option>{/each}
+                      </select>
+                    {:else}{b.satuan}{/if}
+                  </td>
+                  <td data-label="Jumlah"><input class="beli-angka" aria-label={'Jumlah ' + b.nama} inputmode="decimal" data-kolom="qty" required
                     use:inputAngkaPembelian={{ jenis: 'jumlah', nilai: b.qty, ubah: nilai => b.qty = nilai }}
-                    on:keydown={(e) => pindahKolom(e, i, 'harga')} /></td>
-                  <td><input class="beli-angka" aria-label={'Harga beli ' + b.nama} inputmode="numeric" data-kolom="harga" required
+                    on:keydown={(e) => pindahKolom(e, i, 'harga')} /><small>{b.satuan}</small></td>
+                  <td data-label="Harga beli"><input class="beli-angka" aria-label={'Harga beli per ' + b.satuan + ' ' + b.nama} inputmode="numeric" data-kolom="harga" required
                     use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.harga, min: 1, ubah: nilai => b.harga = nilai }}
-                    on:keydown={(e) => pindahKolom(e, i, 'potongan')} /></td>
-                  <td><input class="beli-angka" aria-label={'Potongan ' + b.nama} inputmode="numeric" data-kolom="potongan"
+                    on:keydown={(e) => pindahKolom(e, i, 'potongan')} /><small>per {b.satuan}</small>
+                    {#if item}
+                      {@const opsi = item.satuan.find(s => s.satuan === b.satuan && Number(s.isi) === Number(b.isi))}
+                      {@const awal = opsi ? hargaAwalBeli(item, opsi) : 0}
+                      {@const selisih = opsi ? selisihHarga(item, opsi, b.harga) : null}
+                      {#if awal > 0 && b.harga !== awal}<small>Terakhir {rpBeli(awal)}</small>{/if}
+                      {#if selisih !== null}
+                        <small class="beli-peringatan" role="status">{selisih > 0 ? '+' : ''}{Math.round(selisih * 100)}% dari harga terakhir. Periksa satuan dan harga.</small>
+                      {/if}
+                    {/if}</td>
+                  <td data-label="Potongan"><input class="beli-angka" aria-label={'Potongan ' + b.nama} inputmode="numeric" data-kolom="potongan"
                     use:inputAngkaPembelian={{ jenis: 'rupiah', nilai: b.potongan, ubah: nilai => b.potongan = nilai }}
                     on:keydown={(e) => pindahKolom(e, i)} /></td>
-                  <td class="beli-angka">{rpBeli(bruto === null ? null : bruto - (b.potongan ?? 0))}</td>
+                  <td class="beli-angka" data-label="Subtotal">{rpBeli(bruto === null ? null : bruto - (b.potongan ?? 0))}</td>
                   <td><button type="button" class="beli-hapus" aria-label={'Hapus ' + b.nama} on:click={() => hapus(i)}><Trash2 size={17} aria-hidden="true" /></button></td>
                 </tr>
               {:else}
-                <tr><td colspan="6" class="beli-kosong">Scan barcode atau cari barang untuk menambah baris.</td></tr>
+                <tr><td colspan="7" class="beli-kosong">Scan barcode atau cari barang untuk menambah baris.</td></tr>
               {/each}
             </tbody>
           </table>
@@ -355,6 +398,17 @@
 <dialog class="modal beli-dialog" bind:this={konfirmasi} aria-labelledby="beli-konfirmasi">
   <h2 id="beli-konfirmasi">Konfirmasi pembelian</h2>
   <p>{referensi.supplier.find(s => s.kode === draf.supplier_id)?.nama} · {draf.no_faktur} · {draf.baris.length} baris</p>
+  <ul class="beli-tinjau" aria-label="Barang diterima">
+    {#each draf.baris as b (b.id)}
+      {@const stokTxt = teksQtyDasar(b)}
+      {@const dasar = barangAktif.get(b.product_id)?.satuan[0]?.satuan}
+      <li><span>{b.nama}</span>
+        <strong>{formatJumlahBeli(b.qty.replace('.', ','))} {b.satuan}{#if Number(b.isi) !== 1 && stokTxt && dasar} (= {formatJumlahBeli(stokTxt)} {dasar}){/if}</strong></li>
+    {/each}
+  </ul>
+  {#if ringkasStok.length}
+    <p class="beli-stok-total">Stok masuk: {ringkasStok.map(s => `${formatJumlahBeli(s.qty)} ${s.satuan}`).join(' · ')}</p>
+  {/if}
   <dl class="beli-total">
     <div><dt>Total faktur</dt><dd>{rpBeli(jumlah?.total)}</dd></div>
     <div><dt>Dibayar</dt><dd>{rpBeli(dibayar)}</dd></div>

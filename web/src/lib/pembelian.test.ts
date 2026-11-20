@@ -8,7 +8,7 @@ describe('tabBeli', () => {
     expect(tabBeli('KASIR').map(t => t.id)).toEqual(['input', 'antrean', 'riwayat', 'supplier']);
   });
 });
-import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, bacaRupiahPecahan, cariBarang, formatJumlahBeli, payloadBeli, rpBeli, totalBeli,
+import { angkaQty, bacaJumlahBeli, bacaRupiahBeli, bacaRupiahPecahan, cariBarang, formatJumlahBeli, hargaAwalBeli, hargaDasar, payloadBeli, rpBeli, selisihHarga, stokMasuk, tambahQty, teksQtyDasar, totalBeli,
   type BarangBeli, type DrafBeli } from './pembelian';
 
 const barang: BarangBeli[] = [
@@ -72,6 +72,46 @@ describe('pembelian web', () => {
       no_faktur: 'A-001', uang_muka: 50, metode: 'TRANSFER', referensi: 'DP-01',
       baris: [{ qty: '1.125', isi: '12', harga: 100, potongan: 13 }]
     });
+  });
+
+  it('harga awal memakai harga beli satuan bila ada, selain itu beli x isi', () => {
+    expect(hargaAwalBeli(barang[0], { satuan: 'BOX', isi: '12', barcode: '', beli: '33000' })).toBe(33000);
+    expect(hargaAwalBeli(barang[0], barang[0].satuan[1])).toBe(36000);
+  });
+
+  it('menghitung konversi stok tanpa error desimal dan menggabungkan per satuan dasar', () => {
+    const baris = (qty: string, isi: string, id = 1) => ({ id: 'x', product_id: id, kode: '', nama: '', satuan: 'BOX', isi, qty, harga: 100, potongan: 0 });
+    expect(teksQtyDasar(baris('2', '10'))).toBe('20');
+    expect(teksQtyDasar(baris('0.3', '0.1'))).toBe('0.03');
+    expect(teksQtyDasar(baris('1,5', '12'))).toBe('18');
+    expect(teksQtyDasar(baris('', '12'))).toBeNull();
+    const peta = new Map(barang.map(p => [p.id, p]));
+    expect(stokMasuk([baris('2', '12'), baris('5', '1'), baris('1', '1', 2)], peta))
+      .toEqual([{ satuan: 'PCS', qty: '30' }]);
+  });
+
+  it('scan ulang menambah jumlah dengan batas 999.999 dan hitung harga dasar', () => {
+    expect(tambahQty('1')).toBe('2');
+    expect(tambahQty('1.125')).toBe('2.125');
+    expect(tambahQty('999999')).toBeNull();
+    expect(hargaDasar(24000, '12')).toBe(2000);
+    expect(hargaDasar(100, '3')).toBe(33.33);
+    expect(hargaDasar(undefined, '3')).toBeNull();
+  });
+
+  it('memperingatkan harga yang menyimpang lebih dari 30% dari harga terakhir', () => {
+    const box = barang[0].satuan[1];
+    expect(selisihHarga(barang[0], box, 36000)).toBeNull();
+    expect(selisihHarga(barang[0], box, 40000)).toBeNull();
+    expect(selisihHarga(barang[0], box, 3600)).toBeCloseTo(-0.9);
+    expect(selisihHarga(barang[0], { ...box, beli: '30000' }, 60000)).toBeCloseTo(1);
+    expect(selisihHarga(barang[0], box, undefined)).toBeNull();
+  });
+
+  it('barcode menawarkan satuan dasar dan tambahan milik produk saja', () => {
+    expect(cariBarang(barang, '007').persis.map(p => p.satuan.satuan)).toEqual(['PCS']);
+    expect(cariBarang(barang, '00002').persis).toEqual([]);
+    expect(barang[0].satuan.map(s => s.satuan)).toEqual(['PCS', 'BOX']);
   });
 
   it('menolak potongan di atas bruto dan uang muka sebesar total', () => {

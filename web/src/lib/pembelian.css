@@ -63,7 +63,42 @@
 .beli-grid-barang th[scope=row] { min-width: 140px; }
 .beli-grid-barang td input { min-width: 66px; padding: 7px 6px; border-radius: 7px; }
 .beli-grid-barang td:nth-child(3), .beli-grid-barang td:nth-child(4) { min-width: 92px; }
-.beli-grid-barang th select { margin-top: 4px; padding: 5px; max-width: 150px; font-size: .8rem; }
+.beli-tabel .beli-konversi { color: inherit; margin-top: 6px; line-height: 1.4; }
+.beli-tabel .beli-konversi span { display: block; }
+.beli-tabel .beli-konversi span + span { color: var(--beli-muted); }
+.beli-tabel .beli-konversi strong { display: inline; color: var(--beli-focus); }
+.beli-grid-barang td small { text-align: right; }
+.beli-grid-barang { table-layout: fixed; min-width: 760px; }
+.beli-grid-barang :is(td, th) { vertical-align: top; }
+.beli-grid-barang td input { width: 100%; min-width: 0; min-height: 40px; }
+.beli-grid-barang :is(td, th):nth-child(2) { width: 128px; }
+.beli-grid-barang :is(td, th):nth-child(3) { width: 90px; }
+.beli-grid-barang :is(td, th):nth-child(4) { width: 140px; }
+.beli-grid-barang :is(td, th):nth-child(5) { width: 108px; }
+.beli-grid-barang :is(td, th):nth-child(6) { width: 112px; }
+.beli-grid-barang :is(td, th):nth-child(7) { width: 48px; }
+.beli-grid-barang td select { width: 100%; min-height: 40px; padding: 7px 6px; border-radius: 7px; }
+.beli-grid-barang td:nth-child(6) { padding-top: 18px; }
+.beli-grid-barang td:nth-child(7) { padding-top: 12px; }
+.beli-tabel .beli-konversi .beli-rumus { display: inline; margin-right: .3em; }
+.beli-tabel .beli-peringatan { color: var(--beli-warn); background: var(--beli-warn-bg); border-radius: 6px; padding: 3px 6px; }
+.beli-tinjau { list-style: none; margin: 10px 0; padding: 0; max-height: 40vh; overflow: auto; font-size: .88rem; }
+.beli-tinjau li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--beli-line); }
+.beli-tinjau strong { text-align: right; font-variant-numeric: tabular-nums; }
+.beli-stok-total { font-weight: 700; color: var(--beli-focus); }
+@media (max-width: 640px) {
+  .beli-grid-barang { min-width: 0; }
+  .beli-grid-barang thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .beli-grid-barang, .beli-grid-barang tbody { display: block; }
+  .beli-grid-barang tr[data-baris] { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 12px 0; border-bottom: 1px solid var(--beli-line); position: relative; }
+  .beli-grid-barang tr[data-baris] > :is(td, th) { display: block; border: 0; padding: 0; min-width: 0 !important; width: auto !important; }
+  .beli-grid-barang th[scope=row] { grid-column: 1 / -1; padding-right: 40px; }
+  .beli-grid-barang td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--beli-muted); margin-bottom: 2px; }
+  .beli-grid-barang td:last-child { position: absolute; top: 8px; right: 0; }
+  .beli-grid-barang td[data-label=Subtotal] { grid-column: 1 / -1; text-align: right; font-weight: 700; }
+  .beli-grid-barang td[data-label=Subtotal]::before { display: inline; margin-right: 8px; font-weight: 400; }
+  .beli-grid-barang td input { width: 100%; min-height: 42px; }
+  }
 .beli-angka { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .beli-baris-judul, .beli-aksi { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .beli-aksi { justify-content: flex-end; margin-top: 14px; }

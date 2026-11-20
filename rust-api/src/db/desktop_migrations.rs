@@ -289,6 +289,11 @@ FROM (
             deskripsi: "POS_SATUAN warisan: isi ID yang NULL agar tiap satuan punya ID unik untuk CRUD",
             statements: vec![raw(r"UPDATE POS_SATUAN SET ID = (SELECT NVL(MAX(ID), 0) FROM POS_SATUAN) + ROWNUM WHERE ID IS NULL")],
         },
+        Migration {
+            id: "0013_product_satuan_beli",
+            deskripsi: "Harga beli terakhir per satuan tambahan (POS_PRODUCT_SATUAN.HARGA_BELI, NULL = BELI x ISI)",
+            statements: vec![ddl("ALTER TABLE POS_PRODUCT_SATUAN ADD (HARGA_BELI NUMBER(18,2))")],
+        },
     ]
 }
 
