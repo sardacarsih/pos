@@ -696,11 +696,12 @@ class ApiClient {
 
   /// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
   Future<({List<StokItem> items, bool lagi, int? jumlah, bool kontrolStok})>
-  stokHabis({String? q, int page = 1}) async {
+  stokHabis({String? q, int page = 1, bool urutQty = false}) async {
     final j = await get(
       '/api/v1/admin/stok-habis',
       q: {
         if (q != null && q.isNotEmpty) 'q': q,
+        if (urutQty) 'urut': 'qty',
         'page': page,
         'size': 30,
         'multi_satuan': '1',

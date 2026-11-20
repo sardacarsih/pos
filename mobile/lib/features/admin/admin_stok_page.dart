@@ -27,6 +27,7 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
   bool _kontrolStok = true;
   bool _loading = false;
   bool _lagi = false;
+  bool _urutQty = true; // stok terendah (paling minus) dulu; false = abjad nama
   String? _error;
   int _page = 1;
   int _requestId = 0;
@@ -71,7 +72,7 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
     try {
       final r = await ref
           .read(apiProvider)
-          .stokHabis(q: _q.text.trim(), page: page);
+          .stokHabis(q: _q.text.trim(), page: page, urutQty: _urutQty);
       if (!mounted || requestId != _requestId) return;
       setState(() {
         _items.addAll(r.items);
@@ -121,6 +122,32 @@ class _AdminStokPageState extends ConsumerState<AdminStokPage> {
               labelText: 'Cari nama, kode, atau barcode',
               prefixIcon: Icon(Icons.search),
             ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Qty terendah'),
+                selected: _urutQty,
+                onSelected: (_) {
+                  if (_urutQty) return;
+                  _urutQty = true;
+                  _cari(reset: true);
+                },
+              ),
+              ChoiceChip(
+                label: const Text('Nama A-Z'),
+                selected: !_urutQty,
+                onSelected: (_) {
+                  if (!_urutQty) return;
+                  _urutQty = false;
+                  _cari(reset: true);
+                },
+              ),
+            ],
           ),
         ),
         if (!_kontrolStok)

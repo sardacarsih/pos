@@ -16,25 +16,29 @@ class _ApiStok extends ApiClient {
   String? galatSekali;
   final kiriman = <List<HitunganKirim>>[];
   final kunci = <String>[];
+  final urutDiminta = <bool>[];
 
   @override
   Future<({List<StokItem> items, bool lagi, int? jumlah, bool kontrolStok})>
-  stokHabis({String? q, int page = 1}) async => (
-    items: [
-      StokItem.fromJson({
-        'id': 7,
-        'kode': 'P007',
-        'barcode': 'B7',
-        'nama': 'Tepung',
-        'stok': -2,
-        'satuan': 'Kg',
-        'satuan_tambahan': tambahan,
-      }),
-    ],
-    lagi: false,
-    jumlah: 1,
-    kontrolStok: true,
-  );
+  stokHabis({String? q, int page = 1, bool urutQty = false}) async {
+    urutDiminta.add(urutQty);
+    return (
+      items: [
+        StokItem.fromJson({
+          'id': 7,
+          'kode': 'P007',
+          'barcode': 'B7',
+          'nama': 'Tepung',
+          'stok': -2,
+          'satuan': 'Kg',
+          'satuan_tambahan': tambahan,
+        }),
+      ],
+      lagi: false,
+      jumlah: 1,
+      kontrolStok: true,
+    );
+  }
 
   @override
   Future<String> opnameStok(
@@ -52,6 +56,26 @@ class _ApiStok extends ApiClient {
 }
 
 void main() {
+  testWidgets('stok habis: default urut Qty terendah, chip Nama A-Z memuat ulang', (
+    t,
+  ) async {
+    final api = _ApiStok();
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [apiProvider.overrideWithValue(api)],
+        child: const MaterialApp(home: Scaffold(body: AdminStokPage())),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(api.urutDiminta, [true]);
+    await t.tap(find.text('Nama A-Z'));
+    await t.pumpAndSettle();
+    expect(api.urutDiminta, [true, false]);
+    await t.tap(find.text('Qty terendah'));
+    await t.pumpAndSettle();
+    expect(api.urutDiminta, [true, false, true]);
+  });
+
   testWidgets(
     'opname cepat multi-satuan: total gabungan, muat ulang satuan, key stabil',
     (t) async {
