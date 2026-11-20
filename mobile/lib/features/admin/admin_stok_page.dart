@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
 import '../../core/checkout.dart' show newCheckoutKey;
+import '../../core/hitungan.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -207,6 +208,7 @@ String _fmtQty(double v) =>
 
 /// Sheet opname: controller, kunci idempotensi, dan panggilan API hidup di State sheet,
 /// jadi controller tidak di-dispose saat animasi tutup dan retry memakai kunci yang sama.
+/// Satu kolom input per satuan (dasar + tambahan Katalog); kolom kosong dilewati.
 class _OpnameSheet extends StatefulWidget {
   const _OpnameSheet({required this.item, required this.api});
   final StokItem item;
@@ -217,33 +219,109 @@ class _OpnameSheet extends StatefulWidget {
 }
 
 class _OpnameSheetState extends State<_OpnameSheet> {
-  final _qty = TextEditingController();
+  final List<KolomHitung> _kolom = [];
+  final List<TextEditingController> _ctrl = [];
+  final List<FocusNode> _fokus = [];
   final String _key = newCheckoutKey();
   bool _busy = false;
+  bool _memuatSatuan = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _isi(kolomHitungan(widget.item));
+  }
+
+  void _isi(List<KolomHitung> kolom) {
+    for (final c in _ctrl) {
+      c.dispose();
+    }
+    for (final f in _fokus) {
+      f.dispose();
+    }
+    _kolom
+      ..clear()
+      ..addAll(kolom);
+    _ctrl
+      ..clear()
+      ..addAll([
+        for (final k in _kolom)
+          TextEditingController(text: k.qty.replaceAll('.', ',')),
+      ]);
+    _fokus
+      ..clear()
+      ..addAll([for (final _ in _kolom) FocusNode()]);
+  }
+
+  List<KolomHitung> _draf() => [
+    for (var i = 0; i < _kolom.length; i++)
+      KolomHitung(
+        satuan: _kolom[i].satuan,
+        isi: _kolom[i].isi,
+        qty: _ctrl[i].text,
+      ),
+  ];
+
+  @override
   void dispose() {
-    _qty.dispose();
+    for (final c in _ctrl) {
+      c.dispose();
+    }
+    for (final f in _fokus) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  /// Faktor/satuan berubah sejak sheet dibuka: ambil ulang Katalog, pertahankan isian.
+  Future<void> _muatUlangSatuan() async {
+    if (_memuatSatuan || _busy) return;
+    setState(() {
+      _memuatSatuan = true;
+      _error = null;
+    });
+    try {
+      final r = await widget.api.stokHabis(q: widget.item.kode);
+      final cocok = r.items.where((p) => p.id == widget.item.id);
+      if (cocok.isEmpty) {
+        throw ApiException(
+          'Produk ${widget.item.nama} tidak ditemukan saat memuat ulang satuan.',
+        );
+      }
+      final lama = {
+        for (final k in _draf()) k.satuan.trim().toUpperCase(): k.qty,
+      };
+      _isi(kolomHitungan(cocok.first, qtyLama: lama));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.pesan);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Gagal memuat ulang satuan produk.');
+    } finally {
+      if (mounted) setState(() => _memuatSatuan = false);
+    }
   }
 
   Future<void> _simpan() async {
     if (_busy) return;
-    // Keyboard desimal locale Indonesia memakai koma; server menerima titik.
-    final teks = _qty.text.trim().replaceAll(',', '.');
-    final v = double.tryParse(teks);
-    if (v == null || v < 0) {
-      return setState(() => _error = 'Qty fisik tidak valid');
+    final draf = _draf();
+    final st = statusHitungan(draf);
+    if (st.galat != null) return setState(() => _error = st.galat);
+    if (st.nilai == null) {
+      return setState(
+        () => _error = 'Isi minimal satu jumlah; isi 0 untuk menyatakan stok fisik kosong.',
+      );
     }
     final p = widget.item;
+    final total = st.nilai!;
+    final beda = double.parse((total - p.stok).toStringAsFixed(4));
     final lanjut = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Koreksi stok?'),
         content: Text(
-          '${p.nama}\nStok sistem ${_fmtQty(p.stok)} → fisik ${_fmtQty(v)} '
-          '(selisih ${_fmtQty(v - p.stok)}).\n'
+          '${p.nama}\n${rincianHitungan(draf)} = stok fisik ${_fmtQty(total)} '
+          '(selisih ${_fmtQty(beda)} dari sistem ${_fmtQty(p.stok)} ${p.satuan}).\n'
           'Dokumen SO tidak dapat dibatalkan dari aplikasi.',
         ),
         actions: [
@@ -266,7 +344,7 @@ class _OpnameSheetState extends State<_OpnameSheet> {
     try {
       final no = await widget.api.opnameStok(
         p.id,
-        teks,
+        payloadHitungan(draf),
         idempotencyKey: _key,
       );
       if (mounted) Navigator.pop(context, no);
@@ -280,6 +358,7 @@ class _OpnameSheetState extends State<_OpnameSheet> {
   @override
   Widget build(BuildContext context) {
     final p = widget.item;
+    final st = statusHitungan(_draf());
     return Padding(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -295,20 +374,48 @@ class _OpnameSheetState extends State<_OpnameSheet> {
           const SizedBox(height: 4),
           Text('${p.kode} · stok sistem ${_fmtQty(p.stok)} ${p.satuan}'),
           const SizedBox(height: 12),
-          TextField(
-            controller: _qty,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,4}')),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Qty fisik',
-              errorText: _error,
+          for (var i = 0; i < _kolom.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TextField(
+                controller: _ctrl[i],
+                focusNode: _fokus[i],
+                autofocus: i == 0,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                    RegExp(r'^\d*[.,]?\d{0,4}'),
+                  ),
+                ],
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: _kolom.length == 1
+                      ? 'Qty fisik'
+                      : 'Qty ${_kolom[i].satuan}',
+                  errorText: i == 0 ? _error : null,
+                  helperText: _kolom[i].isi == 1
+                      ? null
+                      : '1 ${_kolom[i].satuan} = ${teksDesimal(_kolom[i].isi)} ${p.satuan}',
+                ),
+              ),
             ),
-            onSubmitted: (_) => _simpan(),
-          ),
-          const SizedBox(height: 12),
+          if (_error != null && _error!.contains('muat ulang satuan'))
+            OutlinedButton(
+              onPressed: _memuatSatuan || _busy ? null : _muatUlangSatuan,
+              child: Text(
+                _memuatSatuan ? 'Memuat satuan…' : 'Muat ulang satuan produk',
+              ),
+            ),
+          if (st.nilai != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Total fisik ${_fmtQty(st.nilai!)} ${p.satuan} · '
+                'selisih ${_fmtQty(double.parse((st.nilai! - p.stok).toStringAsFixed(4)))}',
+              ),
+            ),
           FilledButton(
             onPressed: _busy ? null : _simpan,
             child: Text(_busy ? 'Menyimpan…' : 'Simpan opname'),

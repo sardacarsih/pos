@@ -383,10 +383,17 @@ class StokItem {
       satuan = _s(j['satuan']),
       kategori = _s(j['kategori']),
       barcode = _s(j['barcode']),
-      stok = (j['stok'] as num?)?.toDouble() ?? 0;
+      stok = (j['stok'] as num?)?.toDouble() ?? 0,
+      satuanTambahan = [
+        for (final s in (j['satuan_tambahan'] as List? ?? const []))
+          SatuanJual.fromJson(s as Map<String, dynamic>),
+      ];
   final int id;
   final String kode, nama, satuan, kategori, barcode;
   final double stok;
+
+  /// Satuan tambahan Katalog (hanya terisi bila diminta `multi_satuan=1`); [SatuanJual.harga] tidak dipakai di sini.
+  final List<SatuanJual> satuanTambahan;
 }
 
 double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
@@ -558,7 +565,11 @@ int _bulat(Object? v) => (v as num? ?? 0).round();
 class AturanPinjaman {
   final double bunga;
   final int maksTenor, maksPinjaman; // maksPinjaman 0 = tanpa batas
-  AturanPinjaman({required this.bunga, required this.maksTenor, required this.maksPinjaman});
+  AturanPinjaman({
+    required this.bunga,
+    required this.maksTenor,
+    required this.maksPinjaman,
+  });
   factory AturanPinjaman.fromJson(Map<String, dynamic> j) => AturanPinjaman(
     bunga: (j['bunga'] as num).toDouble(),
     maksTenor: j['maks_tenor'] as int,
@@ -571,33 +582,54 @@ class PengajuanPinjaman {
   final int? antrian, verifUser, setujuUser;
   final String status, keperluan, tglAju;
   final String? noTransaksi, alasan, nik, nama;
-  PengajuanPinjaman({required this.id, required this.jumlah, required this.tenor, required this.angsuran, this.antrian,
-      required this.status, required this.keperluan, required this.tglAju, this.noTransaksi, this.alasan,
-      this.nik, this.nama, this.verifUser, this.setujuUser});
-  factory PengajuanPinjaman.fromJson(Map<String, dynamic> j) => PengajuanPinjaman(
-    id: j['id'] as int,
-    jumlah: j['jumlah'] as int,
-    tenor: j['tenor'] as int,
-    angsuran: _bulat(j['angsuran']),
-    antrian: j['antrian'] as int?,
-    status: j['status'] as String,
-    keperluan: j['keperluan'] as String,
-    tglAju: (j['tgl_aju'] as String? ?? '').split('T').first,
-    noTransaksi: j['no_transaksi'] as String?,
-    alasan: j['alasan'] as String?,
-    nik: j['nik'] as String?,
-    nama: j['nama'] as String?,
-    verifUser: j['verif_user'] as int?,
-    setujuUser: j['setuju_user'] as int?,
-  );
-  bool get berjalan => const ['DIAJUKAN', 'DIVERIFIKASI', 'DISETUJUI'].contains(status);
+  PengajuanPinjaman({
+    required this.id,
+    required this.jumlah,
+    required this.tenor,
+    required this.angsuran,
+    this.antrian,
+    required this.status,
+    required this.keperluan,
+    required this.tglAju,
+    this.noTransaksi,
+    this.alasan,
+    this.nik,
+    this.nama,
+    this.verifUser,
+    this.setujuUser,
+  });
+  factory PengajuanPinjaman.fromJson(Map<String, dynamic> j) =>
+      PengajuanPinjaman(
+        id: j['id'] as int,
+        jumlah: j['jumlah'] as int,
+        tenor: j['tenor'] as int,
+        angsuran: _bulat(j['angsuran']),
+        antrian: j['antrian'] as int?,
+        status: j['status'] as String,
+        keperluan: j['keperluan'] as String,
+        tglAju: (j['tgl_aju'] as String? ?? '').split('T').first,
+        noTransaksi: j['no_transaksi'] as String?,
+        alasan: j['alasan'] as String?,
+        nik: j['nik'] as String?,
+        nama: j['nama'] as String?,
+        verifUser: j['verif_user'] as int?,
+        setujuUser: j['setuju_user'] as int?,
+      );
+  bool get berjalan =>
+      const ['DIAJUKAN', 'DIVERIFIKASI', 'DISETUJUI'].contains(status);
 }
 
 class PinjamanAktif {
   final String noTransaksi, tanggal;
   final int pinjaman, tenor, angsuran, angsuranLewat;
-  PinjamanAktif({required this.noTransaksi, required this.tanggal, required this.pinjaman, required this.tenor,
-      required this.angsuran, required this.angsuranLewat});
+  PinjamanAktif({
+    required this.noTransaksi,
+    required this.tanggal,
+    required this.pinjaman,
+    required this.tenor,
+    required this.angsuran,
+    required this.angsuranLewat,
+  });
   factory PinjamanAktif.fromJson(Map<String, dynamic> j) => PinjamanAktif(
     noTransaksi: j['no_transaksi'] as String,
     tanggal: j['tanggal'] as String,
@@ -612,18 +644,33 @@ class PinjamanSaya {
   final AturanPinjaman aturan;
   final List<PengajuanPinjaman> pengajuan;
   final List<PinjamanAktif> aktif;
-  PinjamanSaya({required this.aturan, required this.pengajuan, required this.aktif});
+  PinjamanSaya({
+    required this.aturan,
+    required this.pengajuan,
+    required this.aktif,
+  });
   factory PinjamanSaya.fromJson(Map<String, dynamic> j) => PinjamanSaya(
     aturan: AturanPinjaman.fromJson(j['aturan'] as Map<String, dynamic>),
-    pengajuan: [for (final p in j['pengajuan'] as List) PengajuanPinjaman.fromJson(p as Map<String, dynamic>)],
-    aktif: [for (final p in j['pinjaman_aktif'] as List) PinjamanAktif.fromJson(p as Map<String, dynamic>)],
+    pengajuan: [
+      for (final p in j['pengajuan'] as List)
+        PengajuanPinjaman.fromJson(p as Map<String, dynamic>),
+    ],
+    aktif: [
+      for (final p in j['pinjaman_aktif'] as List)
+        PinjamanAktif.fromJson(p as Map<String, dynamic>),
+    ],
   );
 }
 
 class BarisAngsuran {
   final int ke, angsuran, sisa;
   final String jatuhTempo;
-  BarisAngsuran({required this.ke, required this.angsuran, required this.sisa, required this.jatuhTempo});
+  BarisAngsuran({
+    required this.ke,
+    required this.angsuran,
+    required this.sisa,
+    required this.jatuhTempo,
+  });
   factory BarisAngsuran.fromJson(Map<String, dynamic> j) => BarisAngsuran(
     ke: j['ke'] as int,
     angsuran: _bulat(j['angsuran']),
@@ -637,13 +684,22 @@ class AntrianPinjaman {
   final int periode, terpakai;
   final int? plafon, sisa;
   final List<PengajuanPinjaman> items;
-  AntrianPinjaman({required this.periode, required this.terpakai, this.plafon, this.sisa, required this.items});
+  AntrianPinjaman({
+    required this.periode,
+    required this.terpakai,
+    this.plafon,
+    this.sisa,
+    required this.items,
+  });
   factory AntrianPinjaman.fromJson(Map<String, dynamic> j) => AntrianPinjaman(
     periode: j['periode'] as int,
     terpakai: j['terpakai'] as int,
     plafon: j['plafon'] as int?,
     sisa: j['sisa'] as int?,
-    items: [for (final p in j['items'] as List) PengajuanPinjaman.fromJson(p as Map<String, dynamic>)],
+    items: [
+      for (final p in j['items'] as List)
+        PengajuanPinjaman.fromJson(p as Map<String, dynamic>),
+    ],
   );
 }
 
@@ -651,38 +707,62 @@ class BarisLaporanPinjaman {
   final String noTransaksi, tanggal;
   final String? nik, nama, unitKerja, jatuhTempoAkhir;
   final int pinjaman, tenor, angsuran, angsuranLewat, sisaPokok;
-  BarisLaporanPinjaman({required this.noTransaksi, required this.tanggal, this.nik, this.nama, this.unitKerja,
-      this.jatuhTempoAkhir, required this.pinjaman, required this.tenor, required this.angsuran,
-      required this.angsuranLewat, required this.sisaPokok});
-  factory BarisLaporanPinjaman.fromJson(Map<String, dynamic> j) => BarisLaporanPinjaman(
-    noTransaksi: j['no_transaksi'] as String,
-    tanggal: j['tanggal'] as String,
-    nik: j['nik'] as String?,
-    nama: j['nama'] as String?,
-    unitKerja: j['unit_kerja'] as String?,
-    jatuhTempoAkhir: j['jatuh_tempo_akhir'] as String?,
-    pinjaman: j['pinjaman'] as int,
-    tenor: j['tenor'] as int,
-    angsuran: _bulat(j['angsuran']),
-    angsuranLewat: j['angsuran_lewat'] as int,
-    sisaPokok: _bulat(j['sisa_pokok']),
-  );
+  BarisLaporanPinjaman({
+    required this.noTransaksi,
+    required this.tanggal,
+    this.nik,
+    this.nama,
+    this.unitKerja,
+    this.jatuhTempoAkhir,
+    required this.pinjaman,
+    required this.tenor,
+    required this.angsuran,
+    required this.angsuranLewat,
+    required this.sisaPokok,
+  });
+  factory BarisLaporanPinjaman.fromJson(Map<String, dynamic> j) =>
+      BarisLaporanPinjaman(
+        noTransaksi: j['no_transaksi'] as String,
+        tanggal: j['tanggal'] as String,
+        nik: j['nik'] as String?,
+        nama: j['nama'] as String?,
+        unitKerja: j['unit_kerja'] as String?,
+        jatuhTempoAkhir: j['jatuh_tempo_akhir'] as String?,
+        pinjaman: j['pinjaman'] as int,
+        tenor: j['tenor'] as int,
+        angsuran: _bulat(j['angsuran']),
+        angsuranLewat: j['angsuran_lewat'] as int,
+        sisaPokok: _bulat(j['sisa_pokok']),
+      );
 }
 
 class LaporanPinjaman {
   final int jumlah, totalPinjaman, totalSisaPokok;
   final List<BarisLaporanPinjaman> items;
-  LaporanPinjaman({required this.jumlah, required this.totalPinjaman, required this.totalSisaPokok, required this.items});
+  LaporanPinjaman({
+    required this.jumlah,
+    required this.totalPinjaman,
+    required this.totalSisaPokok,
+    required this.items,
+  });
   factory LaporanPinjaman.fromJson(Map<String, dynamic> j) => LaporanPinjaman(
     jumlah: j['jumlah'] as int,
     totalPinjaman: j['total_pinjaman'] as int,
     totalSisaPokok: _bulat(j['total_sisa_pokok']),
-    items: [for (final b in j['items'] as List) BarisLaporanPinjaman.fromJson(b as Map<String, dynamic>)],
+    items: [
+      for (final b in j['items'] as List)
+        BarisLaporanPinjaman.fromJson(b as Map<String, dynamic>),
+    ],
   );
 }
 
 /// Aksi pengurus yang ditawarkan (port `aksiTersedia` web); server tetap memeriksa ulang.
-List<String> aksiPinjaman(PengajuanPinjaman p, List<String> hak, int userId, bool kepalaAntrian) {
+List<String> aksiPinjaman(
+  PengajuanPinjaman p,
+  List<String> hak,
+  int userId,
+  bool kepalaAntrian,
+) {
   final pegang = p.verifUser == userId || p.setujuUser == userId;
   bool ada(String t) => hak.contains(t);
   switch (p.status) {
@@ -691,7 +771,10 @@ List<String> aksiPinjaman(PengajuanPinjaman p, List<String> hak, int userId, boo
     case 'DIVERIFIKASI':
       return ada('SETUJU') ? [if (!pegang) 'setujui', 'tolak'] : [];
     case 'DISETUJUI':
-      return [if (ada('CAIR') && !pegang && kepalaAntrian) 'cairkan', if (ada('SETUJU')) 'tolak'];
+      return [
+        if (ada('CAIR') && !pegang && kepalaAntrian) 'cairkan',
+        if (ada('SETUJU')) 'tolak',
+      ];
     default:
       return [];
   }

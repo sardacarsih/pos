@@ -196,13 +196,16 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     }
     h.push(cek("jumlah stok habis", || Ok(katalog::jumlah_stok_habis(conn, awal, hari)?.to_string())));
     h.push(cek("daftar stok habis (cari + paginasi)", || {
-        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5)?;
-        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5)?;
-        Ok(format!("{} baris, total {:?}, dengan filter {} baris", a.items.len(), jumlah, b.items.len()))
+        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false)?;
+        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5, false)?;
+        let (m, _) = katalog::stok_habis(conn, Some("a"), None, awal, hari, 1, 5, true)?;
+        let ids: Vec<i64> = m.items.iter().map(|p| p.id).collect();
+        let satuan = katalog::satuan_tambahan(conn, &ids)?;
+        Ok(format!("{} baris, total {:?}, dengan filter {} baris, multi_satuan {} produk bersatuan", a.items.len(), jumlah, b.items.len(), satuan.len()))
     }));
     h.push(cek("harga jual <= HPP (hitung + daftar)", || {
         let n = katalog::jumlah_harga_rendah(conn)?;
-        let d = katalog::daftar_produk_admin(conn, None, None, None, true, 1, 5)?;
+        let d = katalog::daftar_produk_admin(conn, None, None, None, true, 1, 5, false)?;
         // Daftar tidak boleh memuat produk untung (BELI > 0 dan harga jual > BELI); yang tampil hanya rugi/impas atau tanpa HPP.
         if let Some(p) = d.items.iter().find(|p| p.beli > 0 && p.harga > p.beli) {
             return Err(AppError::Internal(format!("produk untung ikut tampil: {} (jual {} > beli {})", p.kode, p.harga, p.beli)));
@@ -224,7 +227,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
             None => Ok("tidak ada produk".into()),
         }
     }));
-    h.push(cek("daftar produk admin", || Ok(format!("{} baris", katalog::daftar_produk_admin(conn, None, None, None, false, 1, 5)?.items.len()))));
+    h.push(cek("daftar produk admin", || Ok(format!("{} baris", katalog::daftar_produk_admin(conn, None, None, None, false, 1, 5, false)?.items.len()))));
     h.push(cek("stok sistem (stok_map) satu produk", || {
         let kode: Option<String> = conn
             .query_row_as::<(String,)>("SELECT KODE_ITEM FROM POS_PRODUCT WHERE AKTIF = 'Y' AND ROWNUM = 1", &[])

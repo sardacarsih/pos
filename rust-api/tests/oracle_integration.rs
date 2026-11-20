@@ -194,35 +194,36 @@ fn stok_habis_dan_opname_idempoten() {
     c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
     c.commit().unwrap();
 
-    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10).unwrap();
+    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, false).unwrap();
     assert_eq!((h.items.len(), jumlah), (2, Some(2)));
-    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10).unwrap();
+    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10, false).unwrap();
     assert_eq!(h.items.len(), 1);
 
     let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
     let uid = user::create_user(&c, &nama, "Uji Opname", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
     let key = uuid::Uuid::new_v4().to_string();
     let d = |s: &str| s.parse::<Decimal>().unwrap();
+    let bs = |id: i64, q: &str| opname::BarisReq { produk_id: id, qty_fisik: Some(d(q)), hitungan: None };
 
-    let r = opname::simpan(&c, uid, &key, 1, d("10"), hari).unwrap();
+    let r = opname::simpan(&c, uid, &key, &bs(1, "10"), hari).unwrap();
     assert_eq!((r.selisih, r.ulang), (d("10"), false));
     let stok = katalog::stok_map(&c, &["IT-A".to_string()], awal, hari).unwrap();
     assert_eq!(stok["IT-A"], d("10"));
     // Retry dengan kunci sama: hasil sama, tidak ada dokumen SO baru.
-    let ulang = opname::simpan(&c, uid, &key, 1, d("10"), hari).unwrap();
+    let ulang = opname::simpan(&c, uid, &key, &bs(1, "10"), hari).unwrap();
     assert_eq!((ulang.nomor_so.as_str(), ulang.ulang), (r.nomor_so.as_str(), true));
     let n: i64 = c.query_row_as("SELECT COUNT(*) FROM POS_STOCKOPNAME", &[]).unwrap();
     assert_eq!(n, 1);
     // Kunci sama, qty berbeda -> konflik.
-    assert!(matches!(opname::simpan(&c, uid, &key, 1, d("11"), hari), Err(AppError::Conflict(_))));
+    assert!(matches!(opname::simpan(&c, uid, &key, &bs(1, "11"), hari), Err(AppError::Conflict(_))));
     // Qty sama dengan stok sistem dan tambah stok tanpa harga beli ditolak.
     let k2 = uuid::Uuid::new_v4().to_string();
-    assert!(matches!(opname::simpan(&c, uid, &k2, 1, d("10"), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k2, &bs(1, "10"), hari), Err(AppError::Validation(_))));
     let k3 = uuid::Uuid::new_v4().to_string();
-    assert!(matches!(opname::simpan(&c, uid, &k3, 2, d("3"), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k3, &bs(2, "3"), hari), Err(AppError::Validation(_))));
     // Nomor SO berikutnya naik.
     let k4 = uuid::Uuid::new_v4().to_string();
-    let r2 = opname::simpan(&c, uid, &k4, 1, d("4"), hari).unwrap();
+    let r2 = opname::simpan(&c, uid, &k4, &bs(1, "4"), hari).unwrap();
     assert_ne!(r2.nomor_so, r.nomor_so);
     assert_eq!(r2.selisih, d("-6"));
 
@@ -352,14 +353,14 @@ fn harga_rendah_menyaring_dan_mengurutkan() {
     c.execute("UPDATE POS_PRODUCT SET BELI = NULL WHERE KODE_ITEM = 'H-NULL'", &[]).unwrap();
     c.commit().unwrap();
 
-    let h = katalog::daftar_produk_admin(&c, None, None, None, true, 1, 10).unwrap();
+    let h = katalog::daftar_produk_admin(&c, None, None, None, true, 1, 10, false).unwrap();
     let kode: Vec<&str> = h.items.iter().map(|p| p.kode.as_str()).collect();
     // Rugi dulu (margin terkecil), lalu produk tanpa HPP; untung dan nonaktif tidak ada.
     assert_eq!(kode, ["H-RUGI", "H-IMPAS", "H-BELI0", "H-NULL"]);
     let hr = katalog::jumlah_harga_rendah(&c).unwrap();
     assert_eq!((hr.rugi, hr.tanpa_hpp, hr.total()), (2, 2, 4));
     // Tanpa filter, semua produk tetap muncul (jalur lama tidak berubah).
-    let semua = katalog::daftar_produk_admin(&c, None, None, None, false, 1, 10).unwrap();
+    let semua = katalog::daftar_produk_admin(&c, None, None, None, false, 1, 10, false).unwrap();
     assert_eq!(semua.items.len(), 6);
 }
 
@@ -394,7 +395,7 @@ fn dokumen_so_multi_barang_riwayat_dan_idempotensi() {
     let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
     let uid = user::create_user(&c, &nama, "Uji SO", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
     let d = |s: &str| s.parse::<Decimal>().unwrap();
-    let br = |id: i64, q: &str| BarisReq { produk_id: id, qty_fisik: d(q) };
+    let br = |id: i64, q: &str| BarisReq { produk_id: id, qty_fisik: Some(d(q)), hitungan: None };
     let key = uuid::Uuid::new_v4().to_string();
 
     // D-A: sistem 5 -> fisik 8 (+3); D-B: sistem 0 -> fisik 4 (+4). Satu nomor SO untuk dua baris.
@@ -443,6 +444,166 @@ fn dokumen_so_multi_barang_riwayat_dan_idempotensi() {
     let det = opname::detail_so(&c, &r.nomor_so).unwrap();
     assert_eq!(det.items.len(), 2);
     assert!(matches!(opname::detail_so(&c, "SO-00-000000"), Err(AppError::NotFound(_))));
+
+    c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&uid]).unwrap();
+    c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();
+    c.commit().unwrap();
+}
+
+#[test]
+fn opname_multi_satuan_gabungan_presisi_dan_retry() {
+    use pos_api::{db::{faktur, katalog, opname::{self, BarisReq, HitunganReq}}, error::AppError};
+    use rust_decimal::Decimal;
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    db::migrate(&c).unwrap();
+    let (hari, _) = faktur::sekarang(&c).unwrap();
+    let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).unwrap();
+    for (id, kode, beli) in [(1, "M-A", 1000), (2, "M-B", 500), (3, "M-C", 1000)] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, BARCODE, PRODUCTNAME, SATUAN, PRICE, BELI, KATEGORI_ID, AKTIF) VALUES (:i, :k, :k, :k, 'PCS', 2000, :b, 1, 'Y')",
+            &[("i", &id), ("k", &kode), ("b", &beli)],
+        )
+        .unwrap();
+    }
+    for (pid, satuan, isi, harga, barcode) in [
+        (1, "DUS", "12", 25000, "M-A-DUS"),
+        (1, "PACK", "2.5", 3000, "M-A-PACK"),
+        (1, "SLOP", "2.5", 3000, "M-A-SLOP"),
+        (3, "RENCENG", "10", 12000, "M-C-RCG"),
+    ] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT_SATUAN (PRODUCT_ID, SATUAN, ISI, HARGA, BARCODE) VALUES (:p, :s, :i, :h, :b)",
+            &[("p", &pid), ("s", &satuan), ("i", &isi), ("h", &harga), ("b", &barcode)],
+        )
+        .unwrap();
+    }
+    c.execute_named(
+        "INSERT INTO POS_STOCK (KODE_BARANG, TANGGAL, QUANTITY, HPP) VALUES ('M-A', TO_DATE(:d,'YYYY-MM-DD'), 5, 1000)",
+        &[("d", &awal.format("%Y-%m-%d").to_string())],
+    )
+    .unwrap();
+    c.commit().unwrap();
+
+    let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+    let uid = user::create_user(&c, &nama, "Uji Multi", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
+    let d = |s: &str| s.parse::<Decimal>().unwrap();
+    let k = || uuid::Uuid::new_v4().to_string();
+    let hm = |s: &str, q: &str, i: &str| HitunganReq { satuan: s.into(), qty: q.into(), isi: i.into() };
+    let bm = |id: i64, h: Vec<HitunganReq>| BarisReq { produk_id: id, qty_fisik: None, hitungan: Some(h) };
+    let bs = |id: i64, q: &str| BarisReq { produk_id: id, qty_fisik: Some(d(q)), hitungan: None };
+    let jumlah_baris = |c: &oracle::Connection| -> i64 {
+        c.query_row_as("SELECT COUNT(*) FROM POS_STOCKOPNAME", &[]).unwrap()
+    };
+
+    // Pencarian barcode tambahan sebelum paginasi (opt-in) + batch satuan per halaman.
+    let h = katalog::daftar_produk_admin(&c, Some("M-A-DUS"), None, Some("Y"), false, 1, 10, true).unwrap();
+    assert_eq!(h.items.len(), 1);
+    assert_eq!(h.items[0].kode, "M-A");
+    assert!(katalog::daftar_produk_admin(&c, Some("M-A-DUS"), None, Some("Y"), false, 1, 10, false).unwrap().items.is_empty());
+    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, true).unwrap();
+    assert_eq!(h.items.len(), 1);
+    assert_eq!(h.items[0].kode, "M-C");
+    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, false).unwrap();
+    assert!(h.items.is_empty());
+    let satuan = katalog::satuan_tambahan(&c, &[1, 2, 3]).unwrap();
+    assert_eq!(satuan[&1].len(), 3);
+    assert!(satuan.get(&2).is_none());
+    let dus = satuan[&1].iter().find(|s| s.satuan == "DUS").unwrap();
+    assert_eq!((dus.isi, dus.barcode.as_str()), (d("12"), "M-A-DUS"));
+
+    // Hitungan gabungan satu barang: 2 dus x 12 + 3 pcs = 27 pcs (sistem 5 -> selisih +22).
+    let key = k();
+    let r = opname::simpan(&c, uid, &key, &bm(1, vec![hm("DUS", "2", "12"), hm("PCS", "3", "1")]), hari).unwrap();
+    assert_eq!((r.qty_fisik, r.jumlah_sistem, r.selisih), (d("27"), d("5"), d("22")));
+    assert_eq!(katalog::stok_map(&c, &["M-A".into()], awal, hari).unwrap()["M-A"], d("27"));
+    let fisik: String = c.query_row_as_named(
+        "SELECT TO_CHAR(JUMLAHFISIK) FROM POS_STOCKOPNAME WHERE NOMOR_SO = :n", &[("n", &r.nomor_so)],
+    ).unwrap();
+    assert_eq!(d(&fisik), d("27")); // total tersimpan dalam satuan dasar
+
+    // Nol eksplisit lewat dokumen (selisih 0 ikut dicatat); produk tanpa satuan tambahan tetap satu kolom.
+    let r0 = opname::simpan_dokumen(&c, uid, &k(), &[bm(2, vec![hm("PCS", "0", "1")])], hari).unwrap();
+    assert_eq!((r0.items[0].qty_fisik, r0.items[0].selisih), (d("0"), d("0")));
+
+    // Faktor pecahan: 0.5 PACK x 2.5 + 1 PCS = 2.25.
+    let rp = opname::simpan(&c, uid, &k(), &bm(1, vec![hm("PACK", "0.5", "2.5"), hm("PCS", "1", "1")]), hari).unwrap();
+    assert_eq!(rp.qty_fisik, d("2.25"));
+    assert_eq!(rp.selisih, d("-24.75"));
+
+    // Batas presisi & nilai: konversi > 4 desimal, qty > 4 desimal, total > 1 miliar, negatif, satuan ganda.
+    // Pesan harus menyebut konversi/4 desimal (bukan sekadar "qty tidak valid" dari guard total).
+    let e = opname::simpan(&c, uid, &k(), &bm(1, vec![hm("PACK", "0.0001", "2.5")]), hari).unwrap_err();
+    assert!(matches!(&e, AppError::Validation(m) if m.contains("4 desimal")), "{e:?}");
+    // Dua kolom masing-masing 5 desimal tapi jumlahnya 4 desimal (0.00025+0.00025=0.0005):
+    // hanya guard presisi per kolom yang bisa menolak ini.
+    let e = opname::simpan(&c, uid, &k(), &bm(1, vec![hm("PACK", "0.0001", "2.5"), hm("SLOP", "0.0001", "2.5")]), hari).unwrap_err();
+    assert!(matches!(&e, AppError::Validation(m) if m.contains("4 desimal")), "{e:?}");
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![hm("PCS", "1.00001", "1")]), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![hm("DUS", "100000000", "12")]), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![hm("PCS", "-1", "1")]), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![hm("DUS", "1", "12"), hm("dus", "2", "12")]), hari), Err(AppError::Validation(_))));
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![]), hari), Err(AppError::Validation(_))));
+    let ganda = BarisReq { produk_id: 1, qty_fisik: Some(d("5")), hitungan: Some(vec![hm("PCS", "5", "1")]) };
+    assert!(matches!(opname::simpan(&c, uid, &k(), &ganda, hari), Err(AppError::Validation(_))));
+
+    // Satuan yang sudah dihapus ditolak.
+    c.execute("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = 3 AND SATUAN = 'RENCENG'", &[]).unwrap();
+    c.commit().unwrap();
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(3, vec![hm("RENCENG", "1", "10")]), hari), Err(AppError::Validation(_))));
+
+    // Faktor berubah sejak editor dibuka ditolak; faktor terbaru diterima.
+    c.execute("UPDATE POS_PRODUCT_SATUAN SET ISI = 24 WHERE PRODUCT_ID = 1 AND SATUAN = 'DUS'", &[]).unwrap();
+    c.commit().unwrap();
+    assert!(matches!(opname::simpan(&c, uid, &k(), &bm(1, vec![hm("DUS", "1", "12")]), hari), Err(AppError::Validation(_))));
+    let rb = opname::simpan(&c, uid, &k(), &bm(1, vec![hm("DUS", "1", "24"), hm("PCS", "0", "1")]), hari).unwrap();
+    assert_eq!(rb.qty_fisik, d("24"));
+
+    // Rollback seluruh dokumen bila satu baris gagal (M-C tanpa satuan valid), termasuk klaim idempotensi.
+    let sebelum = jumlah_baris(&c);
+    let key_dok = k();
+    assert!(opname::simpan_dokumen(
+        &c, uid, &key_dok,
+        &[bm(1, vec![hm("DUS", "1", "24")]), bm(3, vec![hm("RENCENG", "1", "10")])],
+        hari,
+    ).is_err());
+    assert_eq!(jumlah_baris(&c), sebelum);
+    // Kunci yang sama dengan payload sudah diperbaiki dipakai sebagai permintaan baru (klaim ikut ter-rollback).
+    let rd = opname::simpan_dokumen(
+        &c, uid, &key_dok,
+        &[bm(1, vec![hm("DUS", "1", "24")]), bm(2, vec![hm("PCS", "2", "1")])],
+        hari,
+    ).unwrap();
+    assert_eq!(rd.items.len(), 2);
+    assert_eq!(jumlah_baris(&c), sebelum + 2);
+
+    // Retry kunci+payload sama setelah Katalog berubah lagi: dokumen lama dikembalikan, tanpa baris baru.
+    c.execute("UPDATE POS_PRODUCT_SATUAN SET ISI = 48 WHERE PRODUCT_ID = 1 AND SATUAN = 'DUS'", &[]).unwrap();
+    c.commit().unwrap();
+    let ulang = opname::simpan_dokumen(
+        &c, uid, &key_dok,
+        &[bm(2, vec![hm("PCS", "2.0", "1.00")]), bm(1, vec![hm("DUS", "1.00", "24")])],
+        hari,
+    ).unwrap();
+    assert_eq!((ulang.nomor_so.as_str(), ulang.ulang), (rd.nomor_so.as_str(), true));
+    assert_eq!(jumlah_baris(&c), sebelum + 2);
+    // Payload berbeda dengan kunci sama tetap konflik.
+    assert!(matches!(
+        opname::simpan_dokumen(&c, uid, &key_dok, &[bm(1, vec![hm("DUS", "2", "24")])], hari),
+        Err(AppError::Conflict(_))
+    ));
+
+    // Payload lama qty_fisik tetap diterima, termasuk campuran dalam satu dokumen.
+    let rl = opname::simpan_dokumen(&c, uid, &k(), &[bs(2, "7"), bm(3, vec![hm("PCS", "4", "1")])], hari).unwrap();
+    let b2 = rl.items.iter().find(|b| b.kode == "M-B").unwrap();
+    assert_eq!((b2.qty_fisik, b2.selisih), (d("7"), d("5"))); // sistem M-B 2 dari dokumen sebelumnya
+    let det = opname::detail_so(&c, &rl.nomor_so).unwrap();
+    assert_eq!(det.items.len(), 2);
 
     c.execute("DELETE FROM MOB_IDEMPOTENCY WHERE USER_ID = :1", &[&uid]).unwrap();
     c.execute("DELETE FROM MOB_USER WHERE USER_ID = :1", &[&uid]).unwrap();

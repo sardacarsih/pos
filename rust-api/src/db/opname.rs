@@ -28,11 +28,173 @@ pub struct HasilOpname {
     pub ulang: bool,
 }
 
+/// Satu kolom hitungan: angka dan faktor dikirim sebagai string desimal oleh klien.
+/// `satuan` = nama satuan dasar (faktor 1) atau satuan tambahan di Katalog.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HitunganReq {
+    pub satuan: String,
+    pub qty: String,
+    pub isi: String,
+}
+
 /// Satu baris hitungan fisik dalam permintaan dokumen SO.
+/// Tepat satu dari `qty_fisik` (klien lama, satuan dasar) atau `hitungan` (multi-satuan).
 #[derive(Debug, Clone, Deserialize)]
 pub struct BarisReq {
     pub produk_id: i64,
-    pub qty_fisik: Decimal,
+    #[serde(default)]
+    pub qty_fisik: Option<Decimal>,
+    #[serde(default)]
+    pub hitungan: Option<Vec<HitunganReq>>,
+}
+
+/// Hitungan yang sudah diparsing dan divalidasi bentuknya (faktor belum dicocokkan ke Katalog).
+#[derive(Debug, Clone)]
+pub struct HitunganParsed {
+    pub satuan: String,
+    pub qty: Decimal,
+    pub isi: Decimal,
+}
+
+#[derive(Debug, Clone)]
+enum Fisik {
+    Langsung(Decimal),
+    Hitungan(Vec<HitunganParsed>),
+}
+
+fn parse_desimal(teks: &str, label: &str) -> AppResult<Decimal> {
+    teks.trim()
+        .parse()
+        .map_err(|_| AppError::validation(format!("{label} tidak valid")))
+}
+
+fn parse_hitungan(h: &[HitunganReq]) -> AppResult<Vec<HitunganParsed>> {
+    if h.is_empty() {
+        return Err(AppError::validation(
+            "Hitungan masih kosong; isi 0 untuk menyatakan stok fisik kosong",
+        ));
+    }
+    let mut ada = HashSet::new();
+    let mut out = Vec::with_capacity(h.len());
+    for e in h {
+        let satuan = e.satuan.trim().to_string();
+        if satuan.is_empty() {
+            return Err(AppError::validation("Nama satuan pada hitungan kosong"));
+        }
+        if !ada.insert(satuan.to_uppercase()) {
+            return Err(AppError::validation(format!(
+                "Satuan \"{satuan}\" dihitung lebih dari satu kali"
+            )));
+        }
+        let qty = parse_desimal(&e.qty, "Jumlah hitungan")?;
+        validasi_qty(qty)?;
+        let isi = parse_desimal(&e.isi, "Faktor konversi")?;
+        if isi <= Decimal::ZERO {
+            return Err(AppError::validation("Faktor konversi harus lebih dari 0"));
+        }
+        out.push(HitunganParsed { satuan, qty, isi });
+    }
+    Ok(out)
+}
+
+/// Bentuk payload valid: tepat satu dari qty_fisik / hitungan, angka sudah diparsing.
+fn baca_fisik(b: &BarisReq) -> AppResult<Fisik> {
+    match (&b.qty_fisik, &b.hitungan) {
+        (Some(q), None) => {
+            validasi_qty(*q)?;
+            Ok(Fisik::Langsung(*q))
+        }
+        (None, Some(h)) => Ok(Fisik::Hitungan(parse_hitungan(h)?)),
+        _ => Err(AppError::validation(
+            "Isi tepat satu dari qty_fisik atau hitungan per barang",
+        )),
+    }
+}
+
+/// Sidik fisik untuk hash idempotensi: berbasis payload (bukan hasil konversi),
+/// sehingga retry dengan kunci+payload sama tetap cocok meski Katalog kemudian berubah.
+fn sidik_fisik(f: &Fisik) -> String {
+    match f {
+        Fisik::Langsung(q) => q.normalize().to_string(),
+        Fisik::Hitungan(v) => {
+            let mut e: Vec<String> = v
+                .iter()
+                .map(|h| {
+                    format!(
+                        "{}|{}|{}",
+                        h.satuan.to_uppercase(),
+                        h.qty.normalize(),
+                        h.isi.normalize()
+                    )
+                })
+                .collect();
+            e.sort();
+            format!("[{}]", e.join(";"))
+        }
+    }
+}
+
+/// Total fisik dalam satuan dasar. Faktor dibaca dari Katalog; faktor yang dikirim klien
+/// harus sama dengan faktor saat ini (editor dibuka dengan data lama -> tolak, minta muat ulang).
+fn total_hitungan(
+    conn: &Connection,
+    produk_id: i64,
+    dasar: &str,
+    nama: &str,
+    hitungan: &[HitunganParsed],
+) -> AppResult<Decimal> {
+    let mut total = Decimal::ZERO;
+    for h in hitungan {
+        let faktor = if h.satuan.eq_ignore_ascii_case(dasar.trim()) {
+            Decimal::ONE
+        } else {
+            katalog::satuan_jual(conn, produk_id, &h.satuan)?
+                .ok_or_else(|| {
+                    AppError::validation(format!(
+                        "Satuan \"{}\" {} sudah dihapus; muat ulang satuan produk ini",
+                        h.satuan, nama
+                    ))
+                })?
+                .isi
+        };
+        if h.isi.normalize() != faktor.normalize() {
+            return Err(AppError::validation(format!(
+                "Faktor konversi {} \"{}\" berubah ({} menjadi {}); muat ulang satuan produk ini sebelum meninjau",
+                nama, h.satuan, h.isi.normalize(), faktor.normalize()
+            )));
+        }
+        let konversi = hasil_konversi(h.qty, faktor).map_err(|_| {
+            AppError::validation(format!(
+                "Hasil konversi {} {} perlu lebih dari 4 desimal",
+                nama, h.satuan
+            ))
+        })?;
+        total += konversi;
+    }
+    validasi_qty(total)?;
+    Ok(total)
+}
+
+/// qty x faktor dalam satuan dasar; maksimal 4 desimal setelah nol trailing dibuang.
+fn hasil_konversi(qty: Decimal, faktor: Decimal) -> AppResult<Decimal> {
+    let k = (qty * faktor).normalize();
+    if k.scale() > 4 {
+        return Err(AppError::validation("Hasil konversi perlu lebih dari 4 desimal"));
+    }
+    Ok(k)
+}
+
+fn resolve_fisik(
+    conn: &Connection,
+    produk_id: i64,
+    dasar: &str,
+    nama: &str,
+    f: &Fisik,
+) -> AppResult<Decimal> {
+    match f {
+        Fisik::Langsung(q) => Ok(*q),
+        Fisik::Hitungan(v) => total_hitungan(conn, produk_id, dasar, nama, v),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -96,7 +258,7 @@ pub fn validasi_dokumen(items: &[BarisReq]) -> AppResult<()> {
     }
     let mut ada = HashSet::new();
     for i in items {
-        validasi_qty(i.qty_fisik)?;
+        baca_fisik(i)?;
         if !ada.insert(i.produk_id) {
             return Err(AppError::validation("Ada barang yang muncul lebih dari satu kali"));
         }
@@ -109,13 +271,17 @@ fn hex(d: impl AsRef<[u8]>) -> String {
 }
 
 /// Sidik payload: kunci idempotensi yang dipakai ulang dengan produk/qty lain ditolak.
-fn hash_payload(produk_id: i64, qty: Decimal) -> String {
-    hex(Sha256::digest(format!("{produk_id}|{}", qty.normalize()).as_bytes()))
+fn hash_payload(produk_id: i64, sidik: &str) -> String {
+    hex(Sha256::digest(format!("{produk_id}|{sidik}").as_bytes()))
 }
 
 /// Sidik dokumen: urutan baris tidak berpengaruh.
-fn hash_dokumen(items: &[BarisReq]) -> String {
-    let mut v: Vec<(i64, Decimal)> = items.iter().map(|i| (i.produk_id, i.qty_fisik.normalize())).collect();
+fn hash_dokumen(items: &[BarisReq], fisik: &[Fisik]) -> String {
+    let mut v: Vec<(i64, String)> = items
+        .iter()
+        .zip(fisik)
+        .map(|(i, f)| (i.produk_id, sidik_fisik(f)))
+        .collect();
     v.sort_by_key(|(id, _)| *id);
     let s: Vec<String> = v.iter().map(|(id, q)| format!("{id}={q}")).collect();
     hex(Sha256::digest(s.join(";").as_bytes()))
@@ -259,12 +425,11 @@ pub fn simpan(
     conn: &Connection,
     user_id: i64,
     idempotency_key: &str,
-    produk_id: i64,
-    qty_fisik: Decimal,
+    baris: &BarisReq,
     hari: NaiveDate,
 ) -> AppResult<HasilOpname> {
-    validasi_qty(qty_fisik)?;
-    let r = simpan_inner(conn, user_id, idempotency_key, produk_id, qty_fisik, hari);
+    let fisik = baca_fisik(baris)?;
+    let r = simpan_inner(conn, user_id, idempotency_key, baris.produk_id, &fisik, hari);
     if r.is_err() {
         let _ = conn.rollback();
     }
@@ -276,16 +441,16 @@ fn simpan_inner(
     user_id: i64,
     key: &str,
     produk_id: i64,
-    qty_fisik: Decimal,
+    fisik: &Fisik,
     hari: NaiveDate,
 ) -> AppResult<HasilOpname> {
-    let hash = hash_payload(produk_id, qty_fisik);
+    let hash = hash_payload(produk_id, &sidik_fisik(fisik));
     if let Some(nomor) = klaim_kunci(conn, user_id, OPERASI, key, &hash)? {
         return baca_hasil(conn, &nomor);
     }
     // Kunci baris produk: opname lain atas produk ini menunggu sampai commit/rollback kita.
     let sql = format!(
-        "SELECT KODE_ITEM, {}, AKTIF, PRODUCTNAME FROM POS_PRODUCT WHERE PRODUCTID = :id FOR UPDATE",
+        "SELECT KODE_ITEM, {}, AKTIF, PRODUCTNAME, SATUAN FROM POS_PRODUCT WHERE PRODUCTID = :id FOR UPDATE",
         tm("NVL(BELI, 0)")
     );
     let p = opt(conn.query_row_named(&sql, &[("id", &produk_id)]))?
@@ -299,6 +464,8 @@ fn simpan_inner(
         return Err(AppError::validation("Produk tidak aktif"));
     }
     let nama: String = p.get::<_, Option<String>>(3)?.unwrap_or_else(|| kode.clone());
+    let dasar: String = p.get::<_, Option<String>>(4)?.unwrap_or_default();
+    let qty_fisik = resolve_fisik(conn, produk_id, &dasar, &nama, fisik)?;
     let awal = NaiveDate::from_ymd_opt(hari.year(), 1, 1).expect("1 Jan");
     let sistem = katalog::stok_map(conn, std::slice::from_ref(&kode), awal, hari)?
         .get(&kode)
@@ -337,7 +504,8 @@ pub fn simpan_dokumen(
     hari: NaiveDate,
 ) -> AppResult<DokumenSo> {
     validasi_dokumen(items)?;
-    let r = dokumen_inner(conn, user_id, key, items, hari);
+    let fisik: Vec<Fisik> = items.iter().map(baca_fisik).collect::<AppResult<_>>()?;
+    let r = dokumen_inner(conn, user_id, key, items, &fisik, hari);
     if r.is_err() {
         let _ = conn.rollback();
     }
@@ -349,9 +517,10 @@ fn dokumen_inner(
     user_id: i64,
     key: &str,
     items: &[BarisReq],
+    fisik: &[Fisik],
     hari: NaiveDate,
 ) -> AppResult<DokumenSo> {
-    if let Some(nomor) = klaim_kunci(conn, user_id, OPERASI_DOK, key, &hash_dokumen(items))? {
+    if let Some(nomor) = klaim_kunci(conn, user_id, OPERASI_DOK, key, &hash_dokumen(items, fisik))? {
         let mut d = detail_so(conn, &nomor)?;
         d.ulang = true;
         return Ok(d);
@@ -368,7 +537,7 @@ fn dokumen_inner(
         })
         .collect();
     let sql = format!(
-        "SELECT PRODUCTID, KODE_ITEM, NVL(PRODUCTNAME, KODE_ITEM), {}, AKTIF FROM POS_PRODUCT \
+        "SELECT PRODUCTID, KODE_ITEM, NVL(PRODUCTNAME, KODE_ITEM), {}, AKTIF, SATUAN FROM POS_PRODUCT \
          WHERE PRODUCTID IN ({}) ORDER BY PRODUCTID FOR UPDATE",
         tm("NVL(BELI, 0)"),
         names.join(",")
@@ -377,6 +546,7 @@ fn dokumen_inner(
         kode: String,
         nama: String,
         hpp: Decimal,
+        dasar: String,
     }
     let mut prod = std::collections::HashMap::new();
     b.with(|p| -> AppResult<()> {
@@ -395,6 +565,7 @@ fn dokumen_inner(
                     kode: r.get(1)?,
                     nama,
                     hpp: dec(&r.get::<_, String>(3)?)?,
+                    dasar: r.get::<_, Option<String>>(5)?.unwrap_or_default(),
                 },
             );
         }
@@ -407,14 +578,15 @@ fn dokumen_inner(
     let kodes: Vec<String> = prod.values().map(|p| p.kode.clone()).collect();
     let stok = katalog::stok_map(conn, &kodes, awal, hari)?;
     let mut baris = Vec::with_capacity(items.len());
-    for i in items {
+    for (i, f) in items.iter().zip(fisik) {
         let p = &prod[&i.produk_id];
+        let qty_fisik = resolve_fisik(conn, i.produk_id, &p.dasar, &p.nama, f)?;
         let sistem = stok.get(&p.kode).copied().unwrap_or_default();
-        let selisih = i.qty_fisik - sistem;
+        let selisih = qty_fisik - sistem;
         if selisih > Decimal::ZERO && p.hpp.is_zero() {
             return Err(harga_nol_ditolak(&p.nama));
         }
-        baris.push((p, sistem, i.qty_fisik, selisih));
+        baris.push((p, sistem, qty_fisik, selisih));
     }
     baris.sort_by(|a, b| a.0.nama.cmp(&b.0.nama));
     let nomor = alokasi_nomor(conn, hari.year())?;
@@ -514,7 +686,19 @@ mod tests {
     }
 
     fn br(id: i64, q: &str) -> BarisReq {
-        BarisReq { produk_id: id, qty_fisik: d(q) }
+        BarisReq { produk_id: id, qty_fisik: Some(d(q)), hitungan: None }
+    }
+
+    fn hr(satuan: &str, qty: &str, isi: &str) -> HitunganReq {
+        HitunganReq { satuan: satuan.into(), qty: qty.into(), isi: isi.into() }
+    }
+
+    fn bm(id: i64, h: Vec<HitunganReq>) -> BarisReq {
+        BarisReq { produk_id: id, qty_fisik: None, hitungan: Some(h) }
+    }
+
+    fn fisik(items: &[BarisReq]) -> Vec<Fisik> {
+        items.iter().map(baca_fisik).collect::<AppResult<_>>().unwrap()
     }
 
     #[test]
@@ -543,10 +727,11 @@ mod tests {
 
     #[test]
     fn hash_payload_stabil_dan_membedakan() {
-        let a = hash_payload(7, d("10"));
-        assert_eq!(a, hash_payload(7, d("10.00")));
-        assert_ne!(a, hash_payload(7, d("11")));
-        assert_ne!(a, hash_payload(8, d("10")));
+        let s = |q: &str| sidik_fisik(&Fisik::Langsung(d(q)));
+        let a = hash_payload(7, &s("10"));
+        assert_eq!(a, hash_payload(7, &s("10.00")));
+        assert_ne!(a, hash_payload(7, &s("11")));
+        assert_ne!(a, hash_payload(8, &s("10")));
         assert_eq!(a.len(), 64);
     }
 
@@ -563,9 +748,101 @@ mod tests {
 
     #[test]
     fn hash_dokumen_tidak_peduli_urutan() {
-        let a = hash_dokumen(&[br(1, "5"), br(2, "3.0")]);
-        assert_eq!(a, hash_dokumen(&[br(2, "3"), br(1, "5.00")]));
-        assert_ne!(a, hash_dokumen(&[br(1, "5"), br(2, "4")]));
-        assert_ne!(a, hash_dokumen(&[br(1, "5")]));
+        let a_items = [br(1, "5"), br(2, "3.0")];
+        let b_items = [br(2, "3"), br(1, "5.00")];
+        let a = hash_dokumen(&a_items, &fisik(&a_items));
+        assert_eq!(a, hash_dokumen(&b_items, &fisik(&b_items)));
+        let c_items = [br(1, "5"), br(2, "4")];
+        assert_ne!(a, hash_dokumen(&c_items, &fisik(&c_items)));
+        let d_items = [br(1, "5")];
+        assert_ne!(a, hash_dokumen(&d_items, &fisik(&d_items)));
+    }
+
+    #[test]
+    fn bentuk_payload_tepat_satu() {
+        assert!(baca_fisik(&BarisReq { produk_id: 1, qty_fisik: None, hitungan: None }).is_err());
+        let ganda = BarisReq {
+            produk_id: 1,
+            qty_fisik: Some(d("5")),
+            hitungan: Some(vec![hr("PCS", "5", "1")]),
+        };
+        assert!(baca_fisik(&ganda).is_err());
+        assert!(baca_fisik(&br(1, "5")).is_ok());
+        assert!(baca_fisik(&bm(1, vec![hr("PCS", "5", "1")])).is_ok());
+    }
+
+    #[test]
+    fn hitungan_kosong_dan_satuan_ganda_ditolak() {
+        assert!(parse_hitungan(&[]).is_err());
+        assert!(parse_hitungan(&[hr("DUS", "1", "12"), hr("dus", "2", "12")]).is_err());
+        assert!(parse_hitungan(&[hr(" ", "1", "12")]).is_err());
+        assert!(parse_hitungan(&[hr("DUS", "1", "12"), hr("PCS", "3", "1")]).is_ok());
+    }
+
+    #[test]
+    fn hitungan_angka_divalidasi() {
+        assert!(parse_hitungan(&[hr("PCS", "-1", "1")]).is_err());
+        assert!(parse_hitungan(&[hr("PCS", "1000000001", "1")]).is_err());
+        assert!(parse_hitungan(&[hr("PCS", "1.00001", "1")]).is_err());
+        assert!(parse_hitungan(&[hr("PCS", "abc", "1")]).is_err());
+        assert!(parse_hitungan(&[hr("PCS", "", "1")]).is_err());
+        assert!(parse_hitungan(&[hr("DUS", "1", "0")]).is_err());
+        assert!(parse_hitungan(&[hr("DUS", "1", "-12")]).is_err());
+        assert!(parse_hitungan(&[hr("DUS", "1", "x")]).is_err());
+        assert!(parse_hitungan(&[hr("PCS", "0", "1")]).is_ok());
+        assert!(parse_hitungan(&[hr("PCS", "2,5", "1")]).is_err()); // klien mengirim titik desimal
+    }
+
+    #[test]
+    fn konversi_presisi_maks_4_desimal() {
+        assert_eq!(hasil_konversi(d("2"), d("12")).unwrap(), d("24"));
+        assert_eq!(hasil_konversi(d("0.5"), d("0.5")).unwrap(), d("0.25"));
+        assert_eq!(hasil_konversi(d("1.50"), d("2")).unwrap(), d("3"));
+        assert!(hasil_konversi(d("0.0001"), d("0.3")).is_err()); // 0.00003
+        assert!(hasil_konversi(d("0.12345"), d("1")).is_err());
+        assert_eq!(hasil_konversi(d("0.0001"), d("3")).unwrap(), d("0.0003"));
+    }
+
+    #[test]
+    fn total_gabungan_dan_batas_miliar() {
+        // 2 dus x 12 + 3 pcs = 27 (faktor dari "Katalog" = isi yang dikirim, murni di sini).
+        let h = parse_hitungan(&[hr("DUS", "2", "12"), hr("PCS", "3", "1")]).unwrap();
+        let total: Decimal = h.iter().map(|x| hasil_konversi(x.qty, x.isi).unwrap()).sum();
+        assert_eq!(total, d("27"));
+        let besar = parse_hitungan(&[hr("DUS", "100000000", "12")]).unwrap();
+        let t: Decimal = besar.iter().map(|x| hasil_konversi(x.qty, x.isi).unwrap()).sum();
+        assert!(validasi_qty(t).is_err()); // 1,2 miliar
+    }
+
+    #[test]
+    fn sidik_hitungan_stabil_terhadap_urutan_dan_nol_trailing() {
+        let a_items = [bm(1, vec![hr("DUS", "2", "12"), hr("PCS", "3", "1")])];
+        let b_items = [bm(1, vec![hr("pcs", "3.0", "1.00"), hr("dus", "2.00", "12")])];
+        assert_eq!(
+            hash_dokumen(&a_items, &fisik(&a_items)),
+            hash_dokumen(&b_items, &fisik(&b_items))
+        );
+        let c_items = [bm(1, vec![hr("DUS", "2", "12"), hr("PCS", "4", "1")])];
+        assert_ne!(
+            hash_dokumen(&a_items, &fisik(&a_items)),
+            hash_dokumen(&c_items, &fisik(&c_items))
+        );
+        // Faktor ikut disidik: payload dengan faktor lama != faktor baru.
+        let e_items = [bm(1, vec![hr("DUS", "2", "24"), hr("PCS", "3", "1")])];
+        assert_ne!(
+            hash_dokumen(&a_items, &fisik(&a_items)),
+            hash_dokumen(&e_items, &fisik(&e_items))
+        );
+    }
+
+    #[test]
+    fn sidik_legacy_tidak_berubah() {
+        // Kunci idempotensi payload lama harus tetap cocok dengan hash sebelum multi-satuan.
+        let items = [br(1, "5"), br(2, "3")];
+        assert_eq!(
+            hash_dokumen(&items, &fisik(&items)),
+            hash_dokumen(&[br(2, "3.00"), br(1, "5.0")], &fisik(&[br(2, "3.00"), br(1, "5.0")]))
+        );
+        assert_eq!(sidik_fisik(&Fisik::Langsung(d("5.00"))), "5");
     }
 }

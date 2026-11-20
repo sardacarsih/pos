@@ -22,6 +22,10 @@ BARANG = [
 def test_persediaan(url):
     tulis = []
     kartu_params = []
+    habis_gets = []
+    galat_opname = [None]
+    SATUAN = {101: [{"satuan": "DUS", "isi": 12, "barcode": "BDUS101"}],
+              102: [{"satuan": "DUS", "isi": 12, "barcode": "BDUS102"}]}
     akun = {"id": 17, "role": "ADMIN", "nama": "Admin Uji", "ganti_password": False}
     dialog_jawab = {"aksi": "accept"}
     sesuai = [{"id": 9001, "kode": "BRG-101", "nama": "Gula Pasir", "tanggal": HARI, "qty": "5",
@@ -42,17 +46,38 @@ def test_persediaan(url):
         elif path == "/admin/menu-badge":
             route.fulfill(json={"stok_habis": 3, "harga_rendah": 1})
         elif path == "/admin/stok" and method == "GET":
-            q = (qs.get("q") or "").lower()
-            items = [b for b in BARANG if not q or q in b["nama"].lower() or q in b["kode"].lower()]
+            qraw = qs.get("q") or ""
+            q = qraw.lower()
+            items = []
+            for b in BARANG:
+                if not q or q in b["nama"].lower() or q in b["kode"].lower() \
+                        or b["barcode"] == qraw or any(s["barcode"] == qraw for s in SATUAN[b["id"]]):
+                    item = dict(b)
+                    if qs.get("multi_satuan") == "1":
+                        item["satuan_tambahan"] = SATUAN[b["id"]]
+                    items.append(item)
             route.fulfill(json={"items": items, "ada_lagi": False, "page": 1})
         elif path == "/admin/stok-habis":
-            route.fulfill(json={"items": [dict(BARANG[1])], "ada_lagi": False, "page": 1, "jumlah": 1, "kontrol_stok": True})
+            habis_gets.append(qs)
+            item = dict(BARANG[1])
+            if qs.get("multi_satuan") == "1":
+                item["satuan_tambahan"] = SATUAN[102]
+            route.fulfill(json={"items": [item], "ada_lagi": False, "page": 1, "jumlah": 1, "kontrol_stok": True})
         elif path == "/admin/stok-opname" and method == "GET":
             route.fulfill(json={"items": [], "ada_lagi": False, "tahun": int(HARI[:4])})
         elif path == "/admin/stok-opname" and method == "POST":
             key = req.headers.get("idempotency-key", "")
-            tulis.append(("OPNAME", key, req.post_data_json))
-            route.fulfill(json={"nomor_so": "SO-UJI-1", "selisih": 4})
+            body = req.post_data_json
+            tulis.append(("OPNAME", key, body))
+            if galat_opname[0]:
+                route.fulfill(status=400, json={"pesan": galat_opname[0]})
+                galat_opname[0] = None
+            else:
+                route.fulfill(json={"nomor_so": "SO-UJI-1", "selisih": 4})
+        elif path == "/admin/stok-opname/dokumen" and method == "POST":
+            key = req.headers.get("idempotency-key", "")
+            tulis.append(("DOKUMEN", key, req.post_data_json))
+            route.fulfill(json={"nomor_so": "SO-UJI-2", "tanggal": HARI, "items": []})
         elif path == "/admin/persediaan/kartu":
             kartu_params.append(qs)
             page = int(qs.get("page", "1"))
@@ -162,17 +187,37 @@ def test_persediaan(url):
         expect(page.get_by_role("cell", name="Pembelian", exact=True)).to_be_visible()
         assert kartu_params[-1]["page"] == "1", kartu_params
 
-        # Stok habis + opname cepat ber-Idempotency-Key UUID (perilaku lama dipindah utuh).
+        # Stok habis + opname cepat multi-satuan: beberapa kolom, total gabungan,
+        # penolakan faktor berubah -> muat ulang satuan (isian terjaga) -> simpan dengan kunci yang sama.
         habis.click()
         expect(page.get_by_text("1 produk aktif dengan stok sistem ≤ 0")).to_be_visible()
         page.get_by_role("button", name="Opname", exact=True).click()
         dlg = page.get_by_role("dialog", name="Opname stok")
-        dlg.get_by_label("Qty fisik").fill("4")
+        dlg.get_by_label("Jumlah pcs Kopi Bubuk").fill("3")
+        dlg.get_by_label("Jumlah DUS Kopi Bubuk").fill("2")
+        expect(dlg.get_by_text("Total fisik 27 pcs")).to_be_visible()
+        galat_opname[0] = ('Faktor konversi satuan "DUS" berubah (12 menjadi 24); '
+                           'muat ulang satuan produk ini sebelum meninjau')
+        dlg.get_by_role("button", name="Simpan opname").click()
+        tombol_muat = dlg.get_by_role("button", name="Muat ulang satuan produk")
+        expect(tombol_muat).to_be_visible()
+        SATUAN[102] = [{"satuan": "DUS", "isi": 24, "barcode": "BDUS102"}]
+        tombol_muat.click()
+        expect(dlg.get_by_label("Jumlah DUS Kopi Bubuk")).to_have_value("2")
+        expect(dlg.get_by_text("(1 DUS = 24 pcs)")).to_be_visible()
+        expect(dlg.get_by_text("Total fisik 51 pcs")).to_be_visible()
         dlg.get_by_role("button", name="Simpan opname").click()
         expect(page.get_by_text("Opname SO-UJI-1 tersimpan (selisih 4).")).to_be_visible()
         opname_tulis = [t for t in tulis if t[0] == "OPNAME"]
-        assert len(opname_tulis) == 1 and UUID.match(opname_tulis[0][1]), tulis
-        assert opname_tulis[0][2] == {"produk_id": 102, "qty_fisik": 4}, tulis
+        assert len(opname_tulis) == 2 and opname_tulis[0][1] == opname_tulis[1][1] and UUID.match(opname_tulis[0][1]), tulis
+        assert opname_tulis[0][2] == {"produk_id": 102, "hitungan": [
+            {"satuan": "pcs", "qty": "3", "isi": "1"}, {"satuan": "DUS", "qty": "2", "isi": "12"}]}, tulis
+        assert opname_tulis[1][2] == {"produk_id": 102, "hitungan": [
+            {"satuan": "pcs", "qty": "3", "isi": "1"}, {"satuan": "DUS", "qty": "2", "isi": "24"}]}, tulis
+        assert habis_gets and all(g.get("multi_satuan") == "1" for g in habis_gets), habis_gets
+        assert any(g.get("q") == "BRG-102" for g in habis_gets), habis_gets
+        # Kembalikan faktor ke 12: bagian opname baru di bawah menguji angka dasar.
+        SATUAN[102] = [{"satuan": "DUS", "isi": 12, "barcode": "BDUS102"}]
 
         # Penyesuaian: tanpa alasan ditolak klien; valid tercatat dengan kunci UUID.
         tablist.get_by_role("tab", name="Penyesuaian", exact=True).click()
@@ -225,12 +270,31 @@ def test_persediaan(url):
         ambang_tulis = [t for t in tulis if t[0] == "AMBANG"]
         assert ambang_tulis == [("AMBANG", "102", {"stok_min": 8}), ("AMBANG", "102", {"stok_min": None})], tulis
 
-        # Dirty-guard opname: draf belum disimpan memblokir pindah tab sampai dikonfirmasi.
+        # Opname baru multi-satuan: kolom per satuan, total = 2 x 12, simpan dokumen memakai payload hitungan.
         tablist.get_by_role("tab", name="Stock opname", exact=True).click()
         page.get_by_role("button", name="Opname baru").click()
         page.get_by_label("Cari atau scan barang").fill("Kopi")
         page.get_by_role("button", name="Cari", exact=True).click()
         page.get_by_role("button", name=re.compile("Kopi Bubuk")).click()
+        page.get_by_label("Jumlah DUS Kopi Bubuk").fill("2")
+        expect(page.get_by_text("= 24 pcs")).to_be_visible()
+        page.get_by_role("button", name="Tinjau dan simpan").click()
+        page.get_by_role("button", name="Simpan dokumen").click()
+        expect(page.get_by_text("SO-UJI-2")).to_be_visible()
+        dokumen_tulis = [t for t in tulis if t[0] == "DOKUMEN"]
+        assert len(dokumen_tulis) == 1 and UUID.match(dokumen_tulis[0][1]), tulis
+        assert dokumen_tulis[0][2] == {"items": [{"produk_id": 102, "hitungan": [
+            {"satuan": "DUS", "qty": "2", "isi": "12"}]}]}, tulis
+
+        # Barcode satuan tambahan: barang terbuka otomatis, kolom DUS fokus, tanpa baris duplikat.
+        page.get_by_role("button", name="Opname baru").click()
+        page.get_by_label("Cari atau scan barang").fill("BDUS102")
+        page.get_by_role("button", name="Cari", exact=True).click()
+        page.wait_for_timeout(200)
+        expect(page.locator(".hitungan tbody tr")).to_have_count(1)
+        assert page.evaluate("document.activeElement.id") == "so-fisik-102-1", page.evaluate("document.activeElement.id")
+
+        # Dirty-guard opname: draf belum disimpan memblokir pindah tab sampai dikonfirmasi.
         dialog_jawab["aksi"] = "dismiss"
         kartu.click()
         expect(tablist.get_by_role("tab", name="Stock opname", exact=True)).to_have_attribute("aria-selected", "true")
@@ -269,7 +333,7 @@ def test_persediaan(url):
             assert halaman.get_by_role("tablist", name="Persediaan").count() == 0, peran
             halaman.close()
         browser.close()
-    print("Persediaan: 5 tab keyboard, kartu+paginasi, opname cepat, penyesuaian+balik, valuasi+ambang, peran, dirty-guard, lebar numerik + gelap lulus.")
+    print("Persediaan: 5 tab keyboard, kartu+paginasi, opname cepat multi-satuan (muat ulang satuan), opname baru multi-satuan (barcode tambahan), penyesuaian+balik, valuasi+ambang, peran, dirty-guard, lebar numerik + gelap lulus.")
 
 
 if __name__ == "__main__":
