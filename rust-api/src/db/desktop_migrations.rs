@@ -284,6 +284,11 @@ FROM (
   ORDER BY 1)"),
             ],
         },
+        Migration {
+            id: "0012_satuan_master_id",
+            deskripsi: "POS_SATUAN warisan: isi ID yang NULL agar tiap satuan punya ID unik untuk CRUD",
+            statements: vec![raw(r"UPDATE POS_SATUAN SET ID = (SELECT NVL(MAX(ID), 0) FROM POS_SATUAN) + ROWNUM WHERE ID IS NULL")],
+        },
     ]
 }
 
@@ -375,7 +380,7 @@ mod tests {
         urut.sort();
         urut.dedup();
         assert_eq!(ids, urut);
-        assert_eq!(ids.len(), 11);
+        assert_eq!(ids.len(), 12);
     }
 
     #[test]

@@ -111,7 +111,6 @@ class _AdminSatuanPageState extends ConsumerState<AdminSatuanPage> {
         ),
       ),
     );
-    nama.dispose();
     if (ok == true && mounted) {
       _info(s == null ? 'Satuan ditambahkan' : 'Satuan diubah');
       _muat();

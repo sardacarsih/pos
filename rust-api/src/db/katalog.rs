@@ -690,6 +690,14 @@ pub fn pastikan_satuan_master(c: &Connection, nama: &str) -> AppResult<String> {
     .ok_or_else(|| AppError::validation(format!("Satuan \"{nama}\" tidak ada di master Satuan")))
 }
 
+/// Samakan nama setiap satuan tambahan dengan penulisan di master (sekaligus memastikan ada di master).
+fn satuan_kanonik(conn: &Connection, daftar: &[SatuanJual]) -> AppResult<Vec<SatuanJual>> {
+    daftar
+        .iter()
+        .map(|s| Ok(SatuanJual { satuan: pastikan_satuan_master(conn, &s.satuan)?, ..s.clone() }))
+        .collect()
+}
+
 pub fn satuan_buat(c: &Connection, nama: &str) -> AppResult<Satuan> {
     let nama = nama_satuan_valid(nama)?;
     if satuan_nama_dipakai(c, &nama, None)? {
@@ -1267,9 +1275,7 @@ pub fn ganti_satuan(conn: &Connection, id: i64, daftar: &[SatuanJual]) -> AppRes
             &[("id", &id)],
         ))?.ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
         validasi_satuan(dasar.as_deref().unwrap_or_default(), daftar)?;
-        for s in daftar {
-            pastikan_satuan_master(conn, &s.satuan)?;
-        }
+        let daftar = &satuan_kanonik(conn, daftar)?;
         pastikan_barcode_satuan(conn, daftar, Some(id))?;
         conn.execute_named("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = :id", &[("id", &id)])?;
         sisipkan_satuan(conn, id, daftar)?;
@@ -1454,9 +1460,7 @@ pub fn buat_produk(
                 .ok_or_else(|| AppError::NotFound("Produk hasil permintaan ini sudah dihapus".into()));
         }
         let satuan_master = pastikan_satuan_master(conn, &p.satuan)?;
-        for s in daftar {
-            pastikan_satuan_master(conn, &s.satuan)?;
-        }
+        let daftar = &satuan_kanonik(conn, daftar)?;
         let kat = p.kategori_id.trim();
         let n: i64 = conn.query_row_as_named(
             "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
