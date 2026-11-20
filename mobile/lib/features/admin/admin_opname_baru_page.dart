@@ -5,34 +5,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
 import '../../core/checkout.dart' show newCheckoutKey;
+import '../../core/hitungan.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../kasir/kasir_page.dart' show ScanPage;
 import 'admin_opname_page.dart' show fmtQty, OpnameAngka;
 
 const _maksBarang = 200;
-final _polaJumlah = RegExp(r'^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})$');
-
-String? _jumlahFisik(String teks) {
-  final nilai = teks.trim().replaceAll(',', '.');
-  if (!_polaJumlah.hasMatch(nilai)) return null;
-  final jumlah = double.tryParse(nilai);
-  return jumlah != null && jumlah <= 1000000000 ? nilai : null;
-}
 
 double _selisih(double fisik, double sistem) =>
     double.parse((fisik - sistem).toStringAsFixed(4));
 
-typedef _BarisKirim = ({int produkId, String qty});
+typedef _BarisKirim = ({int produkId, List<HitunganKirim> hitungan});
 typedef _Permintaan = ({String kunci, List<_BarisKirim> items});
 
 class _Entri {
-  _Entri(this.item);
+  _Entri(this.item) : kolom = kolomHitungan(item);
 
   final StokItem item;
-  String? qty;
+  final List<KolomHitung> kolom;
 
-  double? get fisik => qty == null ? null : double.parse(qty!);
+  StatusHitung get status => statusHitungan(kolom);
+  double? get fisik => status.nilai;
   double? get selisih {
     final jumlah = fisik;
     return jumlah == null ? null : _selisih(jumlah, item.stok);
@@ -64,6 +58,7 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
   int _requestId = 0, _halaman = 1;
   bool _lagi = false, _sudahCari = false, _mencari = false;
   bool _menyimpan = false, _tinjau = false, _menutup = false;
+  bool _memuatSatuan = false;
   _Filter _filter = _Filter.semua;
   _Permintaan? _tertunda;
   String? _galatCari, _galatHitung, _galatSimpan;
@@ -92,6 +87,20 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
     }
   }
 
+  /// Barang pada hasil yang barcode-nya persis sama dengan [teks]:
+  /// [satuan] null = barcode satuan dasar, selain itu barcode satuan tambahan.
+  List<({StokItem item, String? satuan})> _cocokBarcode(
+    List<StokItem> items,
+    String teks,
+  ) => [
+    for (final p in items)
+      if (p.barcode == teks) (item: p, satuan: null),
+    for (final p in items)
+      for (final s in p.satuanTambahan)
+        if (s.barcode.isNotEmpty && s.barcode == teks)
+          (item: p, satuan: s.satuan),
+  ];
+
   Future<void> _cari({bool pilihBarcode = false, bool lanjut = false}) async {
     _debounce?.cancel();
     final teks = _q.text.trim();
@@ -114,10 +123,10 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
     try {
       final r = await ref.read(apiProvider).cariStok(q: teks, page: halaman);
       if (!mounted || id != _requestId) return;
-      final persis = r.items.where((p) => p.barcode == teks);
-      if (pilihBarcode && !lanjut && !r.lagi && persis.length == 1) {
+      final cocok = _cocokBarcode(r.items, teks);
+      if (pilihBarcode && !lanjut && !r.lagi && cocok.length == 1) {
         setState(() => _mencari = false);
-        await _pilih(persis.single);
+        await _pilih(cocok.single.item, fokusSatuan: cocok.single.satuan);
         return;
       }
       setState(() {
@@ -146,12 +155,13 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
     await _cari(pilihBarcode: true);
   }
 
-  Future<void> _pilih(StokItem item) async {
+  Future<void> _pilih(StokItem item, {String? fokusSatuan}) async {
     final index = _daftar.indexWhere((e) => e.item.id == item.id);
     if (index < 0 && _daftar.length >= _maksBarang) {
       setState(() => _galatHitung = 'Maksimal 200 barang per dokumen.');
       return;
     }
+    // Entri lama dipertahankan apa adanya: scan ulang tidak menambah qty atau menduplikasi baris.
     final entri = index < 0 ? _Entri(item) : _daftar[index];
     setState(() {
       _resetCari();
@@ -160,25 +170,27 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
       _filter = _Filter.semua;
       if (index < 0) _daftar.insert(0, entri);
     });
-    await _edit(entri);
+    await _edit(entri, fokusSatuan: fokusSatuan);
   }
 
-  Future<void> _edit(_Entri entri) async {
+  Future<void> _edit(_Entri entri, {String? fokusSatuan}) async {
     FocusScope.of(context).unfocus();
-    final hasil = await showDialog<String>(
+    final hasil = await showDialog<List<String>>(
       context: context,
-      builder: (_) => _EditorJumlah(entri: entri),
+      builder: (_) => _EditorJumlah(entri: entri, fokusSatuan: fokusSatuan),
     );
     if (!mounted || hasil == null) return;
     setState(() {
-      entri.qty = hasil;
+      for (var i = 0; i < entri.kolom.length && i < hasil.length; i++) {
+        entri.kolom[i].qty = hasil[i];
+      }
       _galatHitung = null;
     });
   }
 
   void _bukaTinjauan() {
     for (final e in _daftar) {
-      if (e.qty != null) continue;
+      if (e.fisik != null) continue;
       setState(() {
         _filter = _Filter.semua;
         _galatHitung = 'Isi jumlah fisik untuk ${e.item.nama}.';
@@ -195,15 +207,54 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
     });
   }
 
+  /// Faktor/satuan berubah sejak editor dibuka: ambil ulang Katalog per barang, pertahankan isian.
+  Future<void> _muatUlangSatuan() async {
+    if (_memuatSatuan) return;
+    setState(() {
+      _memuatSatuan = true;
+      _galatSimpan = null;
+    });
+    String? galat;
+    try {
+      for (final e in _daftar) {
+        final r = await ref.read(apiProvider).cariStok(q: e.item.kode);
+        final cocok = r.items.where((p) => p.id == e.item.id);
+        if (cocok.isEmpty) {
+          throw ApiException(
+            'Produk ${e.item.nama} tidak ditemukan saat memuat ulang satuan.',
+          );
+        }
+        final lama = {
+          for (final k in e.kolom) k.satuan.trim().toUpperCase(): k.qty,
+        };
+        e.kolom
+          ..clear()
+          ..addAll(kolomHitungan(cocok.first, qtyLama: lama));
+      }
+    } on ApiException catch (e) {
+      galat = e.pesan;
+    } catch (_) {
+      galat = 'Gagal memuat ulang satuan produk.';
+    }
+    if (!mounted) return;
+    setState(() {
+      _memuatSatuan = false;
+      _galatSimpan = galat;
+    });
+  }
+
   Future<void> _simpan() async {
-    if (_menyimpan || _daftar.isEmpty || _daftar.any((e) => e.qty == null)) {
+    if (_menyimpan || _daftar.isEmpty || _daftar.any((e) => e.fisik == null)) {
       return;
     }
     final kirim =
         _tertunda ??
         (
           kunci: newCheckoutKey(),
-          items: [for (final e in _daftar) (produkId: e.item.id, qty: e.qty!)],
+          items: [
+            for (final e in _daftar)
+              (produkId: e.item.id, hitungan: payloadHitungan(e.kolom)),
+          ],
         );
     setState(() {
       _menyimpan = true;
@@ -276,11 +327,11 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
-    final dihitung = _daftar.where((e) => e.qty != null).length;
+    final dihitung = _daftar.where((e) => e.fisik != null).length;
     final berselisih = _daftar.where((e) => (e.selisih ?? 0) != 0).length;
     final tampil = switch (_filter) {
       _Filter.semua => _daftar,
-      _Filter.belum => _daftar.where((e) => e.qty == null).toList(),
+      _Filter.belum => _daftar.where((e) => e.fisik == null).toList(),
       _Filter.beda => _daftar.where((e) => (e.selisih ?? 0) != 0).toList(),
     };
     final baris = _tinjau ? _daftar : tampil;
@@ -370,6 +421,18 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
                                   _tertunda == null
                                       ? galat
                                       : 'Hasil simpan belum terkonfirmasi. Coba simpan lagi untuk memeriksa dokumen yang sama.\n$galat',
+                                ),
+                              if (_galatSimpan != null &&
+                                  _galatSimpan!.contains('muat ulang satuan'))
+                                OutlinedButton(
+                                  onPressed: _memuatSatuan
+                                      ? null
+                                      : _muatUlangSatuan,
+                                  child: Text(
+                                    _memuatSatuan
+                                        ? 'Memuat satuan…'
+                                        : 'Muat ulang satuan produk',
+                                  ),
                                 ),
                               if (_menyimpan)
                                 const LinearProgressIndicator(
@@ -484,6 +547,10 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
         children: [
           Text(e.item.nama, style: tema.textTheme.titleSmall),
           Text('${e.item.kode} · ${e.item.satuan}'),
+          if (e.fisik != null && e.kolom.any((k) => k.terisi && k.isi != 1))
+            Text(
+              '${rincianHitungan(e.kolom)} = ${fmtQty(e.fisik!)} ${e.item.satuan}',
+            ),
           const SizedBox(height: 8),
           OpnameAngka(sistem: e.item.stok, fisik: e.fisik, selisih: e.selisih),
           if (!_tinjau)
@@ -492,7 +559,7 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
               children: [
                 TextButton(
                   onPressed: () => _edit(e),
-                  child: Text(e.qty == null ? 'Isi jumlah' : 'Ubah jumlah'),
+                  child: Text(e.fisik == null ? 'Isi jumlah' : 'Ubah jumlah'),
                 ),
                 IconButton(
                   tooltip: 'Hapus ${e.item.nama}',
@@ -532,74 +599,145 @@ class _PesanOpname extends StatelessWidget {
   );
 }
 
+/// Editor hitungan satu barang: satu kolom per satuan (dasar + tambahan Katalog).
+/// Kolom kosong dilewati; semua kosong berarti belum dihitung. [fokusSatuan] (hasil scan
+/// barcode satuan tambahan) menentukan kolom yang otomatis fokus.
 class _EditorJumlah extends StatefulWidget {
-  const _EditorJumlah({required this.entri});
+  const _EditorJumlah({required this.entri, this.fokusSatuan});
   final _Entri entri;
+  final String? fokusSatuan;
 
   @override
   State<_EditorJumlah> createState() => _EditorJumlahState();
 }
 
 class _EditorJumlahState extends State<_EditorJumlah> {
-  final _form = GlobalKey<FormState>();
-  late final _qty = TextEditingController(
-    text: widget.entri.qty?.replaceAll('.', ',') ?? '',
-  );
+  late final List<TextEditingController> _ctrl;
+  late final List<FocusNode> _fokus;
+  String? _galat;
+
+  @override
+  void initState() {
+    super.initState();
+    final kolom = widget.entri.kolom;
+    _ctrl = [
+      for (final k in kolom)
+        TextEditingController(text: k.qty.replaceAll('.', ',')),
+    ];
+    _fokus = [for (final _ in kolom) FocusNode()];
+    var idx = 0;
+    if (widget.fokusSatuan != null) {
+      final target = kolom.indexWhere(
+        (k) =>
+            k.satuan.trim().toUpperCase() ==
+            widget.fokusSatuan!.trim().toUpperCase(),
+      );
+      if (target > 0) idx = target;
+    }
+    if (idx > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fokus[idx].requestFocus();
+      });
+    }
+  }
 
   @override
   void dispose() {
-    _qty.dispose();
+    for (final c in _ctrl) {
+      c.dispose();
+    }
+    for (final f in _fokus) {
+      f.dispose();
+    }
     super.dispose();
   }
 
+  List<KolomHitung> _draf() {
+    final kolom = widget.entri.kolom;
+    return [
+      for (var i = 0; i < kolom.length; i++)
+        KolomHitung(
+          satuan: kolom[i].satuan,
+          isi: kolom[i].isi,
+          qty: _ctrl[i].text,
+        ),
+    ];
+  }
+
   void _simpan() {
-    if (_form.currentState?.validate() != true) return;
-    Navigator.pop(context, _jumlahFisik(_qty.text));
+    final draf = _draf();
+    final st = statusHitungan(draf);
+    if (st.galat != null) {
+      setState(() => _galat = st.galat);
+      return;
+    }
+    if (st.nilai == null) {
+      setState(
+        () => _galat = 'Isi minimal satu jumlah; isi 0 untuk menyatakan stok fisik kosong.',
+      );
+      return;
+    }
+    Navigator.pop(context, [for (final k in draf) k.qty]);
   }
 
   @override
   Widget build(BuildContext context) {
     final barang = widget.entri.item;
-    final jumlah = _jumlahFisik(_qty.text);
-    final beda = jumlah == null
-        ? null
-        : _selisih(double.parse(jumlah), barang.stok);
+    final kolom = widget.entri.kolom;
+    final st = statusHitungan(_draf());
+    final beda = st.nilai == null ? null : _selisih(st.nilai!, barang.stok);
     return AlertDialog(
       scrollable: true,
       title: Text(barang.nama),
-      content: Form(
-        key: _form,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${barang.kode} · Sistem ${fmtQty(barang.stok)} ${barang.satuan}',
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < kolom.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TextFormField(
+                controller: _ctrl[i],
+                focusNode: _fokus[i],
+                autofocus: i == 0,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: i == kolom.length - 1
+                    ? TextInputAction.done
+                    : TextInputAction.next,
+                onChanged: (_) => setState(() {}),
+                onFieldSubmitted: (_) {
+                  if (i == kolom.length - 1) _simpan();
+                },
+                decoration: InputDecoration(
+                  labelText: 'Jumlah ${kolom[i].satuan}',
+                  suffixText: kolom[i].satuan,
+                  helperText: kolom[i].isi == 1
+                      ? null
+                      : '1 ${kolom[i].satuan} = ${teksDesimal(kolom[i].isi)} ${barang.satuan}',
+                ),
+              ),
+            ),
+          if (st.nilai != null) ...[
+            const SizedBox(height: 4),
             Text(
-              '${barang.kode} · Sistem ${fmtQty(barang.stok)} ${barang.satuan}',
+              'Total fisik ${fmtQty(st.nilai!)} ${barang.satuan} · '
+              'Selisih ${beda! > 0 ? '+' : ''}${fmtQty(beda)}',
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              autofocus: true,
-              controller: _qty,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => setState(() {}),
-              onFieldSubmitted: (_) => _simpan(),
-              decoration: InputDecoration(
-                labelText: 'Jumlah fisik',
-                suffixText: barang.satuan,
-              ),
-              validator: (teks) => _jumlahFisik(teks ?? '') == null
-                  ? 'Masukkan jumlah 0–1 miliar, hingga 4 desimal.'
-                  : null,
-            ),
-            if (beda != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('Selisih ${beda > 0 ? '+' : ''}${fmtQty(beda)}'),
-              ),
           ],
-        ),
+          if (_galat case final galat?)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                galat,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
       ),
       actions: [
         TextButton(

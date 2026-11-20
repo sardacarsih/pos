@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'hitungan.dart';
 import 'models.dart';
 
 class ApiException implements Exception {
@@ -451,9 +452,14 @@ class ApiClient {
   );
 
   Future<List<BarisAngsuran>> simulasiPinjaman(int jumlah, int tenor) async {
-    final j = await post('/api/v1/saya/pinjaman/simulasi', body: {'jumlah': jumlah, 'tenor': tenor})
-        as Map<String, dynamic>;
-    return [for (final b in j['jadwal'] as List) BarisAngsuran.fromJson(b as Map<String, dynamic>)];
+    final j = await post(
+      '/api/v1/saya/pinjaman/simulasi',
+      body: {'jumlah': jumlah, 'tenor': tenor},
+    ) as Map<String, dynamic>;
+    return [
+      for (final b in j['jadwal'] as List)
+        BarisAngsuran.fromJson(b as Map<String, dynamic>),
+    ];
   }
 
   Future<void> ajukanPinjaman({
@@ -473,29 +479,43 @@ class ApiClient {
   );
 
   // ---- pinjaman pengurus (ADMIN + hak tahap) ----
-  Future<({List<PengajuanPinjaman> items, List<String> hak, int userId})> daftarPinjaman({String? status, String? q}) async {
-    final j = await get('/api/v1/pinjaman', q: {'status': ?status, 'q': ?q}) as Map<String, dynamic>;
+  Future<({List<PengajuanPinjaman> items, List<String> hak, int userId})>
+  daftarPinjaman({String? status, String? q}) async {
+    final j = await get(
+      '/api/v1/pinjaman',
+      q: {'status': ?status, 'q': ?q},
+    ) as Map<String, dynamic>;
     return (
-      items: [for (final p in j['items'] as List) PengajuanPinjaman.fromJson(p as Map<String, dynamic>)],
+      items: [
+        for (final p in j['items'] as List)
+          PengajuanPinjaman.fromJson(p as Map<String, dynamic>),
+      ],
       hak: [for (final h in j['hak'] as List) h as String],
       userId: j['user_id'] as int,
     );
   }
 
-  Future<AntrianPinjaman> antrianPinjaman() async =>
-      AntrianPinjaman.fromJson(await get('/api/v1/pinjaman/antrian') as Map<String, dynamic>);
+  Future<AntrianPinjaman> antrianPinjaman() async => AntrianPinjaman.fromJson(
+    await get('/api/v1/pinjaman/antrian') as Map<String, dynamic>,
+  );
 
   Future<LaporanPinjaman> laporanPinjaman({String? q}) async =>
-      LaporanPinjaman.fromJson(await get('/api/v1/pinjaman/laporan', q: {'q': ?q}) as Map<String, dynamic>);
+      LaporanPinjaman.fromJson(
+        await get('/api/v1/pinjaman/laporan', q: {'q': ?q})
+            as Map<String, dynamic>,
+      );
 
   /// `aksi`: verifikasi | setujui | tolak | cairkan. Mengembalikan nomor pinjaman untuk cairkan.
-  Future<String> prosesPinjaman(int id, String aksi, {String? catatan, required String idempotencyKey}) async =>
-      ((await post(
-            '/api/v1/pinjaman/$id/$aksi',
-            headers: {'Idempotency-Key': idempotencyKey},
-            body: {'catatan': catatan},
-          ) as Map<String, dynamic>)['hasil'])
-          .toString();
+  Future<String> prosesPinjaman(
+    int id,
+    String aksi, {
+    String? catatan,
+    required String idempotencyKey,
+  }) async => ((await post(
+    '/api/v1/pinjaman/$id/$aksi',
+    headers: {'Idempotency-Key': idempotencyKey},
+    body: {'catatan': catatan},
+  ) as Map<String, dynamic>)['hasil']).toString();
 
   /// Belanja mandiri: NIK diambil server dari token; selalu kredit.
   Future<Faktur> simpanSaya({
@@ -656,7 +676,12 @@ class ApiClient {
   stokHabis({String? q, int page = 1}) async {
     final j = await get(
       '/api/v1/admin/stok-habis',
-      q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': 30},
+      q: {
+        if (q != null && q.isNotEmpty) 'q': q,
+        'page': page,
+        'size': 30,
+        'multi_satuan': '1',
+      },
     ) as Map<String, dynamic>;
     return (
       items: [
@@ -693,7 +718,12 @@ class ApiClient {
   }) async {
     final j = await get(
       '/api/v1/admin/stok',
-      q: {if (q != null && q.isNotEmpty) 'q': q, 'page': page, 'size': size},
+      q: {
+        if (q != null && q.isNotEmpty) 'q': q,
+        'page': page,
+        'size': size,
+        'multi_satuan': '1',
+      },
     ) as Map<String, dynamic>;
     return (
       items: [
@@ -706,7 +736,7 @@ class ApiClient {
 
   /// Simpan satu dokumen SO. Kunci yang sama dipakai untuk mengirim ulang payload yang sama.
   Future<SoDokumen> simpanSo(
-    List<({int produkId, String qty})> items, {
+    List<({int produkId, List<HitunganKirim> hitungan})> items, {
     required String idempotencyKey,
   }) async {
     final j = await post(
@@ -714,7 +744,7 @@ class ApiClient {
       body: {
         'items': [
           for (final i in items)
-            {'produk_id': i.produkId, 'qty_fisik': num.parse(i.qty)},
+            {'produk_id': i.produkId, 'hitungan': _bodyHitungan(i.hitungan)},
         ],
       },
       headers: {'Idempotency-Key': idempotencyKey},
@@ -746,16 +776,20 @@ class ApiClient {
   /// Koreksi stok satu barang lewat dokumen SO. `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
   Future<String> opnameStok(
     int produkId,
-    String qtyFisik, {
+    List<HitunganKirim> hitungan, {
     required String idempotencyKey,
   }) async {
     final j = await post(
       '/api/v1/admin/stok-opname',
-      body: {'produk_id': produkId, 'qty_fisik': num.parse(qtyFisik)},
+      body: {'produk_id': produkId, 'hitungan': _bodyHitungan(hitungan)},
       headers: {'Idempotency-Key': idempotencyKey},
     ) as Map<String, dynamic>;
     return j['nomor_so'] as String? ?? '';
   }
+
+  static List<Map<String, String>> _bodyHitungan(List<HitunganKirim> h) => [
+    for (final x in h) {'satuan': x.satuan, 'qty': x.qty, 'isi': x.isi},
+  ];
 
   /// Buat produk baru (kode item otomatis dari server). `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
   Future<ProdukAdmin> buatProduk({

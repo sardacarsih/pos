@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kopkar_pos/core/api.dart';
+import 'package:kopkar_pos/core/hitungan.dart';
 import 'package:kopkar_pos/core/models.dart';
 import 'package:kopkar_pos/core/providers.dart';
 import 'package:kopkar_pos/features/admin/admin_opname_page.dart';
 
-typedef _Kiriman = ({String key, List<({int produkId, String qty})> items});
+typedef _Kiriman = ({
+  String key,
+  List<({int produkId, List<HitunganKirim> hitungan})> items,
+});
 
 class _ApiOpname extends ApiClient {
   _ApiOpname() : super(baseUrl: 'http://localhost', store: SecureTokenStore());
@@ -14,6 +18,7 @@ class _ApiOpname extends ApiClient {
   static const nomorSo = 'SO-26-000001';
   final riwayatSo = <SoRingkas>[];
   final kiriman = <_Kiriman>[];
+  bool sekaliPutus = true;
 
   @override
   Future<({List<SoRingkas> items, bool lagi})> daftarSo({
@@ -36,17 +41,28 @@ class _ApiOpname extends ApiClient {
         'stok': 5,
         'satuan': 'Liter',
       }),
+      StokItem.fromJson({
+        'id': 2,
+        'kode': 'P002',
+        'barcode': '899002',
+        'nama': 'Gula pasir',
+        'stok': 5,
+        'satuan': 'Pcs',
+        'satuan_tambahan': [
+          {'satuan': 'DUS', 'isi': 12, 'barcode': '900DUS'},
+        ],
+      }),
     ],
     lagi: false,
   );
 
   @override
   Future<SoDokumen> simpanSo(
-    List<({int produkId, String qty})> items, {
+    List<({int produkId, List<HitunganKirim> hitungan})> items, {
     required String idempotencyKey,
   }) async {
     kiriman.add((key: idempotencyKey, items: List.of(items)));
-    if (kiriman.length == 1) {
+    if (sekaliPutus && kiriman.length == 1) {
       riwayatSo.add(
         SoRingkas.fromJson({
           'nomor_so': nomorSo,
@@ -111,10 +127,10 @@ void main() {
     await t.enterText(fisik, '1,23456');
     await t.tap(find.text('Simpan hitungan'));
     await t.pumpAndSettle();
-    expect(find.textContaining('hingga 4 desimal'), findsOneWidget);
+    expect(find.textContaining('4 desimal'), findsOneWidget);
     await t.enterText(fisik, '1,2345');
     await t.pumpAndSettle();
-    expect(find.text('Selisih -3,7655'), findsOneWidget);
+    expect(find.textContaining('Selisih -3,7655'), findsOneWidget);
     await t.enterText(fisik, '0');
     await t.tap(find.text('Simpan hitungan'));
     await t.pumpAndSettle();
@@ -150,7 +166,7 @@ void main() {
     expect(api.kiriman, hasLength(2));
     expect(api.kiriman.last.key, api.kiriman.first.key);
     expect(api.kiriman.last.items, api.kiriman.first.items);
-    expect(api.kiriman.last.items.single.qty, '0');
+    expect(api.kiriman.last.items.single.hitungan.single.qty, '0');
     expect(api.riwayatSo, hasLength(1));
     expect(find.text('Dokumen SO-26-000001 tersimpan.'), findsOneWidget);
     await t.tap(find.text('Buka dokumen'));
@@ -159,4 +175,91 @@ void main() {
     expect(find.text('-5'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
+
+  testWidgets(
+    'barcode satuan tambahan fokus ke kolomnya; scan ulang tidak duplikat',
+    (t) async {
+      await t.binding.setSurfaceSize(const Size(320, 660));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final api = _ApiOpname()..sekaliPutus = false;
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [apiProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            darkTheme: ThemeData.dark(),
+            themeMode: ThemeMode.dark,
+            home: const Scaffold(body: AdminOpnamePage()),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.tap(find.text('Opname baru'));
+      await t.pumpAndSettle();
+
+      await t.tap(find.text('Scan barcode'));
+      t.state<NavigatorState>(find.byType(Navigator)).pop('900DUS');
+      await t.pumpAndSettle();
+      final fields = find.byType(TextFormField);
+      expect(fields, findsNWidgets(2));
+      expect(t.widget<TextFormField>(fields.at(0)).controller!.text, isEmpty);
+      expect(t.widget<TextFormField>(fields.at(1)).controller!.text, isEmpty);
+      // Barcode DUS mengarahkan fokus ke kolom DUS, bukan kolom satuan dasar.
+      final tf1 = find
+          .descendant(of: fields.at(1), matching: find.byType(TextField))
+          .first;
+      expect(t.widget<TextField>(tf1).focusNode!.hasFocus, isTrue);
+
+      await t.enterText(fields.at(1), '2');
+      await t.enterText(fields.at(0), '3');
+      await t.pumpAndSettle();
+      expect(
+        find.textContaining('Total fisik 27 Pcs · Selisih +22'),
+        findsOneWidget,
+      );
+      await t.tap(find.text('Simpan hitungan'));
+      await t.pumpAndSettle();
+      expect(
+        find.textContaining('3 Pcs + 2 DUS × 12 = 27 Pcs'),
+        findsOneWidget,
+      );
+      expect(find.text('1/1 dihitung · 1 berselisih'), findsOneWidget);
+
+      // Scan ulang barang yang sama: entri lama terbuka kembali, isian utuh, tanpa baris baru.
+      await t.tap(find.text('Scan barcode'));
+      t.state<NavigatorState>(find.byType(Navigator)).pop('900DUS');
+      await t.pumpAndSettle();
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      expect(
+        t
+            .widget<TextFormField>(find.byType(TextFormField).at(1))
+            .controller!
+            .text,
+        '2',
+      );
+      expect(
+        t
+            .widget<TextFormField>(find.byType(TextFormField).at(0))
+            .controller!
+            .text,
+        '3',
+      );
+      await t.tap(find.text('Batal'));
+      await t.pumpAndSettle();
+      expect(find.text('Ubah jumlah'), findsOneWidget);
+
+      await t.tap(find.text('Tinjau dan simpan'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Simpan dokumen'));
+      await t.pumpAndSettle();
+
+      expect(api.kiriman, hasLength(1));
+      final baris = api.kiriman.single.items.single;
+      expect(baris.produkId, 2);
+      expect(baris.hitungan, [
+        (satuan: 'Pcs', qty: '3', isi: '1'),
+        (satuan: 'DUS', qty: '2', isi: '12'),
+      ]);
+      expect(t.takeException(), isNull);
+    },
+  );
 }
