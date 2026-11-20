@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'format.dart';
 import 'models.dart';
+import 'widgets.dart' show LoadingKopkar;
 
 // ---------------------------------------------------------------- logika murni (diuji di test/beranda_test.dart)
 
@@ -89,6 +92,10 @@ String hariSingkat(String iso) {
   return d == null ? '' : _hari[d.weekday - 1].substring(0, 3);
 }
 
+/// Label rentang yang dibaca pengguna: satu hari menjadi tanggal penuh, duanya menjadi rentang.
+String labelRentang(String dari, String sampai) =>
+    dari == sampai ? tanggalPanjang(dari) : rentangTanggal(dari, sampai);
+
 // ---------------------------------------------------------------- warna semantik (ikut tema terang/gelap)
 
 enum Tingkat { ok, peringatan, bahaya }
@@ -106,44 +113,115 @@ Color _warna(BuildContext c, Tingkat t) {
 
 // ---------------------------------------------------------------- widget
 
-/// Sapaan + tanggal + chip periode di bagian atas Beranda.
-class BerandaHeader extends StatelessWidget {
-  const BerandaHeader({
+class BerandaScaffold extends StatelessWidget {
+  const BerandaScaffold({
     super.key,
-    required this.leading,
-    required this.nama,
-    required this.tanggal,
-    this.chip,
+    required this.actions,
+    required this.onRefresh,
+    required this.memuat,
+    required this.adaData,
+    required this.galat,
+    required this.children,
   });
-  final Widget leading;
-  final String nama, tanggal;
+
+  final List<Widget> actions, children;
+  final Future<void> Function() onRefresh;
+  final bool memuat, adaData;
+  final String? galat;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Beranda'),
+      automaticallyImplyLeading: false,
+      actions: actions,
+    ),
+    body: SafeArea(
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) => RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              math.max(16, (constraints.maxWidth - 720) / 2),
+              8,
+              math.max(16, (constraints.maxWidth - 720) / 2),
+              24,
+            ),
+            children: [
+              if (memuat && !adaData)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: LoadingKopkar(),
+                ),
+              if (galat case final pesan?) ...[
+                GalatBeranda(
+                  judul: adaData
+                      ? 'Pembaruan gagal · menampilkan data terakhir'
+                      : 'Beranda tidak dapat dimuat',
+                  pesan: pesan,
+                  cobaLagi: onRefresh,
+                ),
+                const SizedBox(height: 12),
+              ],
+              ...children,
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class GalatBeranda extends StatelessWidget {
+  const GalatBeranda({
+    super.key,
+    required this.judul,
+    required this.pesan,
+    required this.cobaLagi,
+  });
+
+  final String judul, pesan;
+  final VoidCallback cobaLagi;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      BannerBeranda(tingkat: Tingkat.bahaya, judul: judul, pesan: pesan),
+      TextButton(onPressed: cobaLagi, child: const Text('Coba lagi')),
+    ],
+  );
+}
+
+class BerandaHeader extends StatelessWidget {
+  const BerandaHeader({super.key, required this.tanggal, this.nama, this.chip});
+
+  final String tanggal;
+  final String? nama;
   final Widget? chip;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
+    final tema = Theme.of(context);
+    final tanggalTampil = tanggalPanjang(tanggal);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            leading,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Semantics(
-                header: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Halo, $nama', style: t.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(tanggalPanjang(tanggal), style: t.bodySmall),
-                  ],
-                ),
-              ),
+        if (nama case final nama? when nama.isNotEmpty)
+          Semantics(
+            header: true,
+            child: Text('Halo, $nama', style: tema.textTheme.titleLarge),
+          ),
+        if (tanggalTampil.isNotEmpty)
+          Text(
+            tanggalTampil,
+            style: tema.textTheme.bodyMedium?.copyWith(
+              color: tema.colorScheme.onSurfaceVariant,
             ),
-          ],
-        ),
-        if (chip != null) ...[const SizedBox(height: 10), chip!],
+          ),
+        if (chip != null) ...[const SizedBox(height: 8), chip!],
       ],
     );
   }
@@ -220,7 +298,13 @@ class BannerBeranda extends StatelessWidget {
 
 /// Tombol aksi utama Beranda (besar, target sentuh >= 56).
 class AksiUtama extends StatelessWidget {
-  const AksiUtama({super.key, required this.label, required this.icon, required this.onPressed, this.sekunder = false});
+  const AksiUtama({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.sekunder = false,
+  });
   final String label;
   final IconData icon;
   final VoidCallback? onPressed;
@@ -229,22 +313,34 @@ class AksiUtama extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final style = (sekunder ? FilledButton.tonal : FilledButton.new);
+    final style = sekunder ? FilledButton.tonal : FilledButton.new;
     return SizedBox(
-      height: 56,
       width: double.infinity,
       child: style(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          minimumSize: const Size(48, 56),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           backgroundColor: sekunder ? cs.primaryContainer : null,
           foregroundColor: sekunder ? cs.onPrimaryContainer : null,
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             Icon(icon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            if (!sekunder) const Icon(Icons.arrow_forward),
           ],
         ),
       ),
@@ -252,9 +348,15 @@ class AksiUtama extends StatelessWidget {
   }
 }
 
-/// Kartu KPI: label kecil, nilai besar, dan (opsional) pembanding.
+/// Metrik penjualan: label kecil, nilai besar, dan (opsional) pembanding.
 class KpiKartu extends StatelessWidget {
-  const KpiKartu({super.key, required this.label, required this.nilai, this.delta, this.hero = false});
+  const KpiKartu({
+    super.key,
+    required this.label,
+    required this.nilai,
+    this.delta,
+    this.hero = false,
+  });
   final String label, nilai;
   final Delta? delta;
   final bool hero;
@@ -268,94 +370,201 @@ class KpiKartu extends StatelessWidget {
       ArahDelta.turun => cs.error,
       _ => null,
     };
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: EdgeInsets.all(hero ? 18 : 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: t.bodySmall),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                nilai,
-                style: (hero ? t.headlineMedium : t.titleLarge)?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            if (delta != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                teksDelta(delta!),
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: dw ?? t.bodySmall?.color),
-              ),
-            ],
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Text(
+          nilai,
+          style: (hero ? t.headlineMedium : t.titleMedium)?.copyWith(
+            fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
-      ),
+        if (delta != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            teksDelta(delta!),
+            style: t.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: dw ?? cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
 
-/// Bar proporsi tunai vs kredit + legenda nominal.
-class ProporsiKartu extends StatelessWidget {
-  const ProporsiKartu({super.key, required this.tunai, required this.kredit});
-  final int tunai, kredit;
+bool _metrikSejajar(BuildContext context, BoxConstraints batas) =>
+    batas.maxWidth >= 320 && MediaQuery.textScalerOf(context).scale(16) <= 20;
+
+class _PasanganMetrik extends StatelessWidget {
+  const _PasanganMetrik(this.kiri, this.kanan);
+
+  final Widget kiri, kanan;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, batas) => _metrikSejajar(context, batas)
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: kiri),
+              const SizedBox(width: 16),
+              Expanded(child: kanan),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [kiri, const SizedBox(height: 12), kanan],
+          ),
+  );
+}
+
+class RingkasanPenjualan extends StatelessWidget {
+  const RingkasanPenjualan({
+    super.key,
+    required this.label,
+    required this.total,
+    required this.jumlah,
+    this.kemarin,
+    this.pembayaran,
+  });
+
+  final String label;
+  final int total, jumlah;
+  final HariJual? kemarin;
+  final (int, int)? pembayaran;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          KpiKartu(
+            label: label,
+            nilai: rupiah(total),
+            hero: true,
+            delta: kemarin == null ? null : hitungDelta(total, kemarin!.total),
+          ),
+          const Divider(height: 24),
+          _PasanganMetrik(
+            KpiKartu(
+              label: 'Transaksi',
+              nilai: '$jumlah',
+              delta: kemarin == null
+                  ? null
+                  : hitungDelta(jumlah, kemarin!.jumlah),
+            ),
+            KpiKartu(
+              label: 'Rata-rata per transaksi',
+              nilai: rupiah(jumlah == 0 ? 0 : (total / jumlah).round()),
+            ),
+          ),
+          if (pembayaran case (final tunai, final kredit)) ...[
+            const Divider(height: 24),
+            _PasanganMetrik(
+              KpiKartu(label: 'Tunai', nilai: rupiah(tunai)),
+              KpiKartu(label: 'Kredit', nilai: rupiah(kredit)),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class DaftarBeranda extends StatelessWidget {
+  const DaftarBeranda({super.key, required this.kosong, required this.baris});
+
+  final String kosong;
+  final List<Widget> baris;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: baris.isEmpty
+        ? Padding(padding: const EdgeInsets.all(16), child: Text(kosong))
+        : Column(
+            children: [
+              for (final (i, item) in baris.indexed) ...[
+                if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                item,
+              ],
+            ],
+          ),
+  );
+}
+
+class BarisBeranda extends StatelessWidget {
+  const BarisBeranda({
+    super.key,
+    required this.judul,
+    required this.detail,
+    this.nilai,
+    this.onTap,
+  });
+
+  final String judul, detail;
+  final String? nilai;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final (pt, pk) = proporsi(tunai, kredit);
-    const kuning = Color(0xFFE0A100);
-    Widget legenda(Color c, String t) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
-        const SizedBox(width: 6),
-        Text(t, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    );
-    return Card(
-      margin: EdgeInsets.zero,
+    final tema = Theme.of(context);
+    final angka = nilai == null
+        ? null
+        : Text(
+            nilai!,
+            style: tema.textTheme.titleSmall?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          );
+    return InkWell(
+      onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Tunai vs kredit', style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 10),
-            Semantics(
-              label: 'Tunai $pt persen, kredit $pk persen',
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: SizedBox(
-                  height: 12,
-                  child: (pt + pk) == 0
-                      ? ColoredBox(color: cs.outline)
-                      : Row(
-                          children: [
-                            Expanded(flex: pt == 0 ? 0 : pt, child: ColoredBox(color: cs.primary, child: const SizedBox.expand())),
-                            Expanded(flex: pk == 0 ? 0 : pk, child: const ColoredBox(color: kuning, child: SizedBox.expand())),
-                          ],
-                        ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 16,
-              runSpacing: 4,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: LayoutBuilder(
+          builder: (context, batas) {
+            final sejajar = _metrikSejajar(context, batas);
+            return Row(
               children: [
-                legenda(cs.primary, 'Tunai ${rupiah(tunai)}'),
-                legenda(kuning, 'Kredit ${rupiah(kredit)}'),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        judul,
+                        style: tema.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: tema.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (!sejajar && angka != null) ...[
+                        const SizedBox(height: 4),
+                        angka,
+                      ],
+                    ],
+                  ),
+                ),
+                if (sejajar && angka != null) ...[
+                  const SizedBox(width: 12),
+                  Flexible(child: angka),
+                ],
+                if (onTap != null) const Icon(Icons.chevron_right),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -372,9 +581,9 @@ class LimitHero extends StatelessWidget {
     final status = statusLimit(r.belanja, r.limit);
     final persen = persenTerpakai(r.belanja, r.limit);
     final warna = switch (status) {
-      StatusLimit.hampir => const [Color(0xFF6B4A00), Color(0xFFB27A00)],
+      StatusLimit.hampir => const [Color(0xFF6B4A00), Color(0xFF805800)],
       StatusLimit.terlampaui => const [Color(0xFF6E1D18), Color(0xFFB3372F)],
-      _ => const [Color(0xFF104A2B), Color(0xFF287B3E)],
+      _ => const [Color(0xFF104A2B), Color(0xFF1E6634)],
     };
     const putih = Colors.white;
     final t = Theme.of(context).textTheme;
@@ -383,28 +592,50 @@ class LimitHero extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(colors: warna, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+          colors: warna,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'LIMIT BELANJA · ${namaPeriode(r.periode).toUpperCase()}',
-            style: t.labelSmall?.copyWith(color: putih.withValues(alpha: .8), letterSpacing: 1.2),
+            style: t.labelSmall?.copyWith(
+              color: putih.withValues(alpha: .8),
+              letterSpacing: 1.2,
+            ),
           ),
-          Text(rentangTanggal(r.dari, r.sampai), style: t.bodySmall?.copyWith(color: putih.withValues(alpha: .8))),
+          Text(
+            rentangTanggal(r.dari, r.sampai),
+            style: t.bodySmall?.copyWith(color: putih.withValues(alpha: .8)),
+          ),
           const SizedBox(height: 10),
           if (status == StatusLimit.takDibatasi) ...[
-            Text('Tidak dibatasi', style: t.headlineMedium?.copyWith(color: putih, fontWeight: FontWeight.w700)),
-            Text('Belanja periode ini ${rupiah(r.belanja)}', style: const TextStyle(color: putih)),
+            Text(
+              'Tidak dibatasi',
+              style: t.headlineMedium?.copyWith(
+                color: putih,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'Belanja periode ini ${rupiah(r.belanja)}',
+              style: const TextStyle(color: putih),
+            ),
           ] else ...[
-            Text('Sisa limit', style: t.bodySmall?.copyWith(color: putih.withValues(alpha: .85))),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                rupiah((r.sisa ?? 0) < 0 ? 0 : (r.sisa ?? 0)),
-                style: t.headlineMedium?.copyWith(color: putih, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+            Text(
+              'Sisa limit',
+              style: t.bodySmall?.copyWith(color: putih.withValues(alpha: .85)),
+            ),
+            Text(
+              rupiah(math.max(0, r.sisa ?? 0)),
+              style: t.headlineMedium?.copyWith(
+                color: putih,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             const SizedBox(height: 10),
@@ -423,7 +654,11 @@ class LimitHero extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '${rupiah(r.belanja)} terpakai dari ${rupiah(r.limit)} ($persen%)'
-              '${status == StatusLimit.hampir ? ' · Hampir habis' : status == StatusLimit.terlampaui ? ' · Limit terlampaui' : ''}',
+              '${status == StatusLimit.hampir
+                  ? ' · Hampir habis'
+                  : status == StatusLimit.terlampaui
+                  ? ' · Limit terlampaui'
+                  : ''}',
               style: const TextStyle(color: putih),
             ),
           ],
@@ -483,9 +718,12 @@ class TrenBatang extends StatelessWidget {
     final nilai = [for (final h in tren) h.total];
     final t = Theme.of(context).textTheme;
     return Semantics(
-      label: 'Penjualan harian: ${[for (final h in tren) '${hariSingkat(h.tanggal)} ${rupiah(h.total)}'].join(', ')}',
+      label:
+          'Penjualan harian: ${[for (final h in tren) '${hariSingkat(h.tanggal)} ${rupiah(h.total)}'].join(', ')}',
       child: ExcludeSemantics(
-        child: SizedBox(
+        child: _AreaGrafik(
+          kolom: tren.length,
+          lebarKolom: 44,
           height: 170,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -496,20 +734,35 @@ class TrenBatang extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: Column(
                       children: [
-                        Text(singkatRupiah(tren[i].total), style: t.labelSmall?.copyWith(fontSize: 9), maxLines: 1, overflow: TextOverflow.clip),
+                        Text(
+                          singkatRupiah(tren[i].total),
+                          style: t.labelSmall?.copyWith(fontSize: 9),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                        ),
                         const SizedBox(height: 4),
                         Expanded(
                           child: DecoratedBox(
-                            decoration: BoxDecoration(color: cs.outline.withValues(alpha: .45), borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(
+                              color: cs.outline.withValues(alpha: .45),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: Align(
                               alignment: Alignment.bottomCenter,
                               child: FractionallySizedBox(
-                                heightFactor: tinggiBatang(tren[i].total, nilai),
+                                heightFactor: tinggiBatang(
+                                  tren[i].total,
+                                  nilai,
+                                ),
                                 widthFactor: 1,
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    color: i == tren.length - 1 ? cs.primary : cs.primary.withValues(alpha: .4),
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                    color: i == tren.length - 1
+                                        ? cs.primary
+                                        : cs.primary.withValues(alpha: .4),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(8),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -536,6 +789,33 @@ class TrenBatang extends StatelessWidget {
   }
 }
 
+class _AreaGrafik extends StatelessWidget {
+  const _AreaGrafik({
+    required this.kolom,
+    required this.lebarKolom,
+    required this.height,
+    required this.child,
+  });
+
+  final int kolom;
+  final double lebarKolom, height;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, batas) {
+      final lebar = kolom * MediaQuery.textScalerOf(context).scale(lebarKolom);
+      if (lebar <= batas.maxWidth) {
+        return SizedBox(height: height, child: child);
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(width: lebar, height: height, child: child),
+      );
+    },
+  );
+}
+
 /// Judul bagian Beranda.
 class JudulBagian extends StatelessWidget {
   const JudulBagian(this.teks, {super.key, this.aksi});
@@ -543,15 +823,29 @@ class JudulBagian extends StatelessWidget {
   final Widget? aksi;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 20, bottom: 8),
-    child: Row(
-      children: [
-        Expanded(child: Semantics(header: true, child: Text(teks, style: Theme.of(context).textTheme.titleMedium))),
-        ?aksi,
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final judul = Semantics(
+      header: true,
+      child: Text(teks, style: Theme.of(context).textTheme.titleMedium),
+    );
+    final teksBesar = MediaQuery.textScalerOf(context).scale(16) > 20;
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: aksi == null
+          ? judul
+          : teksBesar
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [judul, aksi!],
+            )
+          : Row(
+              children: [
+                Expanded(child: judul),
+                aksi!,
+              ],
+            ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------- rincian penjualan: rentang waktu (logika murni)
@@ -618,44 +912,6 @@ const _kuning = Color(0xFFE0A100);
 Color _warnaLain(BuildContext c) =>
     Theme.of(c).brightness == Brightness.dark ? const Color(0xFF6F8D78) : const Color(0xFF8AA08F);
 
-/// Kartu satu jenis bayar: total besar, jumlah transaksi, dan persen dari total rentang.
-class JenisKartu extends StatelessWidget {
-  const JenisKartu({super.key, required this.label, required this.bagian, required this.persen, required this.warna});
-  final String label;
-  final BagianJual bagian;
-  final int persen;
-  final Color warna;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(border: Border(left: BorderSide(color: warna, width: 5))),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: t.bodySmall),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                rupiah(bagian.total),
-                style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
-              ),
-            ),
-            Text('${bagian.jumlah} transaksi · $persen%', style: t.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Bar proporsi tiga bagian (tunai, kredit, lainnya) terhadap total rentang.
 class ProporsiJenis extends StatelessWidget {
   const ProporsiJenis({super.key, required this.pecahan});
@@ -671,17 +927,59 @@ class ProporsiJenis extends StatelessWidget {
       (f(pecahan.kredit.total), _kuning),
       (f(pecahan.lain.total), _warnaLain(context)),
     ].where((s) => s.$1 > 0).toList();
-    return Semantics(
-      label: 'Tunai ${persenJenis(pecahan.tunai.total, total)} persen, kredit ${persenJenis(pecahan.kredit.total, total)} persen',
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(99),
-        child: SizedBox(
-          height: 12,
-          child: seg.isEmpty
-              ? ColoredBox(color: cs.outline)
-              : Row(children: [for (final s in seg) Expanded(flex: s.$1, child: ColoredBox(color: s.$2, child: const SizedBox.expand()))]),
+    Widget legenda(String label, Color warna) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: warna, shape: BoxShape.circle),
         ),
-      ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          label:
+              'Tunai ${persenJenis(pecahan.tunai.total, total)} persen, '
+              'kredit ${persenJenis(pecahan.kredit.total, total)} persen, '
+              'lainnya ${persenJenis(pecahan.lain.total, total)} persen',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 8,
+              child: seg.isEmpty
+                  ? ColoredBox(color: cs.outline)
+                  : Row(
+                      children: [
+                        for (final s in seg)
+                          Expanded(
+                            flex: s.$1,
+                            child: ColoredBox(
+                              color: s.$2,
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 16,
+          runSpacing: 4,
+          children: [
+            legenda('Tunai', cs.primary),
+            legenda('Kredit', _kuning),
+            if (pecahan.lain.jumlah != 0 || pecahan.lain.total != 0)
+              legenda('Lainnya', _warnaLain(context)),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -697,11 +995,15 @@ class TrenBertumpuk extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final totals = [for (final h in harian) h.tunai + h.kredit + h.lain];
     final lain = _warnaLain(context);
-    String label(String iso) => harian.length <= 7 ? hariSingkat(iso) : iso.substring(8);
+    String label(String iso) =>
+        harian.length <= 7 ? hariSingkat(iso) : iso.substring(8);
     return Semantics(
-      label: 'Penjualan harian tunai dan kredit: ${[for (final h in harian) '${label(h.tanggal)} tunai ${rupiah(h.tunai)}, kredit ${rupiah(h.kredit)}'].join('; ')}',
+      label:
+          'Penjualan harian tunai dan kredit: ${[for (final h in harian) '${label(h.tanggal)} tunai ${rupiah(h.tunai)}, kredit ${rupiah(h.kredit)}'].join('; ')}',
       child: ExcludeSemantics(
-        child: SizedBox(
+        child: _AreaGrafik(
+          kolom: harian.length,
+          lebarKolom: 26,
           height: 160,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -709,25 +1011,59 @@ class TrenBertumpuk extends StatelessWidget {
               for (var i = 0; i < harian.length; i++)
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: harian.length > 14 ? 1 : 3),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: harian.length > 14 ? 1 : 3,
+                    ),
                     child: Column(
                       children: [
                         Expanded(
                           child: DecoratedBox(
-                            decoration: BoxDecoration(color: cs.outline.withValues(alpha: .45), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(
+                              color: cs.outline.withValues(alpha: .45),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                             child: Align(
                               alignment: Alignment.bottomCenter,
                               child: totals[i] <= 0
                                   ? const SizedBox.shrink()
                                   : FractionallySizedBox(
-                                      heightFactor: tinggiBatang(totals[i], totals),
+                                      heightFactor: tinggiBatang(
+                                        totals[i],
+                                        totals,
+                                      ),
                                       child: ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(6),
+                                            ),
                                         child: Column(
                                           children: [
-                                            if (harian[i].lain > 0) Expanded(flex: harian[i].lain, child: ColoredBox(color: lain, child: const SizedBox.expand())),
-                                            if (harian[i].kredit > 0) Expanded(flex: harian[i].kredit, child: const ColoredBox(color: _kuning, child: SizedBox.expand())),
-                                            if (harian[i].tunai > 0) Expanded(flex: harian[i].tunai, child: ColoredBox(color: cs.primary, child: const SizedBox.expand())),
+                                            if (harian[i].lain > 0)
+                                              Expanded(
+                                                flex: harian[i].lain,
+                                                child: ColoredBox(
+                                                  color: lain,
+                                                  child:
+                                                      const SizedBox.expand(),
+                                                ),
+                                              ),
+                                            if (harian[i].kredit > 0)
+                                              Expanded(
+                                                flex: harian[i].kredit,
+                                                child: const ColoredBox(
+                                                  color: _kuning,
+                                                  child: SizedBox.expand(),
+                                                ),
+                                              ),
+                                            if (harian[i].tunai > 0)
+                                              Expanded(
+                                                flex: harian[i].tunai,
+                                                child: ColoredBox(
+                                                  color: cs.primary,
+                                                  child:
+                                                      const SizedBox.expand(),
+                                                ),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -736,7 +1072,15 @@ class TrenBertumpuk extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(label(harian[i].tanggal), style: t.labelSmall?.copyWith(fontSize: 9, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.clip),
+                        Text(
+                          label(harian[i].tanggal),
+                          style: t.labelSmall?.copyWith(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                        ),
                       ],
                     ),
                   ),
@@ -751,7 +1095,13 @@ class TrenBertumpuk extends StatelessWidget {
 
 /// Satu kasir (atau baris total): tunai, kredit, lainnya (bila ada), total, dan jumlah transaksi.
 class KasirRincianKartu extends StatelessWidget {
-  const KasirRincianKartu({super.key, required this.judul, this.subjudul, required this.pecahan, this.total = false});
+  const KasirRincianKartu({
+    super.key,
+    required this.judul,
+    this.subjudul,
+    required this.pecahan,
+    this.total = false,
+  });
   final String judul;
   final String? subjudul;
   final PecahanJual pecahan;
@@ -761,41 +1111,61 @@ class KasirRincianKartu extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    Widget baris(String l, BagianJual b) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Expanded(child: Text(l, style: t.bodySmall)),
-          Text('${b.jumlah} trx', style: t.bodySmall),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 112,
-            child: Text(rupiah(b.total), textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+    Widget baris(String label, BagianJual bagian, {bool tebal = false}) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: LayoutBuilder(
+            builder: (context, batas) {
+              final info = Text(
+                '$label · ${bagian.jumlah} transaksi',
+                style: tebal ? t.titleSmall : t.bodyMedium,
+              );
+              final nilai = Text(
+                rupiah(bagian.total),
+                style: t.titleSmall?.copyWith(
+                  fontWeight: tebal ? FontWeight.w800 : FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              );
+              if (batas.maxWidth < 220 ||
+                  MediaQuery.textScalerOf(context).scale(16) > 20) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [info, nilai],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: info),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: nilai,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-        ],
-      ),
-    );
+        );
     return Card(
-      margin: EdgeInsets.zero,
       color: total ? cs.primaryContainer : null,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(judul, style: const TextStyle(fontWeight: FontWeight.w700)),
-            if (subjudul != null && subjudul!.isNotEmpty) Text(subjudul!, style: t.bodySmall),
+            Semantics(header: true, child: Text(judul, style: t.titleMedium)),
+            if (subjudul != null && subjudul!.isNotEmpty)
+              Text(subjudul!, style: t.bodySmall),
             const SizedBox(height: 6),
             baris('Tunai', pecahan.tunai),
             baris('Kredit', pecahan.kredit),
-            if (pecahan.lain.jumlah > 0 || pecahan.lain.total > 0) baris('Lainnya', pecahan.lain),
+            if (pecahan.lain.jumlah != 0 || pecahan.lain.total != 0)
+              baris('Lainnya', pecahan.lain),
             const Divider(height: 14),
-            Row(
-              children: [
-                Expanded(child: Text('Total · ${pecahan.total.jumlah} trx', style: const TextStyle(fontWeight: FontWeight.w700))),
-                Text(rupiah(pecahan.total.total), style: const TextStyle(fontWeight: FontWeight.w800, fontFeatures: [FontFeature.tabularFigures()])),
-              ],
-            ),
+            baris('Total', pecahan.total, tebal: true),
           ],
         ),
       ),

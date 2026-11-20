@@ -7,13 +7,17 @@ import '../../core/beranda_widgets.dart';
 import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
-import '../../core/widgets.dart';
 import 'riwayat_page.dart';
 
 /// Beranda kasir: status periode -> aksi utama (Mulai jual) -> KPI hari ini -> transaksi terakhir.
 /// [aktif] berubah true saat tab dibuka -> data dimuat ulang.
 class DashboardPage extends ConsumerStatefulWidget {
-  const DashboardPage({super.key, required this.aktif, required this.onJual, this.onRiwayat});
+  const DashboardPage({
+    super.key,
+    required this.aktif,
+    required this.onJual,
+    this.onRiwayat,
+  });
   final bool aktif;
   final VoidCallback onJual;
   final VoidCallback? onRiwayat;
@@ -24,7 +28,7 @@ class DashboardPage extends ConsumerStatefulWidget {
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   DashboardKasir? _data;
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
 
   @override
@@ -40,6 +44,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   Future<void> _muat() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -58,122 +63,76 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget build(BuildContext context) {
     final d = _data;
     final profil = ref.watch(authProvider).profil;
-    return TropicalScaffold(
-      title: 'Beranda',
+    return BerandaScaffold(
       actions: [
-        const ProfilAksi(),
+        const ProfilAksi(warnaTema: null),
         IconButton(
           tooltip: 'Keluar',
-          icon: const Icon(Icons.logout, color: Colors.white),
+          icon: const Icon(Icons.logout),
           onPressed: () => ref.read(authProvider.notifier).logout(),
         ),
       ],
-      body: RefreshIndicator(
-        onRefresh: _muat,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            if (_loading && d == null)
-              const Padding(padding: EdgeInsets.all(40), child: LoadingKopkar()),
-            if (_error != null)
-              Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Text(_error!),
-                      TextButton(onPressed: _muat, child: const Text('Coba lagi')),
-                    ],
+      onRefresh: _muat,
+      memuat: _loading,
+      adaData: d != null,
+      galat: _error,
+      children: [
+        if (d != null) ...[
+          BerandaHeader(
+            nama: profil?.nama.trim().split(' ').first,
+            tanggal: d.tanggal,
+            chip: ChipPeriode(
+              kode: d.periodeKode,
+              periode: d.periode,
+              dari: d.periodeDari,
+              sampai: d.periodeSampai,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (!d.periodeTerbuka) ...[
+            BannerBeranda(
+              tingkat: Tingkat.bahaya,
+              judul: 'Penjualan diblokir',
+              pesan: d.periodePesan ?? 'Periode belum dibuka',
+              catatan: hubungiAdminPeriode,
+            ),
+            const SizedBox(height: 8),
+          ],
+          AksiUtama(
+            label: 'Mulai jual',
+            icon: Icons.point_of_sale,
+            onPressed: d.periodeTerbuka ? widget.onJual : null,
+          ),
+          const JudulBagian('Penjualan hari ini'),
+          RingkasanPenjualan(
+            label: 'Total penjualan',
+            total: d.total,
+            jumlah: d.jumlah,
+            pembayaran: (d.tunai, d.kredit),
+          ),
+          JudulBagian(
+            'Transaksi terakhir',
+            aksi: widget.onRiwayat == null
+                ? null
+                : TextButton(
+                    onPressed: widget.onRiwayat,
+                    child: const Text('Riwayat'),
                   ),
-                ),
-              ),
-            if (d != null) ...[
-              BerandaHeader(
-                leading: const ProfilAvatar(radius: 24),
-                nama: (profil?.nama ?? '').split(' ').first,
-                tanggal: d.tanggal,
-                chip: ChipPeriode(
-                  kode: d.periodeKode,
-                  periode: d.periode,
-                  dari: d.periodeDari,
-                  sampai: d.periodeSampai,
-                ),
-              ),
-              if (!d.periodeTerbuka) ...[
-                const SizedBox(height: 12),
-                BannerBeranda(
-                  tingkat: Tingkat.bahaya,
-                  judul: 'Penjualan diblokir',
-                  pesan: d.periodePesan,
-                  catatan: hubungiAdminPeriode,
-                ),
-              ],
-              const SizedBox(height: 16),
-              AksiUtama(
-                label: 'Mulai jual',
-                icon: Icons.point_of_sale,
-                onPressed: d.periodeTerbuka ? widget.onJual : null,
-              ),
-              const SizedBox(height: 16),
-              KpiKartu(label: 'Total penjualan hari ini', nilai: rupiah(d.total), hero: true),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: KpiKartu(label: 'Transaksi', nilai: '${d.jumlah}')),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: KpiKartu(
-                      label: 'Rata-rata/transaksi',
-                      nilai: rupiah(d.jumlah == 0 ? 0 : (d.total / d.jumlah).round()),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ProporsiKartu(tunai: d.tunai, kredit: d.kredit),
-              JudulBagian(
-                'Transaksi terakhir',
-                aksi: widget.onRiwayat == null
-                    ? null
-                    : TextButton(onPressed: widget.onRiwayat, child: const Text('Riwayat')),
-              ),
-              if (d.terakhir.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(
-                    child: Text('Belum ada transaksi hari ini. Tekan "Mulai jual" untuk memulai.', textAlign: TextAlign.center),
-                  ),
-                ),
+          ),
+          DaftarBeranda(
+            kosong: 'Belum ada transaksi hari ini.',
+            baris: [
               for (final t in d.terakhir)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    onTap: () => bukaDetailTransaksi(context, ref, t.no),
-                    title: Text(
-                      t.pelanggan.isEmpty ? t.no : t.pelanggan,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Wrap(
-                        spacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          StatePill(text: t.jenisBayar),
-                          Text('${t.jam} · ${t.no}'),
-                        ],
-                      ),
-                    ),
-                    trailing: Text(rupiah(t.total), style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ),
+                BarisBeranda(
+                  judul: t.pelanggan.isEmpty ? t.no : t.pelanggan,
+                  detail: '${t.jam} · ${t.no} · ${t.jenisBayar}',
+                  nilai: rupiah(t.total),
+                  onTap: () => bukaDetailTransaksi(context, ref, t.no),
                 ),
             ],
-          ],
-        ),
-      ),
+          ),
+        ],
+      ],
     );
   }
 }

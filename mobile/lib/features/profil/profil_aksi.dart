@@ -8,13 +8,14 @@ import 'profil_page.dart';
 
 /// Tombol avatar di header: membuka Profil Saya. Dipakai di semua layar utama kasir dan admin.
 class ProfilAksi extends StatelessWidget {
-  const ProfilAksi({super.key});
+  const ProfilAksi({super.key, this.warnaTema = Colors.white});
+  final Color? warnaTema;
 
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      const TemaTombol(warna: Colors.white),
+      TemaTombol(warna: warnaTema),
       IconButton(
         tooltip: 'Profil saya',
         icon: const ProfilAvatar(radius: 14),
