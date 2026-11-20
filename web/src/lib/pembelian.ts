@@ -15,9 +15,15 @@ export function tabBeli(peran: string): { id: TabBeli; label: string }[] {
 export type Metode = 'TUNAI' | 'TRANSFER' | 'LAINNYA';
 export type Jenis = 'TUNAI' | 'TEMPO';
 export type Supplier = { kode: string; nama: string };
-export type SatuanBeli = { satuan: string; isi: string; barcode: string };
+export type SatuanBeli = { satuan: string; isi: string; barcode: string; beli?: string };
 export type BarangBeli = { id: number; kode: string; nama: string; beli: string; satuan: SatuanBeli[] };
 export type ReferensiBeli = { tanggal_server: string; supplier: Supplier[]; barang: BarangBeli[] };
+
+/** Harga beli awal per satuan: harga terakhir satuan itu, atau harga beli dasar x isi. */
+export function hargaAwalBeli(produk: BarangBeli, satuan: SatuanBeli): number {
+  const terakhir = Number(satuan.beli);
+  return satuan.beli && terakhir > 0 ? Math.round(terakhir) : Math.round(Number(produk.beli) * Number(satuan.isi));
+}
 export type PilihanBarang = { produk: BarangBeli; satuan: SatuanBeli };
 export type BarisBeli = {
   id: string; product_id: number; kode: string; nama: string; satuan: string; isi: string;
@@ -111,6 +117,68 @@ export function formatJumlahBeli(nilai: number | string | null | undefined): str
   const bagian = bulat.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const pecahan = desimal.replace(/0+$/, '');
   return tanda + bagian + (pecahan ? ',' + pecahan : '');
+}
+
+// Hitung desimal dengan BigInt: qty (3 desimal) x isi (4 desimal) = skala 7 desimal, tanpa error float.
+function keBig(teks: string, desimal: number): bigint | null {
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(teks.trim());
+  if (!m || (m[2] ?? '').length > desimal) return null;
+  return BigInt(m[1] + (m[2] ?? '').padEnd(desimal, '0'));
+}
+
+function dariBig(n: bigint, desimal: number): string {
+  const s = n.toString().padStart(desimal + 1, '0');
+  const pecah = s.slice(-desimal).replace(/0+$/, '');
+  return s.slice(0, -desimal) + (pecah ? '.' + pecah : '');
+}
+
+function qtyDasarBig(b: Pick<BarisBeli, 'qty' | 'isi'>): bigint | null {
+  const q = angkaQty(b.qty);
+  const isi = keBig(b.isi, 4);
+  const qty = q === null ? null : keBig(q, 3);
+  return qty === null || isi === null ? null : qty * isi;
+}
+
+/** Jumlah masuk stok dalam satuan dasar ("20", "1.5"), atau null bila jumlah/isi belum valid. */
+export function teksQtyDasar(b: Pick<BarisBeli, 'qty' | 'isi'>): string | null {
+  const n = qtyDasarBig(b);
+  return n === null ? null : dariBig(n, 7);
+}
+
+/** Total stok masuk per satuan dasar untuk seluruh baris faktur. */
+export function stokMasuk(baris: BarisBeli[], barang: Map<number, BarangBeli>): { satuan: string; qty: string }[] {
+  const total = new Map<string, bigint>();
+  for (const b of baris) {
+    const dasar = barang.get(b.product_id)?.satuan[0]?.satuan;
+    const n = qtyDasarBig(b);
+    if (dasar && n !== null) total.set(dasar, (total.get(dasar) ?? 0n) + n);
+  }
+  return [...total].map(([satuan, n]) => ({ satuan, qty: dariBig(n, 7) }));
+}
+
+/** Tambah jumlah baris yang sama saat barcode discan ulang; null bila melewati batas 999.999. */
+export function tambahQty(qty: string, n = 1): string | null {
+  const q = angkaQty(qty);
+  const sekarang = q === null ? null : keBig(q, 3);
+  if (sekarang === null) return null;
+  const hasil = sekarang + BigInt(n) * 1000n;
+  return hasil > 999_999_000n ? null : dariBig(hasil, 3);
+}
+
+/** Harga per satuan dasar (harga satuan dibagi isi), dibulatkan 2 desimal. */
+export function hargaDasar(harga: number | undefined, isi: string): number | null {
+  const x = Number(isi);
+  return harga && x > 0 ? Math.round((harga / x) * 100) / 100 : null;
+}
+
+export const AMBANG_SELISIH_HARGA = 0.3;
+
+/** Selisih relatif harga terhadap harga awal/terakhir satuan itu; null bila wajar (<= 30%) atau tak ada acuan. */
+export function selisihHarga(produk: BarangBeli, satuan: SatuanBeli, harga: number | undefined): number | null {
+  const awal = hargaAwalBeli(produk, satuan);
+  if (!harga || awal <= 0) return null;
+  const selisih = (harga - awal) / awal;
+  return Math.abs(selisih) > AMBANG_SELISIH_HARGA ? selisih : null;
 }
 
 export function brutoBaris(b: BarisBeli): number | null {

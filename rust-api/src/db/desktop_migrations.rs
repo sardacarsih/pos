@@ -269,6 +269,31 @@ WHEN NOT MATCHED THEN
                 ddl("ALTER TABLE POS_PRODUCT ADD (STOK_MIN NUMBER(12,4))"),
             ],
         },
+        Migration {
+            id: "0011_satuan_master",
+            deskripsi: "Master satuan: POS_SATUAN (bila belum ada) dan seed dari satuan yang sudah dipakai produk",
+            statements: vec![
+                ddl("CREATE TABLE POS_SATUAN (ID NUMBER PRIMARY KEY, SATUAN VARCHAR2(20) NOT NULL)"),
+                raw(r"INSERT INTO POS_SATUAN (ID, SATUAN)
+SELECT (SELECT NVL(MAX(ID), 0) FROM POS_SATUAN) + ROWNUM, S
+FROM (
+  SELECT DISTINCT UPPER(TRIM(SATUAN)) AS S FROM (
+    SELECT SATUAN FROM POS_PRODUCT UNION ALL SELECT SATUAN FROM POS_PRODUCT_SATUAN)
+  WHERE SATUAN IS NOT NULL
+    AND UPPER(TRIM(SATUAN)) NOT IN (SELECT UPPER(TRIM(SATUAN)) FROM POS_SATUAN WHERE SATUAN IS NOT NULL)
+  ORDER BY 1)"),
+            ],
+        },
+        Migration {
+            id: "0012_satuan_master_id",
+            deskripsi: "POS_SATUAN warisan: isi ID yang NULL agar tiap satuan punya ID unik untuk CRUD",
+            statements: vec![raw(r"UPDATE POS_SATUAN SET ID = (SELECT NVL(MAX(ID), 0) FROM POS_SATUAN) + ROWNUM WHERE ID IS NULL")],
+        },
+        Migration {
+            id: "0013_product_satuan_beli",
+            deskripsi: "Harga beli terakhir per satuan tambahan (POS_PRODUCT_SATUAN.HARGA_BELI, NULL = BELI x ISI)",
+            statements: vec![ddl("ALTER TABLE POS_PRODUCT_SATUAN ADD (HARGA_BELI NUMBER(18,2))")],
+        },
     ]
 }
 
@@ -360,7 +385,7 @@ mod tests {
         urut.sort();
         urut.dedup();
         assert_eq!(ids, urut);
-        assert_eq!(ids.len(), 10);
+        assert_eq!(ids.len(), 13);
     }
 
     #[test]

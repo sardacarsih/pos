@@ -1,6 +1,13 @@
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
 String _s(dynamic v) => (v as String?) ?? '';
 
+/// Angka dari JSON; API mengirim kolom Decimal tertentu sebagai string (mis. stok, isi satuan).
+double? _dn(dynamic v) => v is num
+    ? v.toDouble()
+    : v is String
+    ? double.tryParse(v)
+    : null;
+
 class Profil {
   Profil({
     this.id = 0,
@@ -78,7 +85,7 @@ typedef IsianSatuanJual = ({String satuan, num isi, num harga, String barcode});
 class SatuanJual {
   SatuanJual.fromJson(Map<String, dynamic> j)
     : satuan = _s(j['satuan']),
-      isi = (j['isi'] as num?)?.toDouble() ?? 1,
+      isi = _dn(j['isi']) ?? 1,
       harga = _i(j['harga']),
       barcode = _s(j['barcode']);
   final String satuan, barcode;
@@ -88,6 +95,13 @@ class SatuanJual {
 
 class Kategori {
   Kategori.fromJson(Map<String, dynamic> j)
+    : id = _s(j['id']),
+      nama = _s(j['nama']);
+  final String id, nama;
+}
+
+class Satuan {
+  Satuan.fromJson(Map<String, dynamic> j)
     : id = _s(j['id']),
       nama = _s(j['nama']);
   final String id, nama;
@@ -383,7 +397,7 @@ class StokItem {
       satuan = _s(j['satuan']),
       kategori = _s(j['kategori']),
       barcode = _s(j['barcode']),
-      stok = (j['stok'] as num?)?.toDouble() ?? 0,
+      stok = _dn(j['stok']) ?? 0,
       satuanTambahan = [
         for (final s in (j['satuan_tambahan'] as List? ?? const []))
           SatuanJual.fromJson(s as Map<String, dynamic>),

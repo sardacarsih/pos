@@ -33,6 +33,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
   final _scroll = ScrollController();
   final List<ProdukAdmin> _items = [];
   List<Kategori> _kategori = [];
+  List<String> _satuan = [];
   String? _aktif; // null = semua, 'Y', 'N'
   int? _rugi, _tanpaHpp;
   bool _loading = false;
@@ -60,6 +61,13 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         .semuaKategori()
         .then((k) {
           if (mounted) setState(() => _kategori = k);
+        })
+        .catchError((_) {});
+    ref
+        .read(apiProvider)
+        .semuaSatuan()
+        .then((s) {
+          if (mounted) setState(() => _satuan = [for (final x in s) x.nama]);
         })
         .catchError((_) {});
   }
@@ -168,16 +176,18 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
 
   Future<void> _toggleAktif(ProdukAdmin p) async {
     try {
-      final baru = await ref.read(apiProvider).ubahProduk(
-        p.id,
-        nama: p.nama,
-        barcode: p.barcode,
-        satuan: p.satuan,
-        kategoriId: p.kategoriId,
-        harga: p.harga,
-        beli: p.beli,
-        aktif: !p.aktif,
-      );
+      final baru = await ref
+          .read(apiProvider)
+          .ubahProduk(
+            p.id,
+            nama: p.nama,
+            barcode: p.barcode,
+            satuan: p.satuan,
+            kategoriId: p.kategoriId,
+            harga: p.harga,
+            beli: p.beli,
+            aktif: !p.aktif,
+          );
       if (!mounted) return;
       setState(() {
         final i = _items.indexWhere((e) => e.id == baru.id);
@@ -209,7 +219,12 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         builder: (c) => AlertDialog(
           title: const Text('Tidak bisa dihapus'),
           content: Text('${p.nama}\n\n$tolak'),
-          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Mengerti'))],
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Mengerti'),
+            ),
+          ],
         ),
       );
       return;
@@ -218,11 +233,18 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Hapus permanen?'),
-        content: Text('${p.nama} (${p.kode})\n\nProduk belum pernah dipakai di transaksi. Data dihapus dan tidak dapat dibatalkan.'),
+        content: Text(
+          '${p.nama} (${p.kode})\n\nProduk belum pernah dipakai di transaksi. Data dihapus dan tidak dapat dibatalkan.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB3261E),
+            ),
             onPressed: () => Navigator.pop(c, true),
             child: const Text('Hapus permanen'),
           ),
@@ -245,7 +267,11 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
     FocusManager.instance.primaryFocus?.unfocus();
     final nama = TextEditingController();
     final barcode = TextEditingController();
-    final satuan = TextEditingController(text: 'PCS');
+    final satuan = TextEditingController(
+      text: _satuan.contains('PCS')
+          ? 'PCS'
+          : (_satuan.isEmpty ? '' : _satuan.first),
+    );
     final harga = TextEditingController();
     final beli = TextEditingController();
     var kategoriId = _kategori.isEmpty ? '' : _kategori.first.id;
@@ -270,9 +296,8 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       galat!,
-                      style: Theme.of(c).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(c).colorScheme.error,
-                      ),
+                      style: Theme.of(c).textTheme.bodyMedium
+                          ?.copyWith(color: Theme.of(c).colorScheme.error),
                     ),
                   ),
               ],
@@ -296,11 +321,11 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: satuan,
-                      decoration: const InputDecoration(
-                        labelText: 'Satuan dasar',
-                      ),
+                    _PilihSatuan(
+                      label: 'Satuan dasar',
+                      nilai: satuan.text,
+                      opsi: _satuan,
+                      onChanged: (v) => satuan.text = v,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -351,6 +376,7 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                       _SatuanJualFields(
                         key: ObjectKey(draf),
                         draf: draf,
+                        opsi: _satuan,
                         onHapus: () => set(() => satuanLain.remove(draf)),
                       ),
                     OutlinedButton(
@@ -542,9 +568,11 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                   decoration: const InputDecoration(labelText: 'Barcode'),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: satuan,
-                  decoration: const InputDecoration(labelText: 'Satuan'),
+                _PilihSatuan(
+                  label: 'Satuan',
+                  nilai: satuan.text,
+                  opsi: _satuan,
+                  onChanged: (v) => satuan.text = v,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -663,7 +691,8 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
         // Filter aktif/nonaktif aktif -> produk yang tidak lagi cocok hilang dari daftar.
         if (_aktif == 'Y' && !baru.aktif ||
             _aktif == 'N' && baru.aktif ||
-            widget.hargaRendah && (!baru.aktif || (baru.beli > 0 && baru.harga > baru.beli))) {
+            widget.hargaRendah &&
+                (!baru.aktif || (baru.beli > 0 && baru.harga > baru.beli))) {
           _items.removeWhere((e) => e.id == baru.id);
         }
       });
@@ -852,21 +881,47 @@ class _AdminProdukPageState extends ConsumerState<AdminProdukPage> {
                               }
                             },
                             itemBuilder: (_) => [
-                              const PopupMenuItem(value: 'ubah', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Ubah'), dense: true)),
-                              const PopupMenuItem(value: 'foto', child: ListTile(leading: Icon(Icons.add_a_photo_outlined), title: Text('Ganti foto'), dense: true)),
+                              const PopupMenuItem(
+                                value: 'ubah',
+                                child: ListTile(
+                                  leading: Icon(Icons.edit_outlined),
+                                  title: Text('Ubah'),
+                                  dense: true,
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'foto',
+                                child: ListTile(
+                                  leading: Icon(Icons.add_a_photo_outlined),
+                                  title: Text('Ganti foto'),
+                                  dense: true,
+                                ),
+                              ),
                               PopupMenuItem(
                                 value: 'aktif',
                                 child: ListTile(
-                                  leading: Icon(p.aktif ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                                  title: Text(p.aktif ? 'Nonaktifkan' : 'Aktifkan'),
+                                  leading: Icon(
+                                    p.aktif
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                  ),
+                                  title: Text(
+                                    p.aktif ? 'Nonaktifkan' : 'Aktifkan',
+                                  ),
                                   dense: true,
                                 ),
                               ),
                               const PopupMenuItem(
                                 value: 'hapus',
                                 child: ListTile(
-                                  leading: Icon(Icons.delete_outline, color: Color(0xFFB3261E)),
-                                  title: Text('Hapus permanen', style: TextStyle(color: Color(0xFFB3261E))),
+                                  leading: Icon(
+                                    Icons.delete_outline,
+                                    color: Color(0xFFB3261E),
+                                  ),
+                                  title: Text(
+                                    'Hapus permanen',
+                                    style: TextStyle(color: Color(0xFFB3261E)),
+                                  ),
                                   dense: true,
                                 ),
                               ),
@@ -952,10 +1007,12 @@ class _SatuanJualFields extends StatelessWidget {
   const _SatuanJualFields({
     super.key,
     required this.draf,
+    required this.opsi,
     required this.onHapus,
   });
 
   final _DrafSatuanJual draf;
+  final List<String> opsi;
   final VoidCallback onHapus;
 
   @override
@@ -965,14 +1022,11 @@ class _SatuanJualFields extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextFormField(
-            initialValue: draf.satuan,
+          _PilihSatuan(
+            label: 'Satuan tambahan',
+            nilai: draf.satuan,
+            opsi: opsi,
             onChanged: (v) => draf.satuan = v,
-            maxLength: 20,
-            decoration: const InputDecoration(
-              labelText: 'Satuan tambahan',
-              counterText: '',
-            ),
           ),
           TextFormField(
             initialValue: draf.isi,
@@ -1000,6 +1054,37 @@ class _SatuanJualFields extends StatelessWidget {
           TextButton(onPressed: onHapus, child: const Text('Hapus satuan')),
         ],
       ),
+    );
+  }
+}
+
+/// Pilihan satuan dari master. Nilai awal yang tidak ada di master (produk warisan) tetap ditampilkan.
+class _PilihSatuan extends StatelessWidget {
+  const _PilihSatuan({
+    required this.label,
+    required this.nilai,
+    required this.opsi,
+    required this.onChanged,
+  });
+
+  final String label, nilai;
+  final List<String> opsi;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final daftar = [
+      if (nilai.isNotEmpty && !opsi.contains(nilai)) nilai,
+      ...opsi,
+    ];
+    return DropdownButtonFormField<String>(
+      initialValue: daftar.contains(nilai) ? nilai : null,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label),
+      items: [
+        for (final n in daftar) DropdownMenuItem(value: n, child: Text(n)),
+      ],
+      onChanged: (v) => onChanged(v ?? ''),
     );
   }
 }

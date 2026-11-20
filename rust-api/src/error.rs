@@ -46,6 +46,7 @@ impl AppError {
 impl From<oracle::Error> for AppError {
     fn from(e: oracle::Error) -> Self {
         if e.oci_code() == Some(1) {
+            tracing::warn!(error = %e, "pelanggaran unik");
             return AppError::Conflict("Data sudah ada".into());
         }
         tracing::error!(error = %e, "kesalahan database");

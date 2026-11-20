@@ -137,6 +137,10 @@ class _AdminOpnameBaruPageState extends ConsumerState<AdminOpnameBaruPage> {
       });
     } on ApiException catch (e) {
       if (mounted && id == _requestId) setState(() => _galatCari = e.pesan);
+    } catch (_) {
+      if (mounted && id == _requestId) {
+        setState(() => _galatCari = 'Gagal membaca hasil pencarian.');
+      }
     } finally {
       if (mounted && id == _requestId) setState(() => _mencari = false);
     }

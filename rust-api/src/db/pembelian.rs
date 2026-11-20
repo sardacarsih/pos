@@ -125,6 +125,8 @@ struct Satuan {
     satuan: String,
     isi: String,
     barcode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    beli: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -154,10 +156,10 @@ pub fn referensi(c: &Connection) -> AppResult<Value> {
     let mut produk = BTreeMap::new();
     for row in c.query(
         &format!(
-        "SELECT p.PRODUCTID,p.KODE_ITEM,p.PRODUCTNAME,{},p.SATUAN,p.BARCODE,s.SATUAN,{},s.BARCODE
+        "SELECT p.PRODUCTID,p.KODE_ITEM,p.PRODUCTNAME,{},p.SATUAN,p.BARCODE,s.SATUAN,{},s.BARCODE,{}
          FROM POS_PRODUCT p LEFT JOIN POS_PRODUCT_SATUAN s ON s.PRODUCT_ID=p.PRODUCTID
          WHERE p.AKTIF='Y' ORDER BY p.PRODUCTID,s.SATUAN",
-        tm("NVL(p.BELI,0)"), tm("s.ISI"),
+        tm("NVL(p.BELI,0)"), tm("s.ISI"), tm("s.HARGA_BELI"),
     ),
         &[],
     )? {
@@ -174,6 +176,7 @@ pub fn referensi(c: &Connection) -> AppResult<Value> {
                     satuan: r.get(4)?,
                     isi: "1".into(),
                     barcode: r.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                    beli: None,
                 }],
             }),
         };
@@ -182,6 +185,7 @@ pub fn referensi(c: &Connection) -> AppResult<Value> {
                 satuan,
                 isi: r.get(7)?,
                 barcode: r.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                beli: r.get::<_, Option<String>>(9)?,
             });
         }
     }
@@ -515,6 +519,11 @@ fn simpan_snapshot(c: &Connection, no: &str, n: i64, req: &BarisReq, b: &Baris) 
          VALUES (:no,:n,:p,:kode,:nama,:sat,:dasar,{},{},:harga,:pot)", num("isi"), num("qty")),
         &[("no", &no), ("n", &n), ("p", &req.product_id), ("kode", &b.kode), ("nama", &b.nama),
           ("sat", &req.satuan.trim()), ("dasar", &b.dasar), ("isi", &isi), ("qty", &qty), ("harga", &req.harga), ("pot", &req.potongan)],
+    )?;
+    // Ingat harga beli terakhir per satuan tambahan terdaftar (0 baris bila satuan dasar / belum terdaftar).
+    c.execute_named(
+        "UPDATE POS_PRODUCT_SATUAN SET HARGA_BELI=:harga WHERE PRODUCT_ID=:p AND UPPER(SATUAN)=UPPER(:sat)",
+        &[("harga", &req.harga), ("p", &req.product_id), ("sat", &req.satuan.trim())],
     )?;
     Ok(())
 }
