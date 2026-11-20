@@ -195,13 +195,16 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         }));
     }
     h.push(cek("jumlah stok habis", || Ok(katalog::jumlah_stok_habis(conn, awal, hari)?.to_string())));
-    h.push(cek("daftar stok habis (cari + paginasi)", || {
-        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false)?;
-        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5, false)?;
-        let (m, _) = katalog::stok_habis(conn, Some("a"), None, awal, hari, 1, 5, true)?;
-        let ids: Vec<i64> = m.items.iter().map(|p| p.id).collect();
-        let satuan = katalog::satuan_tambahan(conn, &ids)?;
-        Ok(format!("{} baris, total {:?}, dengan filter {} baris, multi_satuan {} produk bersatuan", a.items.len(), jumlah, b.items.len(), satuan.len()))
+    h.push(cek("daftar stok habis (cari + paginasi + urut qty)", || {
+        use katalog::UrutanStokHabis::{Nama, Qty};
+
+        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false, Nama)?;
+        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5, false, Nama)?;
+        let (urut, _) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false, Qty)?;
+        if urut.items.windows(2).any(|pasang| pasang[0].stok > pasang[1].stok) {
+            return Err(AppError::Internal("Urutan qty stok habis tidak menaik".into()));
+        }
+        Ok(format!("{} baris, total {:?}, dengan filter {} baris", a.items.len(), jumlah, b.items.len()))
     }));
     h.push(cek("harga jual <= HPP (hitung + daftar)", || {
         let n = katalog::jumlah_harga_rendah(conn)?;
@@ -273,6 +276,10 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
     h.push(cek("valuasi persediaan per kategori", || {
         let v = persediaan::valuasi(conn, None, awal, hari)?;
         Ok(format!("{} produk, nilai {}, tanpa HPP {}, {} kategori", v.total_produk, v.total_nilai, v.tanpa_hpp, v.per_kategori.len()))
+    }));
+    h.push(cek("valuasi persediaan per item", || {
+        let h = persediaan::valuasi_item(conn, None, awal, hari, 1, 50)?;
+        Ok(format!("{} item pada halaman pertama, ada_lagi={}", h.items.len(), h.ada_lagi))
     }));
     h.push(cek("stok minimum (daftar + jumlah)", || {
         let (h, jumlah) = persediaan::stok_minimum(conn, None, None, awal, hari, 1, 5)?;

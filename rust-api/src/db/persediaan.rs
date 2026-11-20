@@ -14,6 +14,7 @@ use crate::error::{AppError, AppResult};
 
 const OPERASI: &str = "SESUAI";
 const OPERASI_BALIK: &str = "SESUAI_BALIK";
+const HPP_EXPR: &str = "NVL(p.BELI, 0)";
 /// 99.999.999,9999 — batas |qty| penyesuaian (scale maks 4).
 const MAKS_QTY: Decimal = rust_decimal::dec!(99999999.9999);
 
@@ -99,6 +100,19 @@ pub struct Valuasi {
     pub tanpa_hpp: i64,
     pub jumlah_stok_minim: i64,
     pub per_kategori: Vec<KategoriValuasi>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ValuasiItem {
+    pub id: i64,
+    pub kode: String,
+    pub nama: String,
+    pub kategori: String,
+    pub satuan: String,
+    pub stok: Decimal,
+    pub hpp: Decimal,
+    pub nilai: Decimal,
+    pub tanpa_hpp: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -532,12 +546,12 @@ pub fn valuasi(conn: &Connection, kategori: Option<&str>, dari: NaiveDate, sampa
     }
     let sql = format!(
         "SELECT NVL(k.KATEGORI, 'Tanpa kategori'), COUNT(*), {}, {}, \
-                SUM(CASE WHEN NVL(p.BELI, 0) = 0 THEN 1 ELSE 0 END), \
+                SUM(CASE WHEN {HPP_EXPR} = 0 THEN 1 ELSE 0 END), \
                 SUM(CASE WHEN p.STOK_MIN IS NOT NULL AND {STOK_EXPR} < p.STOK_MIN THEN 1 ELSE 0 END) \
          FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
          GROUP BY NVL(k.KATEGORI, 'Tanpa kategori') ORDER BY 1",
         tm(&format!("SUM({STOK_EXPR})")),
-        tm(&format!("SUM(({STOK_EXPR}) * NVL(p.BELI, 0))")),
+        tm(&format!("SUM(({STOK_EXPR}) * {HPP_EXPR})")),
         stok_join(None)
     );
     let mut per_kategori = Vec::new();
@@ -560,6 +574,52 @@ pub fn valuasi(conn: &Connection, kategori: Option<&str>, dari: NaiveDate, sampa
     })?;
     v.per_kategori = per_kategori;
     Ok(v)
+}
+
+/// Rincian valuasi produk aktif dengan periode saldo dan HPP yang sama dengan ringkasan.
+pub fn valuasi_item(conn: &Connection, q: Option<&str>, dari: NaiveDate, sampai: NaiveDate, page: u32, size: u32) -> AppResult<Halaman<ValuasiItem>> {
+    let mut b = Binds::default();
+    b.add("dari", dari.format("%Y-%m-%d"));
+    b.add("sampai", sampai.format("%Y-%m-%d"));
+    let mut where_sql = String::from("WHERE p.AKTIF = 'Y'");
+    if let Some(q) = q.map(str::trim).filter(|q| !q.is_empty()) {
+        b.add("q", like(q));
+        b.add("qraw", q);
+        where_sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw)");
+    }
+    b.add("off", (u64::from(page.saturating_sub(1)) * u64::from(size)).to_string());
+    b.add("lim", (size + 1).to_string());
+    let sql = format!(
+        "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, NVL(k.KATEGORI, 'Tanpa kategori'), p.SATUAN, {}, {}, {} \
+         FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
+         ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
+        tm(STOK_EXPR),
+        tm(HPP_EXPR),
+        tm(&format!("({STOK_EXPR}) * {HPP_EXPR}")),
+        stok_join(None)
+    );
+    let mut items = Vec::new();
+    b.with(|p| -> AppResult<()> {
+        for r in conn.query_named(&sql, p)? {
+            let r = r?;
+            let hpp = dec(&r.get::<_, String>(6)?)?;
+            items.push(ValuasiItem {
+                id: r.get(0)?,
+                kode: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                nama: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                kategori: r.get(3)?,
+                satuan: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                stok: dec(&r.get::<_, String>(5)?)?,
+                hpp,
+                nilai: dec(&r.get::<_, String>(7)?)?,
+                tanpa_hpp: hpp.is_zero(),
+            });
+        }
+        Ok(())
+    })?;
+    let ada_lagi = items.len() > size as usize;
+    items.truncate(size as usize);
+    Ok(Halaman { items, ada_lagi })
 }
 
 /// Produk aktif dengan ambang minimum terisi dan stok sistem < ambang (strict `<`; stok == ambang tidak alert).

@@ -166,6 +166,7 @@ impl Drop for SkemaPos<'_> {
 #[test]
 fn stok_habis_dan_opname_idempoten() {
     use pos_api::{db::{faktur, katalog, opname}, error::AppError};
+    use katalog::UrutanStokHabis::{Nama, Qty};
     use rust_decimal::Decimal;
 
     let Some(c) = koneksi() else {
@@ -194,10 +195,34 @@ fn stok_habis_dan_opname_idempoten() {
     c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-A', 5)", &[]).unwrap();
     c.commit().unwrap();
 
-    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, false).unwrap();
+    let (h, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, false, Nama).unwrap();
     assert_eq!((h.items.len(), jumlah), (2, Some(2)));
-    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10, false).unwrap();
+    let (h, _) = katalog::stok_habis(&c, Some("it-a"), None, awal, hari, 1, 10, false, Nama).unwrap();
     assert_eq!(h.items.len(), 1);
+
+    for (id, kode, nama) in [(3, "IT-C", "IT-C"), (4, "IT-D", "IT-D"), (5, "IT-E", "IT-D")] {
+        c.execute_named(
+            "INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, AKTIF) VALUES (:i, :k, :n, 'Y')",
+            &[("i", &id), ("k", &kode), ("n", &nama)],
+        ).unwrap();
+    }
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-C', 2.5)", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-D', 10)", &[]).unwrap();
+    c.execute("INSERT INTO POS_PENJUALAN_DETAIL (NO_TRANSAKSI, KODE_BARANG, JUMLAH_BARANG) VALUES ('J1', 'IT-E', 10)", &[]).unwrap();
+    c.commit().unwrap();
+
+    let (p1, jumlah) = katalog::stok_habis(&c, None, None, awal, hari, 1, 2, false, Qty).unwrap();
+    let (p2, jumlah_lanjutan) = katalog::stok_habis(&c, None, None, awal, hari, 2, 2, false, Qty).unwrap();
+    let (p3, _) = katalog::stok_habis(&c, None, None, awal, hari, 3, 2, false, Qty).unwrap();
+    assert_eq!((jumlah, jumlah_lanjutan), (Some(5), None));
+    assert!(p1.ada_lagi && p2.ada_lagi && !p3.ada_lagi);
+    let hasil: Vec<_> = p1.items.into_iter().chain(p2.items).chain(p3.items).map(|p| (p.id, p.stok)).collect();
+    assert_eq!(hasil, [(4, rust_decimal::dec!(-10)), (5, rust_decimal::dec!(-10)), (3, rust_decimal::dec!(-2.5)), (1, Decimal::ZERO), (2, Decimal::ZERO)]);
+    let (nama, _) = katalog::stok_habis(&c, None, None, awal, hari, 1, 10, false, Nama).unwrap();
+    assert_eq!(nama.items.iter().map(|p| p.id).collect::<Vec<_>>(), [1, 2, 3, 4, 5]);
+    let (cari, jumlah) = katalog::stok_habis(&c, Some("it-d"), None, awal, hari, 1, 10, false, Qty).unwrap();
+    assert_eq!(jumlah, Some(2));
+    assert_eq!(cari.items.iter().map(|p| p.id).collect::<Vec<_>>(), [4, 5]);
 
     let nama = format!("it.{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
     let uid = user::create_user(&c, &nama, "Uji Opname", &password::hash("x-12345678").unwrap(), Role::Admin, None).unwrap();
@@ -506,10 +531,10 @@ fn opname_multi_satuan_gabungan_presisi_dan_retry() {
     assert_eq!(h.items.len(), 1);
     assert_eq!(h.items[0].kode, "M-A");
     assert!(katalog::daftar_produk_admin(&c, Some("M-A-DUS"), None, Some("Y"), false, 1, 10, false).unwrap().items.is_empty());
-    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, true).unwrap();
+    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, true, katalog::UrutanStokHabis::Nama).unwrap();
     assert_eq!(h.items.len(), 1);
     assert_eq!(h.items[0].kode, "M-C");
-    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, false).unwrap();
+    let (h, _) = katalog::stok_habis(&c, Some("M-C-RCG"), None, awal, hari, 1, 10, false, katalog::UrutanStokHabis::Nama).unwrap();
     assert!(h.items.is_empty());
     let satuan = katalog::satuan_tambahan(&c, &[1, 2, 3]).unwrap();
     assert_eq!(satuan[&1].len(), 3);
@@ -1184,6 +1209,41 @@ fn valuasi_dan_stok_minimum() {
     assert!(persediaan::set_stok_min(&c, 1, Some(d("-1"))).is_err());
     assert!(persediaan::set_stok_min(&c, 1, Some(d("1.00001"))).is_err());
     assert!(matches!(persediaan::set_stok_min(&c, 999, Some(d("1"))), Err(AppError::NotFound(_))));
+
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, BARCODE, PRODUCTNAME, BELI, AKTIF) VALUES (4, 'VL-D', '123456', 'Produk Nol', NULL, 'Y')", &[]).unwrap();
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, BELI, AKTIF) VALUES (5, 'VL-E', 'Produk Negatif', 12.5, 'Y')", &[]).unwrap();
+    c.execute("INSERT INTO POS_PRODUCT (PRODUCTID, KODE_ITEM, PRODUCTNAME, BELI, AKTIF) VALUES (6, 'VL-F', 'Produk Nonaktif', 10, 'N')", &[]).unwrap();
+    for (kode, qty) in [("VL-E", -3), ("VL-F", 5)] {
+        c.execute_named(
+            "INSERT INTO POS_STOCK (KODE_BARANG, TANGGAL, QUANTITY, HPP) VALUES (:k, TO_DATE(:d,'YYYY-MM-DD'), :q, 0)",
+            &[("k", &kode), ("d", &awal.format("%Y-%m-%d").to_string()), ("q", &qty)],
+        ).unwrap();
+    }
+    c.commit().unwrap();
+
+    let pertama = persediaan::valuasi_item(&c, None, awal, hari, 1, 3).unwrap();
+    let berikutnya = persediaan::valuasi_item(&c, None, awal, hari, 2, 3).unwrap();
+    assert!(pertama.ada_lagi && !berikutnya.ada_lagi);
+    let items: Vec<_> = pertama.items.into_iter().chain(berikutnya.items).collect();
+    assert_eq!(items.iter().map(|i| i.id).collect::<Vec<_>>(), [5, 4, 1, 2, 3]);
+    let v = persediaan::valuasi(&c, None, awal, hari).unwrap();
+    assert_eq!(items.len() as i64, v.total_produk);
+    assert_eq!(items.iter().map(|i| i.nilai).sum::<Decimal>(), v.total_nilai);
+    assert_eq!(items.iter().filter(|i| i.tanpa_hpp).count() as i64, v.tanpa_hpp);
+    let negatif = &items[0];
+    assert_eq!((negatif.stok, negatif.hpp, negatif.nilai), (d("-3"), d("12.5"), d("-37.5")));
+    let kosong = &items[1];
+    assert_eq!((kosong.stok, kosong.hpp, kosong.nilai), (Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
+    assert!(kosong.tanpa_hpp && items[3].tanpa_hpp);
+    assert_eq!(kosong.kategori, "Tanpa kategori");
+    for (q, id) in [(" produk negatif ", 5), ("vl-b", 2), ("123456", 4)] {
+        let h = persediaan::valuasi_item(&c, Some(q), awal, hari, 1, 10).unwrap();
+        assert_eq!(h.items.iter().map(|i| i.id).collect::<Vec<_>>(), [id]);
+    }
+    for q in ["123", "VL-F", "%"] {
+        let h = persediaan::valuasi_item(&c, Some(q), awal, hari, 1, 10).unwrap();
+        assert!(h.items.is_empty() && !h.ada_lagi);
+    }
 
     bersihkan_user(&c, 0);
     c.execute("DELETE FROM MOB_STOK_SESUAI", &[]).unwrap();

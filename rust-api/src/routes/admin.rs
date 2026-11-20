@@ -749,6 +749,7 @@ pub struct StokQuery {
     size: Option<u32>,
     /// `1` = sertakan satuan_tambahan (opname multi-satuan) dan cocokkan barcode tambahan saat mencari.
     multi_satuan: Option<String>,
+    urut: Option<String>,
 }
 
 impl StokQuery {
@@ -757,7 +758,8 @@ impl StokQuery {
     }
 }
 
-/// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
+/// Produk aktif dengan stok sistem <= 0. `urut=qty` mengurutkan dari stok terendah.
+/// `jumlah` (total seluruh halaman) hanya ada di halaman 1.
 pub async fn stok_habis(
     State(s): State<AppState>,
     a: Auth,
@@ -773,10 +775,14 @@ pub async fn stok_habis(
     let (page, size) = (pg.page(), pg.size());
     let teks = pg.q;
     let kategori = q.kategori;
+    let urutan = match q.urut.as_deref() {
+        Some("qty") => katalog::UrutanStokHabis::Qty,
+        _ => katalog::UrutanStokHabis::Nama,
+    };
     let (h, jumlah, kontrol) = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
         let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
-        let (mut h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size, multi)?;
+        let (mut h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size, multi, urutan)?;
         if multi {
             let ids: Vec<i64> = h.items.iter().map(|p| p.id).collect();
             let mut satuan = katalog::satuan_tambahan(c, &ids)?;
@@ -1000,6 +1006,11 @@ mod opname_tests {
         let uri: axum::http::Uri = "/api/v1/admin/stok?q=gula&multi_satuan=1".parse().unwrap();
         let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
         assert!(q.0.multi());
+        assert_eq!(q.0.urut, None);
+
+        let uri = "/api/v1/admin/stok-habis?urut=qty".parse().unwrap();
+        let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!(q.0.urut.as_deref(), Some("qty"));
     }
 }
 

@@ -5,18 +5,22 @@
   import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
   import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import Coins from '@lucide/svelte/icons/coins';
+  import List from '@lucide/svelte/icons/list';
   import { TAB_SEDIA, type TabSedia } from './persediaan';
   import AdminOpname from './AdminOpname.svelte';
   import PersediaanKartu from './PersediaanKartu.svelte';
   import PersediaanHabis from './PersediaanHabis.svelte';
   import PersediaanSesuaikan from './PersediaanSesuaikan.svelte';
   import PersediaanValuasi from './PersediaanValuasi.svelte';
+  import PersediaanValuasiItem from './PersediaanValuasiItem.svelte';
   import './persediaan.css';
 
   export let tabAwal: TabSedia = 'kartu';
   let tab: TabSedia = tabAwal;
   let opnameRef: AdminOpname | undefined;
-  const IKON_TAB: Record<TabSedia, any> = { kartu: NotebookText, habis: PackageX, opname: ClipboardCheck, sesuai: SlidersHorizontal, valuasi: Coins };
+  const IKON_TAB: Record<TabSedia, any> = {
+    kartu: NotebookText, habis: PackageX, opname: ClipboardCheck, sesuai: SlidersHorizontal, valuasi: Coins, 'valuasi-item': List
+  };
 
   let tabAwalTerakhir = tabAwal;
   $: if (tabAwal !== tabAwalTerakhir) { tabAwalTerakhir = tabAwal; void pilihTab(tabAwal); }
@@ -64,6 +68,8 @@
           <PersediaanSesuaikan />
         {:else if tab === 'valuasi'}
           <PersediaanValuasi />
+        {:else if tab === 'valuasi-item'}
+          <PersediaanValuasiItem />
         {/if}
       {/if}
     </div>
