@@ -385,7 +385,7 @@ mod tests {
         urut.sort();
         urut.dedup();
         assert_eq!(ids, urut);
-        assert_eq!(ids.len(), 12);
+        assert_eq!(ids.len(), 13);
     }
 
     #[test]
