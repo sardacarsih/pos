@@ -113,7 +113,9 @@
     } finally { memeriksaSesi = false; }
   }
 
+  let passwordChanged = false;
   async function signIn() {
+    passwordChanged = false;
     busy = true;
     error = '';
     try {
@@ -125,7 +127,23 @@
     } catch(e) { error = (e as Error).message; }
     finally { busy = false; }
   }
-  async function changePassword() { busy = true; error = ''; try { await api('/auth/ganti-password',{method:'POST',body:{password_lama:password,password_baru:newPassword}}); clearSession(); user = null; password = newPassword = ''; error = 'Password berhasil diganti. Silakan login kembali.'; } catch(e) { error = (e as Error).message; } finally { busy = false; } }
+  async function changePassword() {
+    if (busy) return;
+    busy = true;
+    error = '';
+    try {
+      await api('/auth/ganti-password', { method: 'POST', body: { password_lama: password, password_baru: newPassword } });
+      clearSession();
+      password = newPassword = '';
+      lihat = false;
+      user = null;
+      passwordChanged = true;
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      busy = false;
+    }
+  }
   let persediaan: Persediaan | undefined;
   let tabAwal: TabSedia = 'kartu';
   function pilihView(tujuan: string) {
@@ -140,6 +158,8 @@
   });
   async function signOut() {
     if (persediaan && !persediaan.bolehKeluar()) return;
+    password = newPassword = error = '';
+    lihat = false;
     user = null; modeLokal = false; view = 'dashboard'; badge = {}; periode = null;
     try { await logout(); } catch { /* Sesi lokal sudah dikunci. */ }
   }
@@ -150,8 +170,20 @@
 <svelte:head><title>{user ? judulDokumen(labelView(menu, view)) : 'Kopkar POS'}</title><meta name="description" content="Aplikasi koperasi Kopkar Kusuma Lestari"/></svelte:head>
 <div class:dark class="app">
 {#if loading}<div class="center muted">Menyiapkan aplikasi…</div>
-{:else if !user}<main class="login-page"><div class="login-story"><div class="brand inverse"><img src={logoKopkar} width="42" height="42" alt=""/><span>KOPKAR <small>KUSUMA LESTARI</small></span></div><div class="story-text"><p class="eyebrow light">BERSAMA TUMBUH LEBIH BAIK</p><h1>Lebih dekat<br/>dengan <em>koperasi.</em></h1><p>Akses layanan, transaksi, dan kebutuhan sehari-hari dalam satu tempat.</p></div><div class="story-footer">KOPKAR KUSUMA LESTARI <span>●</span> LAYANAN DIGITAL</div></div><div class="login-side"><div class="login-card"><img class="login-icon" src={logoKopkar} width="42" height="42" alt="Kopkar Kusuma Lestari"/><p class="eyebrow">SELAMAT DATANG</p><h2>Masuk ke akun</h2><p class="muted">Gunakan akun Kopkar Anda untuk melanjutkan.</p>{#if error}<div class="error" role="alert">{error}</div>{/if}<form on:submit|preventDefault={signIn}><label>Username<span class="field"><UserRound size={18} aria-hidden="true"/><input bind:value={username} autocomplete="username" required placeholder="Masukkan username"/></span></label><label>Password<span class="field"><Lock size={18} aria-hidden="true"/><input type={lihat ? 'text' : 'password'} bind:value={password} autocomplete="current-password" required placeholder="Masukkan password"/><button type="button" class="eye" aria-label={lihat ? 'Sembunyikan password' : 'Tampilkan password'} on:click={() => lihat = !lihat}>{#if lihat}<EyeOff size={18} aria-hidden="true"/>{:else}<Eye size={18} aria-hidden="true"/>{/if}</button></span></label><label class="check"><input type="checkbox" bind:checked={ingat}/> Ingat saya di perangkat ini</label><button class="primary wide" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'} <span><ArrowRight size={18} aria-hidden="true"/></span></button></form><p class="login-help">Mengalami kendala? Hubungi administrator koperasi.</p></div></div></main>
-{:else if user.ganti_password}<div class="center"><section class="panel password-card"><p class="eyebrow">KEAMANAN AKUN</p><h2>Buat password baru</h2><p>Anda perlu mengganti password sementara sebelum melanjutkan.</p>{#if error}<div class="error">{error}</div>{/if}<form on:submit|preventDefault={changePassword}><label>Password saat ini<input type="password" bind:value={password} required/></label><label>Password baru<input type="password" bind:value={newPassword} required/></label><button class="primary wide" disabled={busy}>Ganti password</button></form><button on:click={signOut}>Keluar</button></section></div>
+{:else if !user}<main class="login-page"><div class="login-story"><div class="brand inverse"><img src={logoKopkar} width="42" height="42" alt=""/><span>KOPKAR <small>KUSUMA LESTARI</small></span></div><div class="story-text"><p class="eyebrow light">BERSAMA TUMBUH LEBIH BAIK</p><h1>Lebih dekat<br/>dengan <em>koperasi.</em></h1><p>Akses layanan, transaksi, dan kebutuhan sehari-hari dalam satu tempat.</p></div><div class="story-footer">KOPKAR KUSUMA LESTARI <span>●</span> LAYANAN DIGITAL</div></div><div class="login-side"><div class="login-card"><img class="login-icon" src={logoKopkar} width="42" height="42" alt="Kopkar Kusuma Lestari"/><p class="eyebrow">SELAMAT DATANG</p><h2>Masuk ke akun</h2><p class="muted">Gunakan akun Kopkar Anda untuk melanjutkan.</p>{#if passwordChanged}<p class="notice" role="status">Password berhasil diganti. Silakan masuk kembali.</p>{/if}{#if error}<div class="error" role="alert">{error}</div>{/if}<form on:submit|preventDefault={signIn}><label>Username<span class="field"><UserRound size={18} aria-hidden="true"/><input bind:value={username} autocomplete="username" required placeholder="Masukkan username"/></span></label><label>Password<span class="field"><Lock size={18} aria-hidden="true"/><input type={lihat ? 'text' : 'password'} bind:value={password} autocomplete="current-password" required placeholder="Masukkan password"/><button type="button" class="eye" aria-label={lihat ? 'Sembunyikan password' : 'Tampilkan password'} on:click={() => lihat = !lihat}>{#if lihat}<EyeOff size={18} aria-hidden="true"/>{:else}<Eye size={18} aria-hidden="true"/>{/if}</button></span></label><label class="check"><input type="checkbox" bind:checked={ingat}/> Ingat saya di perangkat ini</label><button class="primary wide" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'} <span><ArrowRight size={18} aria-hidden="true"/></span></button></form><p class="login-help">Mengalami kendala? Hubungi administrator koperasi.</p></div></div></main>
+{:else if user.ganti_password}
+  <main class="center"><section class="panel password-card" aria-labelledby="ganti-title">
+    <Lock size={22} aria-hidden="true"/>
+    <h2 id="ganti-title">Buat password baru</h2>
+    <p>Anda perlu mengganti password sementara sebelum melanjutkan.</p>
+    {#if error}<div class="error" role="alert">{error}</div>{/if}
+    <form on:submit|preventDefault={changePassword}>
+      <label>Password sementara<input type="password" autocomplete="current-password" bind:value={password} required/></label>
+      <label>Password baru (minimal 8 karakter)<input type="password" autocomplete="new-password" minlength="8" bind:value={newPassword} required/></label>
+      <button class="primary wide" disabled={busy}>{busy ? 'Menyimpan…' : 'Ganti password'}</button>
+    </form>
+    <button disabled={busy} on:click={signOut}>Keluar</button>
+  </section></main>
 {:else}<div class="shell" class:rail={rail}><a class="skip" href="#konten">Lewati ke konten</a><Sidebar {menu} {view} {badge} {dark} {rail} bisaDiciutkan={!layarSedang} on:pilih={(e) => pilihView(e.detail)} on:tema={toggleTheme} on:keluar={signOut} on:ciut={toggleRail}/>
   <div class="main-area">
     <Topbar judul={labelView(menu, view)} jejak={hitungJejak(menu, view, user.role)}

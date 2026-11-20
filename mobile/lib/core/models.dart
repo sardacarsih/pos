@@ -448,6 +448,17 @@ class SoDokumen {
 }
 
 class UserInfo {
+  UserInfo.withAccess(UserInfo user, {bool? aktif, bool? terkunci})
+    : id = user.id,
+      username = user.username,
+      nama = user.nama,
+      role = user.role,
+      nik = user.nik,
+      aktif = aktif ?? user.aktif,
+      terkunci = terkunci ?? user.terkunci,
+      fotoVersi = user.fotoVersi,
+      kategori = user.kategori;
+
   UserInfo.fromJson(Map<String, dynamic> j)
     : id = _i(j['id']),
       username = _s(j['username']),

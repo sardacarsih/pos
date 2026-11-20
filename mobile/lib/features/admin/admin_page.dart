@@ -8,8 +8,11 @@ import '../../core/api.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/validasi.dart';
-import '../profil/profil_aksi.dart';
 import '../../core/widgets.dart';
+import '../profil/profil_aksi.dart';
+import 'daftar_akun.dart';
+
+typedef _PasswordAkun = ({String username, String password});
 
 class AdminPage extends ConsumerStatefulWidget {
   const AdminPage({super.key});
@@ -23,7 +26,7 @@ class _AdminPageState extends ConsumerState<AdminPage>
     ..addListener(() {
       if (mounted) setState(() {});
     });
-  final _q = TextEditingController();
+  bool _memproses = false;
   List<UserInfo> _users = [];
   bool _loading = true;
   String? _error;
@@ -37,7 +40,6 @@ class _AdminPageState extends ConsumerState<AdminPage>
   @override
   void dispose() {
     _tab.dispose();
-    _q.dispose();
     super.dispose();
   }
 
@@ -59,70 +61,73 @@ class _AdminPageState extends ConsumerState<AdminPage>
     }
   }
 
-  Future<void> _tampilPassword(String judul, String pw) => showDialog<void>(
+  Future<void> _tampilPassword(_PasswordAkun akun) => showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (c) => AlertDialog(
-      title: Text(judul),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Password sementara (hanya tampil sekali). User wajib menggantinya saat login pertama.',
+    builder: (c) => PopScope(
+      canPop: false,
+      child: AlertDialog(
+        scrollable: true,
+        icon: const Icon(Icons.key_outlined),
+        title: const Text('Password sementara'),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(akun.username, style: Theme.of(c).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            const Text(
+              'Password ini hanya ditampilkan sekali. Berikan kepada pengguna. Saat masuk, pengguna wajib membuat password baru sebelum dapat menggunakan aplikasi.',
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              akun.password,
+              style: Theme.of(c).textTheme.headlineSmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              try {
+                await Clipboard.setData(ClipboardData(text: akun.password));
+                if (c.mounted) _pesan('Password tersalin');
+              } on PlatformException {
+                if (c.mounted) {
+                  _pesan('Pilih teks password dan salin secara manual.');
+                }
+              }
+            },
+            icon: const Icon(Icons.copy_outlined),
+            label: const Text('Salin password'),
           ),
-          const SizedBox(height: 12),
-          SelectableText(pw, style: Theme.of(c).textTheme.headlineSmall),
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Sudah dicatat'),
+          ),
         ],
       ),
-      actions: [
-        TextButton.icon(
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: pw));
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Password tersalin')));
-          },
-          icon: const Icon(Icons.copy, size: 18),
-          label: const Text('Salin'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(c),
-          child: const Text('Sudah dicatat'),
-        ),
-      ],
     ),
   );
 
-  Future<T> _jalan<T>(Future<T> Function() f) async {
-    try {
-      return await f();
-    } on ApiException catch (e) {
-      if (mounted) _pesan(e.pesan);
-      rethrow;
-    }
-  }
-
   /// Dialog buat akun (validasi inline, tetap terbuka bila server menolak) lalu tampilkan password sementara.
   Future<void> _tampilDialogBuat(_BuatAkunDialog dialog) async {
-    final pw = await showDialog<String>(
+    final akun = await showDialog<_PasswordAkun>(
       context: context,
       barrierDismissible: false,
       builder: (_) => dialog,
     );
-    if (pw == null || !mounted) return;
-    await _muat();
-    if (mounted) await _tampilPassword('Akun dibuat', pw);
+    if (akun == null || !mounted) return;
+    await _tampilPassword(akun);
+    if (mounted) await _muat();
   }
 
   Future<void> _buatSistem() => _tampilDialogBuat(
     _BuatAkunDialog(
-      judul: 'User sistem baru',
+      judul: 'Tambah pengguna sistem',
       pakaiNama: true,
       pakaiRole: true,
-      kirim: (u, n, r) => ref
-          .read(apiProvider)
-          .buatUser(username: u, nama: n, role: r),
+      kirim: (u, n, r) =>
+          ref.read(apiProvider).buatUser(username: u, nama: n, role: r),
     ),
   );
 
@@ -156,118 +161,139 @@ class _AdminPageState extends ConsumerState<AdminPage>
     );
   }
 
-  Widget _kartu(UserInfo u) => Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      leading: UserAvatar(id: u.id, nama: u.nama, fotoVersi: u.fotoVersi),
-      title: Text(
-        '${u.nama} (${u.username})',
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            StatePill(text: u.role),
-            if (u.nik != null)
-              Text(u.nik!, style: Theme.of(context).textTheme.bodySmall),
-            if (!u.aktif)
-              const StatePill(text: 'NONAKTIF', color: Color(0xFF78817B)),
-            if (u.terkunci)
-              const StatePill(text: 'TERKUNCI', color: Color(0xFFD68A00)),
-          ],
-        ),
-      ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (a) async {
-          try {
-            if (a == 'reset') {
-              final pw = await _jalan(
-                () => ref.read(apiProvider).resetPassword(u.id),
-              );
-              if (mounted) await _tampilPassword('Password direset', pw);
-            } else if (a == 'aktif') {
-              await _jalan(
-                () => ref.read(apiProvider).setAktif(u.id, !u.aktif),
-              );
-              await _muat();
+  Future<void> _tindakan(UserInfo user, TindakanAkun tindakan) async {
+    final reset = tindakan == TindakanAkun.reset;
+    final sendiri = user.id == ref.read(authProvider).profil?.id;
+    if (_memproses || _loading || (!reset && user.aktif && sendiri)) return;
+    setState(() => _memproses = true);
+    final label = reset
+        ? 'Reset password'
+        : user.aktif
+        ? 'Nonaktifkan'
+        : 'Aktifkan';
+    final dampak = reset
+        ? 'Sesi login akan dicabut. Pengguna wajib mengganti password sementara saat masuk.'
+        : user.aktif
+        ? 'Sesi login akan dicabut. Akses ditutup sampai akun diaktifkan kembali.'
+        : 'Pengguna dapat masuk kembali jika akun tidak terkunci.';
+    String? password;
+    try {
+      bool mengirim = false;
+      String? galat;
+      final selesai = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => StatefulBuilder(
+          builder: (c, ubah) {
+            Future<void> kirim() async {
+              if (mengirim) return;
+              ubah(() {
+                mengirim = true;
+                galat = null;
+              });
+              try {
+                final api = ref.read(apiProvider);
+                if (reset) {
+                  password = await api.resetPassword(user.id);
+                } else {
+                  await api.setAktif(user.id, !user.aktif);
+                }
+                if (c.mounted) Navigator.pop(c, true);
+              } on ApiException catch (e) {
+                if (c.mounted) {
+                  ubah(() {
+                    mengirim = false;
+                    galat = e.pesan;
+                  });
+                }
+              }
             }
-          } on ApiException {
-            // Pesan sudah ditampilkan.
-          }
-        },
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'reset', child: Text('Reset password')),
-          PopupMenuItem(
-            value: 'aktif',
-            child: Text(u.aktif ? 'Nonaktifkan' : 'Aktifkan'),
-          ),
-        ],
-      ),
-    ),
-  );
 
-  Widget _daftar(List<UserInfo> items, String kosong) => RefreshIndicator(
-    onRefresh: _muat,
-    child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      children: [
-        if (_loading)
-          const Padding(
-            padding: EdgeInsets.all(40),
-            child: LoadingKopkar(),
-          ),
-        if (_error != null)
-          Card(
-            color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(_error!),
-                  TextButton(onPressed: _muat, child: const Text('Coba lagi')),
+            return PopScope(
+              canPop: !mengirim,
+              child: AlertDialog(
+                scrollable: true,
+                icon: Icon(
+                  reset ? Icons.key_outlined : Icons.power_settings_new,
+                ),
+                title: Text('$label?'),
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${user.nama} (@${user.username})\n\n$dampak'),
+                    if (galat != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            galat!,
+                            style: TextStyle(
+                              color: Theme.of(c).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: mengirim ? null : () => Navigator.pop(c, false),
+                    child: const Text('Batal'),
+                  ),
+                  FilledButton(
+                    onPressed: mengirim ? null : kirim,
+                    child: Text(mengirim ? 'Memproses…' : label),
+                  ),
                 ],
               ),
-            ),
-          ),
-        if (!_loading && _error == null && items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(36),
-            child: Center(child: Text(kosong)),
-          ),
-        for (final u in items) _kartu(u),
-      ],
-    ),
-  );
+            );
+          },
+        ),
+      );
+      if (selesai != true || !mounted) return;
+      setState(() {
+        _users = [
+          for (final item in _users)
+            if (item.id != user.id)
+              item
+            else if (reset)
+              UserInfo.withAccess(item, terkunci: false)
+            else
+              UserInfo.withAccess(item, aktif: !user.aktif),
+        ];
+      });
+      final sementara = password;
+      if (sementara != null) {
+        await _tampilPassword((username: user.username, password: sementara));
+      } else {
+        _pesan(
+          'Akun ${user.username} ${user.aktif ? 'dinonaktifkan' : 'diaktifkan'}.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _memproses = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sistem = [
-      for (final u in _users)
-        if (u.role != 'ANGGOTA') u,
-    ];
-    final semuaAnggota = [
-      for (final u in _users)
-        if (u.role == 'ANGGOTA') u,
-    ];
-    final q = _q.text.trim().toLowerCase();
-    final anggota = q.isEmpty
-        ? semuaAnggota
-        : [
-            for (final u in semuaAnggota)
-              if ('${u.nama} ${u.nik ?? ''} ${u.username}'
-                  .toLowerCase()
-                  .contains(q))
-                u,
-          ];
+    final sistem = _users.where((u) => u.role != 'ANGGOTA').toList();
+    final anggota = _users.where((u) => u.role == 'ANGGOTA').toList();
     final tabSistem = _tab.index == 0;
+    final sibuk = _loading || _memproses;
+    final idSendiri = ref.watch(authProvider.select((a) => a.profil?.id));
+    Widget daftar(List<UserInfo> users, String jenis) => DaftarAkun(
+      users: users,
+      jenis: jenis,
+      idSendiri: idSendiri,
+      loading: _loading,
+      error: _error,
+      onRefresh: sibuk ? null : _muat,
+      onTindakan: sibuk ? null : _tindakan,
+    );
     return TropicalScaffold(
-      title: 'Admin · User Mobile',
+      title: 'Pengguna',
       actions: [
         const ProfilAksi(),
         IconButton(
@@ -276,55 +302,36 @@ class _AdminPageState extends ConsumerState<AdminPage>
           onPressed: () => ref.read(authProvider.notifier).logout(),
         ),
       ],
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: GradientActionButton(
-            label: tabSistem ? 'User sistem' : 'Akun anggota',
-            icon: tabSistem ? Icons.manage_accounts : Icons.person_add_alt_1,
-            onPressed: tabSistem ? _buatSistem : _buatAnggota,
-          ),
-        ),
-      ),
+      bottomNavigationBar: MediaQuery.viewInsetsOf(context).bottom > 0
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: GradientActionButton(
+                  label: tabSistem ? 'Tambah pengguna' : 'Tambah akun anggota',
+                  icon: Icons.person_add_alt_1,
+                  onPressed: sibuk
+                      ? null
+                      : tabSistem
+                      ? _buatSistem
+                      : _buatAnggota,
+                ),
+              ),
+            ),
       body: Column(
         children: [
           TabBar(
             controller: _tab,
             tabs: [
               Tab(text: 'Sistem (${sistem.length})'),
-              Tab(text: 'Anggota (${semuaAnggota.length})'),
+              Tab(text: 'Anggota (${anggota.length})'),
             ],
           ),
           Expanded(
             child: TabBarView(
               controller: _tab,
-              children: [
-                _daftar(sistem, 'Belum ada user sistem.'),
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: TextField(
-                        controller: _q,
-                        onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                          labelText: 'Cari nama atau NIK',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _daftar(
-                        anggota,
-                        q.isEmpty
-                            ? 'Belum ada akun anggota.'
-                            : 'Tidak ada akun anggota yang cocok.',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              children: [daftar(sistem, 'sistem'), daftar(anggota, 'anggota')],
             ),
           ),
         ],
@@ -528,7 +535,8 @@ class _BuatAkunDialog extends StatefulWidget {
     required this.kirim,
     this.atas,
     this.usernameAwal = '',
-    this.usernameBantu = 'Huruf kecil, angka, titik, garis bawah, atau strip (3-50)',
+    this.usernameBantu =
+        'Huruf kecil, angka, titik, garis bawah, atau strip (3-50)',
     this.usernameTerkunci = false,
     this.pakaiNama = false,
     this.pakaiRole = false,
@@ -538,7 +546,8 @@ class _BuatAkunDialog extends StatefulWidget {
   final Widget? atas;
   final String usernameAwal, usernameBantu;
   final bool pakaiNama, pakaiRole;
-  final Future<String> Function(String username, String nama, String role) kirim;
+  final Future<String> Function(String username, String nama, String role)
+  kirim;
 
   @override
   State<_BuatAkunDialog> createState() => _BuatAkunDialogState();
@@ -563,17 +572,15 @@ class _BuatAkunDialogState extends State<_BuatAkunDialog> {
   bool get _valid => _galatU == null && _galatN == null;
 
   Future<void> _buat() async {
+    if (_busy || !_valid) return;
+    final username = _u.text.trim().toLowerCase();
     setState(() {
       _busy = true;
       _galatServer = null;
     });
     try {
-      final pw = await widget.kirim(
-        _u.text.trim().toLowerCase(),
-        _n.text.trim(),
-        _role,
-      );
-      if (mounted) Navigator.pop(context, pw);
+      final pw = await widget.kirim(username, _n.text.trim(), _role);
+      if (mounted) Navigator.pop(context, (username: username, password: pw));
     } on ApiException catch (e) {
       if (mounted) setState(() => _galatServer = e.pesan);
     } finally {
@@ -584,86 +591,88 @@ class _BuatAkunDialogState extends State<_BuatAkunDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: Text(widget.judul),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.atas != null) ...[
-              widget.atas!,
-              const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: _u,
-              enabled: !_busy,
-              readOnly: widget.usernameTerkunci,
-              autocorrect: false,
-              onChanged: (_) => setState(() {
-                _sentuhU = true;
-                _galatServer = null;
-              }),
-              decoration: InputDecoration(
-                labelText: 'Username',
-                helperText: widget.usernameBantu,
-                helperMaxLines: 2,
-                errorText: _sentuhU ? _galatU : null,
-                errorMaxLines: 2,
-              ),
-            ),
-            if (widget.pakaiNama) ...[
-              const SizedBox(height: 12),
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
+        title: Text(widget.judul),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.atas != null) ...[
+                widget.atas!,
+                const SizedBox(height: 12),
+              ],
               TextField(
-                controller: _n,
+                controller: _u,
                 enabled: !_busy,
+                readOnly: widget.usernameTerkunci,
+                autocorrect: false,
                 onChanged: (_) => setState(() {
-                  _sentuhN = true;
+                  _sentuhU = true;
                   _galatServer = null;
                 }),
                 decoration: InputDecoration(
-                  labelText: 'Nama',
-                  errorText: _sentuhN ? _galatN : null,
+                  labelText: 'Username',
+                  helperText: widget.usernameBantu,
+                  helperMaxLines: 2,
+                  errorText: _sentuhU ? _galatU : null,
+                  errorMaxLines: 2,
                 ),
               ),
-            ],
-            if (widget.pakaiRole) ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _role,
-                items: [
-                  for (final r in ['KASIR', 'ADMIN'])
-                    DropdownMenuItem(value: r, child: Text(r)),
-                ],
-                onChanged: _busy ? null : (v) => setState(() => _role = v ?? 'KASIR'),
-                decoration: const InputDecoration(labelText: 'Role'),
-              ),
-            ],
-            if (_galatServer != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _galatServer!,
-                  style: TextStyle(color: cs.error),
+              if (widget.pakaiNama) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _n,
+                  enabled: !_busy,
+                  onChanged: (_) => setState(() {
+                    _sentuhN = true;
+                    _galatServer = null;
+                  }),
+                  decoration: InputDecoration(
+                    labelText: 'Nama',
+                    errorText: _sentuhN ? _galatN : null,
+                  ),
                 ),
-              ),
-          ],
+              ],
+              if (widget.pakaiRole) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  items: [
+                    for (final r in ['KASIR', 'ADMIN'])
+                      DropdownMenuItem(value: r, child: Text(r)),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() => _role = v ?? 'KASIR'),
+                  decoration: const InputDecoration(labelText: 'Role'),
+                ),
+              ],
+              if (_galatServer != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_galatServer!, style: TextStyle(color: cs.error)),
+                ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: _valid && !_busy ? _buat : null,
+            child: _busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Buat'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Batal'),
-        ),
-        FilledButton(
-          onPressed: _valid && !_busy ? _buat : null,
-          child: _busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Buat'),
-        ),
-      ],
     );
   }
 }

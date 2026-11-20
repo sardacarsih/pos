@@ -4,6 +4,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleMinus from '@lucide/svelte/icons/circle-minus';
+  import Copy from '@lucide/svelte/icons/copy';
   import KeyRound from '@lucide/svelte/icons/key-round';
   import ListFilter from '@lucide/svelte/icons/list-filter';
   import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -31,6 +32,13 @@
   type Dialog = { kind: 'create' } | AccountAction | { kind: 'password'; username: string; value: string };
 
   const roles = { ADMIN: 'Admin', KASIR: 'Kasir', ANGGOTA: 'Anggota', PEMBELIAN: 'Petugas pembelian' };
+  const filters = [
+    { value: '', label: 'Semua', icon: ListFilter },
+    { value: 'terkunci', label: 'Terkunci', icon: Lock },
+    { value: 'nonaktif', label: 'Nonaktif', icon: CircleMinus },
+    { value: 'aktif', label: 'Aktif', icon: CircleCheck }
+  ] as const;
+  let copied = false;
   let accounts: Account[] = [];
   let tab: Tab = 'sistem', status: Status = '', search = '';
   let loading = true, busy = false, listError = '', notice = '';
@@ -44,6 +52,7 @@
   $: systemAccounts = accounts.filter(account => account.role !== 'ANGGOTA');
   $: memberAccounts = accounts.filter(account => account.role === 'ANGGOTA');
   $: tabAccounts = tab === 'sistem' ? systemAccounts : memberAccounts;
+  $: lockedCount = tabAccounts.filter(account => account.terkunci).length;
   $: term = search.trim().toLowerCase();
   $: filtered = tabAccounts.filter(account => {
     const matchesSearch = [account.nama, account.username, account.nik ?? ''].some(value => value.toLowerCase().includes(term));
@@ -96,6 +105,7 @@
     if (!dialogEl.open) previouslyFocused = opener as HTMLElement | null;
     dialog = next;
     dialogError = '';
+    copied = false;
     await tick();
     if (!dialogEl.open) dialogEl.showModal();
     await focusDialog();
@@ -117,6 +127,17 @@
   function cancelDialog(event?: Event) {
     event?.preventDefault();
     if (!busy && dialog?.kind !== 'password') closeDialog();
+  }
+
+  async function copyPassword() {
+    const current = dialog;
+    if (current?.kind !== 'password') return;
+    try {
+      await navigator.clipboard.writeText(current.value);
+      if (dialog === current) { copied = true; dialogError = ''; }
+    } catch {
+      if (dialog === current) dialogError = 'Pilih teks password dan salin secara manual.';
+    }
   }
 
   function openCreate(event: MouseEvent) {
@@ -188,7 +209,6 @@
         const result = await api<TemporaryPassword>('/admin/users/' + account.id + '/reset-password', { method: 'POST' });
         accounts = accounts.map(item => item.id === account.id ? { ...item, terkunci: false } : item);
         await present({ kind: 'password', username: account.username, value: result.password_sementara });
-        await loadAccounts();
       } else {
         const aktif = !account.aktif;
         await api('/admin/users/' + account.id + '/aktif', { method: 'PUT', body: { aktif } });
@@ -209,7 +229,6 @@
     <div class="directory-heading">
       <div>
         <h2>Daftar akun</h2>
-        <p>Kelola akses admin, kasir, dan anggota.</p>
       </div>
       <button class="button primary-action" on:click={openCreate} disabled={busy || loading}>
         <UserPlus size={18} aria-hidden="true"/>
@@ -233,18 +252,26 @@
         <Search size={17} aria-hidden="true"/>
         <input type="search" aria-label="Cari berdasarkan nama, username, atau NIK" placeholder="Nama, username, atau NIK" bind:value={search} bind:this={searchInput}/>
       </div>
-      <div class="field-icon">
-        <ListFilter size={17} aria-hidden="true"/>
-        <select aria-label="Filter status akun" bind:value={status}>
-          <option value="">Semua status</option>
-          <option value="aktif">Aktif</option>
-          <option value="nonaktif">Nonaktif</option>
-          <option value="terkunci">Terkunci</option>
-        </select>
+      <div class="status-filters" role="group" aria-label="Filter status akun">
+        {#each filters as filter}
+          <button type="button" class="button filter" aria-pressed={status === filter.value} on:click={() => status = filter.value}>
+            <svelte:component this={filter.icon} size={15} aria-hidden="true"/>
+            {filter.label}
+            {#if filter.value === 'terkunci' && (!loading || accounts.length) && (!listError || accounts.length)}
+              <span class="lock-count">{lockedCount}</span>
+            {/if}
+          </button>
+        {/each}
       </div>
     </div>
 
     <div class="feedback">
+      {#if (term || status) && filtered.length > 0}
+        <div class="filter-summary">
+          <span role="status">{filtered.length} akun cocok</span>
+          <button type="button" on:click={() => { clearFilters(); searchInput.focus(); }}><X size={14} aria-hidden="true"/> Hapus filter</button>
+        </div>
+      {/if}
       {#if listError}
         <div class="alert" role="alert">
           <AlertCircle size={18} aria-hidden="true"/>
@@ -299,7 +326,7 @@
               </td>
               <td class="account-actions" role="cell">
                 <div class="row-actions">
-                  <button class="button secondary-action" aria-label={'Reset password ' + account.username} on:click={(event) => openAction(event, account, 'reset')} disabled={busy || loading}>
+                  <button class="button secondary-action" class:recover={account.terkunci} aria-label={'Reset password ' + account.username} on:click={(event) => openAction(event, account, 'reset')} disabled={busy || loading}>
                     <KeyRound size={16} aria-hidden="true"/> Reset password
                   </button>
                   <button class="button secondary-action" aria-label={(account.aktif ? 'Nonaktifkan ' : 'Aktifkan ') + account.username}
@@ -418,17 +445,19 @@
           </button>
         </div>
       {:else}
-        <p class="dialog-copy">Catat password untuk <strong>{dialog.username}</strong>. Password ini hanya ditampilkan sekali dan wajib diganti saat login berikutnya.</p>
+        <p class="dialog-copy">Password untuk <strong>{dialog.username}</strong> hanya ditampilkan sekali. Berikan kepada pengguna. Saat masuk, pengguna wajib membuat password baru sebelum dapat menggunakan aplikasi.</p>
         <div class="temporary-password"><KeyRound size={18} aria-hidden="true"/> <code>{dialog.value}</code></div>
-        <div class="dialog-actions"><button class="button primary-action" on:click={closeDialog}><CircleCheck size={17} aria-hidden="true"/> Sudah dicatat</button></div>
+        <div class="dialog-actions">
+          <button class="button secondary-action" on:click={copyPassword}><Copy size={17} aria-hidden="true"/> Salin password</button>
+          <button class="button primary-action" on:click={closeDialog}><CircleCheck size={17} aria-hidden="true"/> Sudah dicatat</button>
+        </div>
+        <div role="status">{copied ? 'Password tersalin.' : ''}</div>
       {/if}
     {/if}
   </dialog>
 </section>
 
 <style>
-  /* Hallmark · macrostructure: directory table and responsive account cards */
-  /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
   .users-page {
     container-type: inline-size;
     --surface: #fff;
@@ -487,7 +516,6 @@
   }
   .directory-heading { padding: var(--space-xl); }
   .directory-heading h2, .dialog-heading h2 { overflow-wrap: anywhere; }
-  .directory-heading p { margin: var(--space-xs) 0 0; color: var(--muted-ink); font-size: .9rem; }
 
   .button, .account-tabs button {
     display: inline-flex;
@@ -536,10 +564,18 @@
   .account-tabs button[aria-pressed='true'] .count { background: var(--accent-soft); }
   .account-toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-md);
     padding: var(--space-lg) var(--space-xl);
   }
+  .account-toolbar .search-field { flex: 1 1 235px; max-width: none; }
+  .status-filters { display: flex; flex-wrap: wrap; gap: 4px; }
+  .filter { gap: 6px; background: var(--subtle); color: var(--muted-ink); }
+  .filter[aria-pressed='true'], .recover {
+    background: var(--accent-soft); border-color: var(--accent-ink); color: var(--accent-ink);
+  }
+  .lock-count { font-variant-numeric: tabular-nums; font-weight: 800; }
   .field-icon { position: relative; min-width: 0; }
   .search-field { flex: 1; max-width: 420px; }
   .field-icon > :global(svg) {
@@ -562,8 +598,10 @@
   .users-page :is(input, select):hover { border-color: var(--accent-ink); }
   .users-page input::placeholder { color: var(--muted-ink); }
   .field-icon :is(input, select) { padding-inline-start: 36px; }
-  .field-icon select { padding-inline-end: var(--space-md); }
   .feedback { padding-inline: var(--space-xl); }
+  .filter-summary, .filter-summary button { display: flex; align-items: center; gap: var(--space-sm); }
+  .filter-summary { justify-content: space-between; color: var(--muted-ink); font-size: .82rem; }
+  .filter-summary button { min-height: 44px; color: var(--accent-ink); font-weight: 700; }
   .alert, .success {
     display: flex;
     align-items: center;
@@ -580,7 +618,7 @@
 
 
   .account-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .875rem; }
-  .account-table th, .account-table td { padding: var(--space-md); }
+  .account-table th, .account-table td { padding: var(--space-sm) var(--space-md); }
   .account-table th:first-child { padding-inline-start: var(--space-xl); }
   .account-table :is(th, td):last-child { padding-inline-end: var(--space-xl); }
   .account-table thead th {
@@ -732,6 +770,7 @@
   @container (max-width: 420px) {
     .directory-heading { flex-direction: column; align-items: flex-start; }
     .account-toolbar { flex-direction: column; align-items: stretch; }
+    .account-toolbar .search-field { flex: auto; }
     .account-tabs { gap: var(--space-xs); }
     .account-tabs button { flex: 1; padding-inline: var(--space-sm); }
     .row-actions > button { flex: 1; }

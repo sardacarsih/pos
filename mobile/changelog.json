@@ -1,5 +1,14 @@
 [
   {
+    "versionName": "1.0.12",
+    "versionCode": 13,
+    "tanggal": "2026-11-20",
+    "perubahan": [
+      "Admin dapat mencari akun sistem dan anggota berdasarkan nama, username, atau NIK, lalu memfilter hasil berdasarkan status.",
+      "Reset password tersedia langsung pada akun terkunci. Password sementara dapat disalin dan wajib diganti saat pengguna masuk."
+    ]
+  },
+  {
     "versionName": "1.0.11",
     "versionCode": 12,
     "tanggal": "2026-11-20",
