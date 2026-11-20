@@ -6,6 +6,7 @@
   import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import Coins from '@lucide/svelte/icons/coins';
   import List from '@lucide/svelte/icons/list';
+  import PackageMinus from '@lucide/svelte/icons/package-minus';
   import { TAB_SEDIA, type TabSedia } from './persediaan';
   import AdminOpname from './AdminOpname.svelte';
   import PersediaanKartu from './PersediaanKartu.svelte';
@@ -13,13 +14,14 @@
   import PersediaanSesuaikan from './PersediaanSesuaikan.svelte';
   import PersediaanValuasi from './PersediaanValuasi.svelte';
   import PersediaanValuasiItem from './PersediaanValuasiItem.svelte';
+  import PersediaanRusak from './PersediaanRusak.svelte';
   import './persediaan.css';
 
   export let tabAwal: TabSedia = 'kartu';
   let tab: TabSedia = tabAwal;
   let opnameRef: AdminOpname | undefined;
   const IKON_TAB: Record<TabSedia, any> = {
-    kartu: NotebookText, habis: PackageX, opname: ClipboardCheck, sesuai: SlidersHorizontal, valuasi: Coins, 'valuasi-item': List
+    kartu: NotebookText, habis: PackageX, opname: ClipboardCheck, sesuai: SlidersHorizontal, valuasi: Coins, 'valuasi-item': List, rusak: PackageMinus
   };
 
   let tabAwalTerakhir = tabAwal;
@@ -70,6 +72,8 @@
           <PersediaanValuasi />
         {:else if tab === 'valuasi-item'}
           <PersediaanValuasiItem />
+        {:else if tab === 'rusak'}
+          <PersediaanRusak />
         {/if}
       {/if}
     </div>

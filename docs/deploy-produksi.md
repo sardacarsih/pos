@@ -35,6 +35,10 @@ jalankan `pos-api migrate-pembelian` untuk menyiapkan tabel dan trigger rekonsil
 tabel pembelian dan uji pencatatan saldo awal, koreksi, serta pembayaran di Oracle staging terlebih dahulu.
 Untuk pemasangan yang masih memerlukan migrasi sistem lengkap, jalankan `pos-api migrate --skip-admin`.
 
+**Migrasi `0014_log_dokumen_stok` (tabel `POS_DOKUMEN_STOK_LOG`) wajib dijalankan SEBELUM deploy API** yang memuat ubah/hapus Opname dan
+Barang Rusak: `pos-api migrate --skip-admin` dengan `.env` produksi (idempoten, forward-only). `pos-api selftest` pada deploy memeriksa tabel ini.
+Tanpa tabel itu, endpoint ubah/hapus gagal.
+
 ## 2. Deploy API
 
 ```powershell

@@ -5,8 +5,8 @@ const HARI = '2026-11-19';
 
 describe('tab persediaan', () => {
   it('enam tab tetap dengan id dan label', () => {
-    expect(TAB_SEDIA.map(t => t.id)).toEqual(['kartu', 'habis', 'opname', 'sesuai', 'valuasi', 'valuasi-item']);
-    expect(TAB_SEDIA.map(t => t.label)).toEqual(['Kartu stok', 'Stok habis', 'Stock opname', 'Penyesuaian', 'Valuasi & alert', 'Valuasi Item']);
+    expect(TAB_SEDIA.map(t => t.id)).toEqual(['kartu', 'habis', 'opname', 'sesuai', 'valuasi', 'valuasi-item', 'rusak']);
+    expect(TAB_SEDIA.map(t => t.label)).toEqual(['Kartu stok', 'Stok habis', 'Stock opname', 'Penyesuaian', 'Valuasi & alert', 'Valuasi Item', 'Barang rusak']);
   });
 });
 

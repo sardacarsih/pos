@@ -4,6 +4,8 @@
   import Plus from '@lucide/svelte/icons/plus';
   import X from '@lucide/svelte/icons/x';
   import { api, query } from './api';
+  import DokumenEditor from './DokumenEditor.svelte';
+  import { teksQty, type BarisEdit } from './dokumenEdit';
   import { MAKS_BARANG, bedaStok, hasilSimpanBelumPasti, jumlahFisik, kolomHitungan, payloadHitungan, statusHitungan } from './opname';
   import type { KolomHitung, SatuanTambahan } from './opname';
 
@@ -27,8 +29,9 @@
   interface Dokumen {
     nomor_so: string;
     tanggal: string;
+    versi: string;
     items: {
-      kode: string; nama: string; jumlah_sistem: number; qty_fisik: number; selisih: number;
+      produk_id: number | null; kode: string; nama: string; jumlah_sistem: number; qty_fisik: number; selisih: number;
     }[];
   }
   type Filter = 'Semua' | 'Belum dihitung' | 'Berselisih';
@@ -52,6 +55,7 @@
   let kolomCari: HTMLInputElement, daftarHitung: HTMLElement, judulTinjau: HTMLElement;
   let kolomTahun: HTMLInputElement, tombolBaru: HTMLButtonElement;
   let hidup = false;
+  let mengubah = false, menghapus = false, alasanHapus = '', galatHapus = '', prosesHapus = false, kunciHapus = '', sidikHapus = '';
 
   $: dihitung = draf.filter((b) => statusHitungan(b.kolom).nilai !== null).length;
   $: berselisih = draf.filter((b) => {
@@ -114,12 +118,52 @@
     nomorDetail = nomor;
     detail = null;
     galatDetail = '';
+    mengubah = false; menghapus = false; alasanHapus = ''; galatHapus = '';
     if (!dialogDetail.open) dialogDetail.showModal();
     try {
       const r = await api<Dokumen>('/admin/stok-opname/' + encodeURIComponent(nomor));
       if (hidup && id === detailId) detail = r;
     } catch (e) {
       if (hidup && id === detailId) galatDetail = (e as Error).message;
+    }
+  }
+
+  const barisUbah = (d: Dokumen): BarisEdit[] =>
+    d.items.map((b) => ({ produk_id: b.produk_id ?? 0, kode: b.kode, nama: b.nama, satuan: '', qty: teksQty(b.qty_fisik), keterangan: '' }));
+
+  async function simpanUbah(baris: BarisEdit[], alasan: string, key: string) {
+    if (!detail) return;
+    await api('/admin/stok-opname/' + encodeURIComponent(detail.nomor_so), {
+      method: 'PUT', headers: { 'Idempotency-Key': key },
+      body: { versi: detail.versi, alasan, items: baris.map((b) => ({ produk_id: b.produk_id, qty_fisik: b.qty.trim().replace(',', '.') })) }
+    });
+  }
+
+  async function selesaiUbah() {
+    mengubah = false;
+    tersimpan = '';
+    void muatRiwayat();
+    await bukaDetail(nomorDetail);
+  }
+
+  async function hapusDokumen() {
+    if (!detail || prosesHapus) return;
+    if (!alasanHapus.trim()) { galatHapus = 'Alasan wajib diisi.'; return; }
+    const sidik = detail.versi + '|' + alasanHapus.trim();
+    if (sidik !== sidikHapus) { kunciHapus = crypto.randomUUID(); sidikHapus = sidik; }
+    prosesHapus = true;
+    galatHapus = '';
+    try {
+      await api('/admin/stok-opname/' + encodeURIComponent(detail.nomor_so), {
+        method: 'DELETE', headers: { 'Idempotency-Key': kunciHapus }, body: { versi: detail.versi, alasan: alasanHapus.trim() }
+      });
+      dialogDetail.close();
+      tersimpan = '';
+      void muatRiwayat();
+    } catch (e) {
+      galatHapus = (e as Error).message;
+    } finally {
+      prosesHapus = false;
     }
   }
 
@@ -498,7 +542,23 @@
     <div><h2 id="so-nomor">{nomorDetail}</h2>{#if detail}<p>{detail.tanggal} · {detail.items.length} barang</p>{/if}</div>
     <button class="ikon" aria-label="Tutup detail" on:click={() => dialogDetail.close()}><X size={22} aria-hidden="true"/></button>
   </header>
-  {#if detail}
+  {#if detail && mengubah}
+    <DokumenEditor judul={'Ubah ' + detail.nomor_so} labelQty="Fisik (satuan dasar)" awal={barisUbah(detail)}
+      simpan={simpanUbah} on:selesai={selesaiUbah} on:batal={() => (mengubah = false)}/>
+  {:else if detail}
+    <div class="aksi-dokumen">
+      <button class="secondary" disabled={detail.items.some((b) => b.produk_id === null)} on:click={() => (mengubah = true)}>Ubah dokumen</button>
+      <button class="secondary" on:click={() => { menghapus = !menghapus; galatHapus = ''; }}>Hapus dokumen</button>
+    </div>
+    {#if menghapus}
+      <div class="hapus-dokumen">
+        <p>Dokumen dihapus permanen dan stok sistem kembali seperti sebelum dokumen ini.</p>
+        <label for="so-alasan-hapus">Alasan</label>
+        <input id="so-alasan-hapus" maxlength="250" bind:value={alasanHapus}/>
+        {#if galatHapus}<p class="error" role="alert">{galatHapus}</p>{/if}
+        <button class="primary" disabled={prosesHapus} on:click={hapusDokumen}>{prosesHapus ? 'Menghapus…' : 'Hapus permanen'}</button>
+      </div>
+    {/if}
     <table class="tinjau" aria-label="Hasil stock opname">
       <thead><tr><th scope="col">Barang</th><th scope="col" class="angka">Sistem</th><th scope="col" class="angka">Fisik</th><th scope="col" class="angka">Selisih</th></tr></thead>
       <tbody>
@@ -592,6 +652,8 @@
   .muat { margin-top: 12px; }
   .bilah { position: sticky; bottom: 0; margin-top: 12px; padding: 10px 0; border-top: 1px solid var(--so-line); background: var(--so-paper); }
   .galat-simpan { flex: 0 0 100%; margin: 0; }
+  .aksi-dokumen { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .hapus-dokumen { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px; border: 1px solid var(--so-line); border-radius: 10px; background: var(--so-subtle); }
   @media (max-width: 650px) {
     .bilah { bottom: calc(64px + env(safe-area-inset-bottom)); }
     .filter button { font-size: .84rem; }

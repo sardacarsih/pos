@@ -1,5 +1,15 @@
 [
   {
+    "versionName": "1.0.14",
+    "versionCode": 15,
+    "tanggal": "2026-11-20",
+    "perubahan": [
+      "Stok habis: daftar kini urut dari stok terendah; bisa diganti ke urut nama A-Z.",
+      "Opname: dokumen bisa diubah (jumlah, tambah atau hapus barang) dan dihapus dengan alasan.",
+      "Tab baru Rusak untuk mencatat, mengubah, dan menghapus barang rusak."
+    ]
+  },
+  {
     "versionName": "1.0.13",
     "versionCode": 14,
     "tanggal": "2026-11-20",

@@ -269,7 +269,7 @@ struct BarisDb {
 
 pub fn detail(conn: &Connection, nomor: &str) -> AppResult<DokumenRusak> {
     let sql = format!(
-        "SELECT B.KODE_BARANG, NVL(P.PRODUCTNAME, B.KODE_BARANG), {}, {}, NVL(B.KETERANGAN, ''), TO_CHAR(B.TANGGAL, 'YYYY-MM-DD') \
+        "SELECT B.KODE_BARANG, NVL(P.PRODUCTNAME, B.KODE_BARANG), {}, {}, NVL(B.KETERANGAN, ''), TO_CHAR(B.TANGGAL, 'YYYY-MM-DD'), P.PRODUCTID \
          FROM POS_BARANGRUSAK B LEFT JOIN POS_PRODUCT P ON P.KODE_ITEM = B.KODE_BARANG \
          WHERE B.NOMOR_SO = :n ORDER BY 2, 1",
         tm("NVL(B.JUMLAHFISIK, 0)"),

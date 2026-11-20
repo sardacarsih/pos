@@ -671,7 +671,7 @@ pub fn daftar_so(conn: &Connection, tahun: i32, page: u32, size: u32) -> AppResu
 /// Isi satu dokumen SO (dari mobile/web maupun desktop).
 pub fn detail_so(conn: &Connection, nomor: &str) -> AppResult<DokumenSo> {
     let sql = format!(
-        "SELECT S.KODE_BARANG, NVL(B.PRODUCTNAME, S.KODE_BARANG), {}, {}, {}, TO_CHAR(S.TANGGAL, 'YYYY-MM-DD') \
+        "SELECT S.KODE_BARANG, NVL(B.PRODUCTNAME, S.KODE_BARANG), {}, {}, {}, TO_CHAR(S.TANGGAL, 'YYYY-MM-DD'), B.PRODUCTID \
          FROM POS_STOCKOPNAME S LEFT JOIN POS_PRODUCT B ON B.KODE_ITEM = S.KODE_BARANG \
          WHERE S.NOMOR_SO = :n ORDER BY 2, 1",
         tm("NVL(S.JUMLAHSISTEM, 0)"),

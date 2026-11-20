@@ -2,6 +2,24 @@
 
 Ringkasan perubahan per platform. Disusun dari riwayat commit; tanggal sesuai tanggal commit.
 
+## 20 November 2026 (lanjutan)
+
+### API dan database
+- Ubah dan hapus dokumen Stock Opname: `PUT` dan `DELETE /api/v1/admin/stok-opname/{nomor}` (ubah fisik, tambah atau hapus barang). Selisih baris lama dihitung dari `JUMLAHSISTEM` yang tercatat dengan HPP lama, sehingga stok bergeser tepat sebesar delta.
+- CRUD Barang Rusak: `/api/v1/admin/barang-rusak` (buat, riwayat, detail, ubah, hapus). Jumlah rusak tidak boleh melebihi stok sistem.
+- Pengaman bersama: ditolak bila periode tutup atau belum diatur, bila ada dokumen SO/rusak yang lebih baru untuk barang yang sama, atau bila `versi` dokumen sudah basi (409). Alasan wajib, kunci idempotensi, dan cache stok habis dibersihkan.
+- Migrasi desktop `0014_log_dokumen_stok`: tabel `POS_DOKUMEN_STOK_LOG` mencatat siapa, kapan, nomor, aksi, alasan, jumlah baris, dan total nilai. **Jalankan `pos-api migrate --skip-admin` sebelum deploy API.**
+- Detail SO kini memuat `versi` dan `produk_id` per baris. Uji ujung-ke-ujung: `tests/dokumen_stok_e2e.rs` (`POS_E2E_ORACLE`).
+
+### Mobile (Android)
+- Stok habis: daftar urut Qty terendah (default) dengan chip Nama A-Z.
+- Detail Opname: tombol Ubah (editor dengan cari dan tambah barang, hapus baris, alasan) dan Hapus (dengan alasan).
+- Tab baru Rusak: riwayat, rusak baru, ubah, dan hapus dokumen barang rusak.
+
+### Web (admin.kopkarksk.com)
+- Stock opname: Ubah dan Hapus dokumen dari dialog detail.
+- Tab baru Barang rusak di Persediaan: riwayat, baru, ubah, hapus.
+
 ## 18–20 November 2026
 
 ### Web (admin.kopkarksk.com)
