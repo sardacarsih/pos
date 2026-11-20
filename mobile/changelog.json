@@ -1,5 +1,13 @@
 [
   {
+    "versionName": "1.0.13",
+    "versionCode": 14,
+    "tanggal": "2026-11-20",
+    "perubahan": [
+      "Perbaikan: angka stok, jumlah fisik, dan selisih di Opname dan Stok kini tampil benar untuk semua format data dari server."
+    ]
+  },
+  {
     "versionName": "1.0.12",
     "versionCode": 13,
     "tanggal": "2026-11-20",
