@@ -206,9 +206,25 @@ class ApiClient {
       options: Options(extra: {'auth': auth}, headers: headers),
     ),
   );
-  Future<dynamic> put(String p, {Object? body}) =>
-      _call(() => _dio.put<dynamic>(p, data: body));
-  Future<dynamic> delete(String p) => _call(() => _dio.delete<dynamic>(p));
+  Future<dynamic> put(String p, {Object? body, Map<String, String>? headers}) =>
+      _call(
+        () => _dio.put<dynamic>(
+          p,
+          data: body,
+          options: headers == null ? null : Options(headers: headers),
+        ),
+      );
+  Future<dynamic> delete(
+    String p, {
+    Object? body,
+    Map<String, String>? headers,
+  }) => _call(
+    () => _dio.delete<dynamic>(
+      p,
+      data: body,
+      options: headers == null ? null : Options(headers: headers),
+    ),
+  );
 
   Future<void> daftarPush(String token) async {
     await put(
@@ -796,6 +812,107 @@ class ApiClient {
   Future<SoDokumen> detailSo(String nomor) async => SoDokumen.fromJson(
     await get('/api/v1/admin/stok-opname/$nomor') as Map<String, dynamic>,
   );
+
+  /// Ubah dokumen SO (nomor dan tanggal tetap). `qty` = fisik dalam satuan dasar (string desimal).
+  Future<SoDokumen> ubahSo(
+    String nomor, {
+    required String versi,
+    required String alasan,
+    required List<({int produkId, String qty})> items,
+    required String idempotencyKey,
+  }) async => SoDokumen.fromJson(
+    await put(
+      '/api/v1/admin/stok-opname/$nomor',
+      body: {
+        'versi': versi,
+        'alasan': alasan,
+        'items': [
+          for (final i in items) {'produk_id': i.produkId, 'qty_fisik': i.qty},
+        ],
+      },
+      headers: {'Idempotency-Key': idempotencyKey},
+    ) as Map<String, dynamic>,
+  );
+
+  Future<void> hapusSo(
+    String nomor, {
+    required String versi,
+    required String alasan,
+    required String idempotencyKey,
+  }) async {
+    await delete(
+      '/api/v1/admin/stok-opname/$nomor',
+      body: {'versi': versi, 'alasan': alasan},
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+  }
+
+  Future<({List<RusakRingkas> items, bool lagi})> daftarRusak({
+    required int tahun,
+    int page = 1,
+  }) async {
+    final j = await get(
+      '/api/v1/admin/barang-rusak',
+      q: {'tahun': tahun, 'page': page, 'size': 30},
+    ) as Map<String, dynamic>;
+    return (
+      items: [
+        for (final s in j['items'] as List)
+          RusakRingkas.fromJson(s as Map<String, dynamic>),
+      ],
+      lagi: j['ada_lagi'] == true,
+    );
+  }
+
+  Future<RusakDokumen> detailRusak(String nomor) async =>
+      RusakDokumen.fromJson(
+        await get('/api/v1/admin/barang-rusak/$nomor') as Map<String, dynamic>,
+      );
+
+  static List<Map<String, Object>> _bodyRusak(
+    List<({int produkId, String qty, String keterangan})> items,
+  ) => [
+    for (final i in items)
+      {'produk_id': i.produkId, 'qty': i.qty, 'keterangan': i.keterangan},
+  ];
+
+  Future<RusakDokumen> simpanRusak(
+    List<({int produkId, String qty, String keterangan})> items, {
+    required String idempotencyKey,
+  }) async => RusakDokumen.fromJson(
+    await post(
+      '/api/v1/admin/barang-rusak',
+      body: {'items': _bodyRusak(items)},
+      headers: {'Idempotency-Key': idempotencyKey},
+    ) as Map<String, dynamic>,
+  );
+
+  Future<RusakDokumen> ubahRusak(
+    String nomor, {
+    required String versi,
+    required String alasan,
+    required List<({int produkId, String qty, String keterangan})> items,
+    required String idempotencyKey,
+  }) async => RusakDokumen.fromJson(
+    await put(
+      '/api/v1/admin/barang-rusak/$nomor',
+      body: {'versi': versi, 'alasan': alasan, 'items': _bodyRusak(items)},
+      headers: {'Idempotency-Key': idempotencyKey},
+    ) as Map<String, dynamic>,
+  );
+
+  Future<void> hapusRusak(
+    String nomor, {
+    required String versi,
+    required String alasan,
+    required String idempotencyKey,
+  }) async {
+    await delete(
+      '/api/v1/admin/barang-rusak/$nomor',
+      body: {'versi': versi, 'alasan': alasan},
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+  }
 
   /// Koreksi stok satu barang lewat dokumen SO. `idempotencyKey` dipakai ulang saat retry agar tidak dobel.
   Future<String> opnameStok(

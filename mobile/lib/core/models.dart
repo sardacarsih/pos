@@ -426,11 +426,13 @@ class SoRingkas {
 
 class SoBaris {
   SoBaris.fromJson(Map<String, dynamic> j)
-    : kode = _s(j['kode']),
+    : produkId = (j['produk_id'] as num?)?.toInt(),
+      kode = _s(j['kode']),
       nama = _s(j['nama']),
       sistem = _d(j['jumlah_sistem']),
       fisik = _d(j['qty_fisik']),
       selisih = _d(j['selisih']);
+  final int? produkId;
   final String kode, nama;
   final double sistem, fisik, selisih;
 }
@@ -439,12 +441,56 @@ class SoDokumen {
   SoDokumen.fromJson(Map<String, dynamic> j)
     : nomor = _s(j['nomor_so']),
       tanggal = _s(j['tanggal']),
+      versi = _s(j['versi']),
       items = [
         for (final b in (j['items'] as List? ?? []))
           SoBaris.fromJson(b as Map<String, dynamic>),
       ];
   final String nomor, tanggal;
+
+  /// Sidik isi dokumen; dikirim balik saat ubah/hapus (server menolak bila sudah berubah).
+  final String versi;
   final List<SoBaris> items;
+}
+
+/// Ringkasan dokumen barang rusak (riwayat).
+class RusakRingkas {
+  RusakRingkas.fromJson(Map<String, dynamic> j)
+    : nomor = _s(j['nomor_so']),
+      tanggal = _s(j['tanggal']),
+      jumlahItem = _i(j['jumlah_item']),
+      nilai = _d(j['nilai']);
+  final String nomor, tanggal;
+  final int jumlahItem;
+  final double nilai;
+}
+
+class RusakBaris {
+  RusakBaris.fromJson(Map<String, dynamic> j)
+    : produkId = (j['produk_id'] as num?)?.toInt(),
+      kode = _s(j['kode']),
+      nama = _s(j['nama']),
+      qty = _d(j['qty']),
+      hpp = _d(j['hpp']),
+      keterangan = _s(j['keterangan']);
+  final int? produkId;
+  final String kode, nama, keterangan;
+  final double qty, hpp;
+}
+
+class RusakDokumen {
+  RusakDokumen.fromJson(Map<String, dynamic> j)
+    : nomor = _s(j['nomor_so']),
+      tanggal = _s(j['tanggal']),
+      versi = _s(j['versi']),
+      total = _d(j['total']),
+      items = [
+        for (final b in (j['items'] as List? ?? []))
+          RusakBaris.fromJson(b as Map<String, dynamic>),
+      ];
+  final String nomor, tanggal, versi;
+  final double total;
+  final List<RusakBaris> items;
 }
 
 class UserInfo {

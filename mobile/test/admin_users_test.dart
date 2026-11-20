@@ -124,7 +124,7 @@ class _Api extends ApiClient {
   }
 
   @override
-  Future<dynamic> put(String path, {Object? body}) async {
+  Future<dynamic> put(String path, {Object? body, Map<String, String>? headers}) async {
     if (path != '/api/v1/admin/users/3/aktif') throw StateError(path);
     accounts['ami']!['aktif'] = (body as Map)['aktif'];
   }

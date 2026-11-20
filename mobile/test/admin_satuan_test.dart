@@ -39,13 +39,13 @@ class _ApiSatuan extends ApiClient {
   }
 
   @override
-  Future<dynamic> put(String p, {Object? body}) async {
+  Future<dynamic> put(String p, {Object? body, Map<String, String>? headers}) async {
     log.add('PUT $p ${(body as Map)['nama']}');
     daftar[1] = {'id': '2', 'nama': body['nama'] as String};
   }
 
   @override
-  Future<dynamic> delete(String p) async {
+  Future<dynamic> delete(String p, {Object? body, Map<String, String>? headers}) async {
     log.add('DELETE $p');
     daftar.removeWhere((e) => '/api/v1/admin/satuan/${e['id']}' == p);
   }

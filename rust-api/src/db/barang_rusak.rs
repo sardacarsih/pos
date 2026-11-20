@@ -39,6 +39,7 @@ struct Baris {
 
 #[derive(Debug, Serialize)]
 pub struct BarisRusak {
+    pub produk_id: Option<i64>,
     pub kode: String,
     pub nama: String,
     pub qty: Decimal,
@@ -280,6 +281,7 @@ pub fn detail(conn: &Connection, nomor: &str) -> AppResult<DokumenRusak> {
         let r = r?;
         tanggal = r.get(5)?;
         items.push(BarisRusak {
+            produk_id: r.get(6)?,
             kode: r.get(0)?,
             nama: r.get(1)?,
             qty: dec(&r.get::<_, String>(2)?)?,
@@ -522,7 +524,7 @@ mod tests {
 
     #[test]
     fn versi_berubah_bila_qty_berubah() {
-        let b = |q: &str| vec![BarisRusak { kode: "K".into(), nama: "N".into(), qty: q.parse().unwrap(), hpp: Decimal::ONE, keterangan: String::new() }];
+        let b = |q: &str| vec![BarisRusak { produk_id: Some(1), kode: "K".into(), nama: "N".into(), qty: q.parse().unwrap(), hpp: Decimal::ONE, keterangan: String::new() }];
         assert_eq!(versi_rusak(&b("2")), versi_rusak(&b("2.0")));
         assert_ne!(versi_rusak(&b("2")), versi_rusak(&b("3")));
     }

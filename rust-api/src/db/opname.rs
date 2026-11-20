@@ -199,6 +199,8 @@ fn resolve_fisik(
 
 #[derive(Debug, Serialize)]
 pub struct BarisSo {
+    /// Id produk (null bila produk sudah tidak ada); dipakai klien untuk mengirim ulang baris saat ubah.
+    pub produk_id: Option<i64>,
     pub kode: String,
     pub nama: String,
     pub jumlah_sistem: Decimal,
@@ -606,17 +608,18 @@ fn dokumen_inner(
         if selisih > Decimal::ZERO && p.hpp.is_zero() {
             return Err(harga_nol_ditolak(&p.nama));
         }
-        baris.push((p, sistem, qty_fisik, selisih));
+        baris.push((p, sistem, qty_fisik, selisih, i.produk_id));
     }
     baris.sort_by(|a, b| a.0.nama.cmp(&b.0.nama));
     let nomor = alokasi_nomor(conn, hari.year())?;
-    for (p, sistem, fisik, selisih) in &baris {
+    for (p, sistem, fisik, selisih, _) in &baris {
         tulis_baris(conn, &nomor, hari, &p.kode, *sistem, *fisik, *selisih, p.hpp)?;
     }
     selesai(conn, user_id, OPERASI_DOK, key, &nomor)?;
     let items: Vec<BarisSo> = baris
         .into_iter()
-        .map(|(p, sistem, fisik, selisih)| BarisSo {
+        .map(|(p, sistem, fisik, selisih, produk_id)| BarisSo {
+            produk_id: Some(produk_id),
             kode: p.kode.clone(),
             nama: p.nama.clone(),
             jumlah_sistem: sistem,
@@ -681,6 +684,7 @@ pub fn detail_so(conn: &Connection, nomor: &str) -> AppResult<DokumenSo> {
         let r = r?;
         tanggal = r.get(5)?;
         items.push(BarisSo {
+            produk_id: r.get(6)?,
             kode: r.get(0)?,
             nama: r.get(1)?,
             jumlah_sistem: dec(&r.get::<_, String>(2)?)?,

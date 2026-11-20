@@ -8,6 +8,7 @@ import 'admin_kategori_page.dart';
 import 'admin_satuan_page.dart';
 import 'admin_opname_page.dart';
 import 'admin_produk_page.dart';
+import 'admin_rusak_page.dart';
 import 'admin_stok_page.dart';
 
 /// Permintaan pindah sub-tab Produk dari Beranda admin (0 Produk, 1 Stok habis, 2 Harga ≤ HPP, 3 Opname, 4 Kategori).
@@ -23,7 +24,7 @@ class AdminKatalogPage extends ConsumerStatefulWidget {
 
 class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 6, vsync: this)
+  late final TabController _tab = TabController(length: 7, vsync: this)
     ..addListener(() {
       if (!_tab.indexIsChanging) setState(() {});
     });
@@ -73,6 +74,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
             Tab(text: 'Opname'),
             Tab(text: 'Kategori'),
             Tab(text: 'Satuan'),
+            Tab(text: 'Rusak'),
           ],
         ),
         // IndexedStack: kedua tab tetap hidup (pencarian/filter dan perubahan kategori yang belum disimpan tidak hilang).
@@ -86,6 +88,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
               AdminOpnamePage(),
               AdminKategoriPage(),
               AdminSatuanPage(),
+              AdminRusakPage(),
             ],
           ),
         ),

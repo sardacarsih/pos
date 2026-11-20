@@ -7,6 +7,8 @@ import '../../core/format.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
+import '../../core/checkout.dart' show newCheckoutKey;
+import 'admin_dokumen_editor_page.dart';
 import 'admin_opname_baru_page.dart';
 
 final _formatQty = NumberFormat('#,##0.####', 'id_ID');
@@ -96,9 +98,10 @@ class _AdminOpnamePageState extends ConsumerState<AdminOpnamePage> {
     await _muat();
   }
 
-  void _detail(String nomor) {
-    Navigator.of(context)
+  Future<void> _detail(String nomor) async {
+    await Navigator.of(context)
         .push<void>(MaterialPageRoute(builder: (_) => _OpnameDetail(nomor)));
+    if (mounted) await _muat(); // dokumen mungkin diubah atau dihapus
   }
 
   @override
@@ -258,12 +261,111 @@ class _OpnameDetail extends ConsumerStatefulWidget {
 
 class _OpnameDetailState extends ConsumerState<_OpnameDetail> {
   late Future<SoDokumen> _detail = _muat();
+  SoDokumen? _dokumen;
 
-  Future<SoDokumen> _muat() => ref.read(apiProvider).detailSo(widget.nomor);
+  Future<SoDokumen> _muat() async {
+    final d = await ref.read(apiProvider).detailSo(widget.nomor);
+    _dokumen = d;
+    return d;
+  }
+
+  Future<void> _ubah() async {
+    final d = _dokumen;
+    if (d == null) return;
+    if (d.items.any((b) => b.produkId == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ada produk yang sudah tidak ada; dokumen tidak bisa diubah.')),
+      );
+      return;
+    }
+    final api = ref.read(apiProvider);
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AdminDokumenEditorPage(
+          judul: 'Ubah ${d.nomor}',
+          labelQty: 'Fisik (satuan dasar)',
+          awal: [
+            for (final b in d.items)
+              BarisEditor(
+                produkId: b.produkId!,
+                kode: b.kode,
+                nama: b.nama,
+                satuan: '',
+                qty: _qtyTeks(b.fisik),
+              ),
+          ],
+          simpan: (baris, alasan, key) async {
+            await api.ubahSo(
+              d.nomor,
+              versi: d.versi,
+              alasan: alasan,
+              items: [for (final b in baris) (produkId: b.produkId, qty: b.qtyKirim!)],
+              idempotencyKey: key,
+            );
+          },
+        ),
+      ),
+    );
+    if (ok == true && mounted) setState(() => _detail = _muat());
+  }
+
+  Future<void> _hapus() async {
+    final d = _dokumen;
+    if (d == null) return;
+    final alasan = TextEditingController();
+    final ya = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Hapus ${d.nomor}?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Dokumen dihapus permanen dan stok sistem kembali seperti sebelum dokumen ini.'),
+            TextField(
+              controller: alasan,
+              maxLength: 250,
+              decoration: const InputDecoration(labelText: 'Alasan'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Hapus')),
+        ],
+      ),
+    );
+    final teks = alasan.text.trim();
+    alasan.dispose();
+    if (ya != true || !mounted) return;
+    if (teks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alasan wajib diisi.')));
+      return;
+    }
+    try {
+      await ref.read(apiProvider).hapusSo(
+        d.nomor,
+        versi: d.versi,
+        alasan: teks,
+        idempotencyKey: newCheckoutKey(),
+      );
+      if (mounted) Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.pesan)));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.nomor)),
+    appBar: AppBar(
+      title: Text(widget.nomor),
+      actions: [
+        IconButton(tooltip: 'Ubah dokumen', icon: const Icon(Icons.edit_outlined), onPressed: _ubah),
+        IconButton(tooltip: 'Hapus dokumen', icon: const Icon(Icons.delete_outline), onPressed: _hapus),
+      ],
+    ),
     body: SafeArea(
       child: FutureBuilder<SoDokumen>(
         future: _detail,
@@ -322,6 +424,9 @@ class _OpnameDetailState extends ConsumerState<_OpnameDetail> {
     ),
   );
 }
+
+String _qtyTeks(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
 class OpnameAngka extends StatelessWidget {
   const OpnameAngka({
