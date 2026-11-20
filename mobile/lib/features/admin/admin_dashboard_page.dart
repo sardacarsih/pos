@@ -11,9 +11,13 @@ import '../../core/widgets.dart';
 import 'admin_katalog_page.dart' show adminKatalogTab;
 
 /// Indeks tab di [AdminShell].
-const adminTabBeranda = 0, adminTabProduk = 1, adminTabRekap = 2, adminTabUser = 3, adminTabPinjaman = 4;
+const adminTabBeranda = 0,
+    adminTabProduk = 1,
+    adminTabRekap = 2,
+    adminTabUser = 3,
+    adminTabPinjaman = 4;
 
-/// Beranda admin: perlu perhatian -> KPI hari ini (dengan pembanding kemarin) -> tren 7 hari -> detail.
+/// Beranda admin: perlu perhatian -> KPI hari ini -> penjualan per kasir -> tren dan laporan pendukung.
 /// [aktif] berubah true saat tab dibuka -> data dimuat ulang.
 class AdminDashboardPage extends ConsumerStatefulWidget {
   const AdminDashboardPage({super.key, required this.aktif, this.onBuka});
@@ -29,7 +33,9 @@ class AdminDashboardPage extends ConsumerStatefulWidget {
 class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   DashboardAdmin? _data;
   int? _stokHabis; // dimuat terpisah (agregasi berat di server)
-  bool _loading = true;
+  bool _loading = false;
+  bool _stokMemuat = false;
+  String? _stokError;
   String? _error;
 
   // Rincian penjualan: rentang yang dipilih + hasilnya dimuat terpisah dari Beranda.
@@ -53,18 +59,21 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   }
 
   Future<void> _muat() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final api = ref.read(apiProvider);
-      final d = await api.dashboardAdmin();
-      if (mounted) setState(() => _data = d);
-      // Tidak ditunggu: kartu stok habis muncul sendiri setelah dihitung; gagal = kartu tidak tampil.
-      api.stokHabisJumlah().then((n) {
-        if (mounted) setState(() => _stokHabis = n);
-      }).catchError((_) {});
+      final d = await ref.read(apiProvider).dashboardAdmin();
+      if (!mounted) return;
+      setState(() {
+        _data = d;
+        if (_preset == PresetRentang.periode && _rentangPeriode(d) == null) {
+          _preset = PresetRentang.hari;
+        }
+      });
+      _muatStok();
       _muatRincian(_rentangAktif(d));
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.pesan);
@@ -73,12 +82,34 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
     }
   }
 
-  /// Rentang untuk pilihan saat ini; cadangan "hari ini" bila periode berjalan tidak diketahui.
-  Rentang? _rentangAktif(DashboardAdmin d) {
-    if (_preset == PresetRentang.bebas) return _bebas ?? _rincian?.let((r) => Rentang(r.dari, r.sampai));
-    return rentangPreset(_preset, d.tanggal, periodeDari: d.periodeDari, periodeSampai: d.periodeSampai) ??
-        rentangPreset(PresetRentang.hari, d.tanggal);
+  Future<void> _muatStok() async {
+    if (_stokMemuat) return;
+    setState(() {
+      _stokMemuat = true;
+      _stokError = null;
+    });
+    try {
+      final jumlah = await ref.read(apiProvider).stokHabisJumlah();
+      if (mounted) setState(() => _stokHabis = jumlah);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _stokError = e.pesan);
+    } finally {
+      if (mounted) setState(() => _stokMemuat = false);
+    }
   }
+
+  Rentang? _rentangPeriode(DashboardAdmin d) => rentangPreset(
+    PresetRentang.periode,
+    d.tanggal,
+    periodeDari: d.periodeDari,
+    periodeSampai: d.periodeSampai,
+  );
+
+  Rentang? _rentangAktif(DashboardAdmin d) => switch (_preset) {
+    PresetRentang.bebas => _bebas,
+    PresetRentang.periode => _rentangPeriode(d),
+    _ => rentangPreset(_preset, d.tanggal),
+  };
 
   Future<void> _muatRincian(Rentang? r) async {
     if (r == null) return;
@@ -86,9 +117,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
     setState(() {
       _rincianLoading = true;
       _rincianError = null;
+      if (_rincian?.dari != r.dari || _rincian?.sampai != r.sampai) {
+        _rincian = null;
+      }
     });
     try {
-      final hasil = await ref.read(apiProvider).rincianPenjualan(r.dari, r.sampai);
+      final hasil = await ref
+          .read(apiProvider)
+          .rincianPenjualan(r.dari, r.sampai);
       if (mounted && id == _rincianId) setState(() => _rincian = hasil);
     } on ApiException catch (e) {
       if (mounted && id == _rincianId) setState(() => _rincianError = e.pesan);
@@ -99,7 +135,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
 
   Future<void> _pilihPreset(PresetRentang p, DashboardAdmin d) async {
     if (p == PresetRentang.bebas) {
-      final hariIni = DateTime.parse(d.tanggal);
+      final hariIni = DateTime.tryParse(d.tanggal);
+      if (hariIni == null) return;
       final awal = _rentangAktif(d);
       final dipilih = await showDateRangePicker(
         context: context,
@@ -107,18 +144,25 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
         lastDate: hariIni,
         initialDateRange: awal == null
             ? null
-            : DateTimeRange(start: DateTime.parse(awal.dari), end: DateTime.parse(awal.sampai)),
+            : DateTimeRange(
+                start: DateTime.parse(awal.dari),
+                end: DateTime.parse(awal.sampai),
+              ),
         helpText: 'Pilih rentang penjualan',
       );
       if (dipilih == null || !mounted) return;
       final r = Rentang(isoTanggal(dipilih.start), isoTanggal(dipilih.end));
       final galat = validasiRentang(r, d.tanggal);
+      if (galat != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(galat)));
+        return;
+      }
       setState(() {
         _preset = p;
-        _rincianError = galat;
-        if (galat == null) _bebas = r;
+        _bebas = r;
       });
-      if (galat == null) await _muatRincian(r);
+      await _muatRincian(r);
       return;
     }
     setState(() => _preset = p);
@@ -126,17 +170,19 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   }
 
   List<Widget> _bagianRincian(DashboardAdmin d) {
-    final adaPeriode = rentangPreset(PresetRentang.periode, d.tanggal, periodeDari: d.periodeDari, periodeSampai: d.periodeSampai) != null;
+    final adaPeriode = _rentangPeriode(d) != null;
+    final rentang = _rentangAktif(d);
     final rc = _rincian;
-    final cs = Theme.of(context).colorScheme;
-    String pendek(String iso) => '${iso.substring(8)}/${iso.substring(5, 7)}';
-    Widget chip(PresetRentang p, String label, {bool aktif = true}) => ChoiceChip(
-      label: Text(label),
-      selected: _preset == p,
-      onSelected: aktif ? (_) => _pilihPreset(p, d) : null,
-    );
+    Widget chip(PresetRentang p, String label, {bool aktif = true}) =>
+        ChoiceChip(
+          label: Text(label),
+          selected: _preset == p,
+          materialTapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
+          onSelected: aktif ? (_) => _pilihPreset(p, d) : null,
+        );
     return [
-      const JudulBagian('Rincian penjualan'),
+      const JudulBagian('Penjualan per kasir'),
       Wrap(
         spacing: 8,
         runSpacing: 4,
@@ -144,80 +190,87 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
           chip(PresetRentang.hari, 'Hari ini'),
           chip(PresetRentang.tujuh, '7 hari'),
           chip(PresetRentang.periode, 'Periode berjalan', aktif: adaPeriode),
-          chip(PresetRentang.bebas, 'Pilih tanggal'),
+          chip(PresetRentang.bebas, 'Pilih tanggal', aktif: rentang != null),
         ],
       ),
-      if (_rincianError != null) ...[
+      if (rentang != null) ...[
         const SizedBox(height: 8),
-        BannerBeranda(tingkat: Tingkat.bahaya, judul: 'Rincian tidak dapat dimuat', pesan: _rincianError),
-      ],
-      if (_rincianLoading && rc == null)
-        const Padding(padding: EdgeInsets.all(24), child: LoadingKopkar()),
-      if (rc != null) ...[
-        const SizedBox(height: 10),
         Text(
-          '${pendek(rc.dari)}${rc.hari > 1 ? ' – ${pendek(rc.sampai)}' : ''} · ${rc.hari} hari · ${rc.ringkasan.total.jumlah} transaksi'
-          '${_rincianLoading ? ' · memuat…' : ''}',
+          labelRentang(rentang.dari, rentang.sampai),
           style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+      const SizedBox(height: 8),
+      if (_rincianLoading)
+        Semantics(
+          liveRegion: true,
+          label: 'Memuat penjualan per kasir',
+          child: const LinearProgressIndicator(),
+        ),
+      if (_rincianError case final pesan? when rentang != null)
+        GalatBeranda(
+          judul: rc == null
+              ? 'Penjualan per kasir tidak dapat dimuat'
+              : 'Pembaruan rincian gagal · menampilkan data terakhir',
+          pesan: pesan,
+          cobaLagi: () => _muatRincian(rentang),
+        ),
+      if (rc != null) ...[
+        KasirRincianKartu(
+          judul: 'Semua kasir',
+          pecahan: rc.ringkasan,
+          total: true,
         ),
         const SizedBox(height: 8),
         if (rc.ringkasan.total.jumlah == 0)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: Text('Belum ada transaksi pada rentang ini.')),
+          DaftarBeranda(
+            kosong:
+                'Belum ada transaksi pada ${labelRentang(rc.dari, rc.sampai)}.',
+            baris: const [],
           )
-        else ...[
-          JenisKartu(
-            label: 'Tunai',
-            bagian: rc.ringkasan.tunai,
-            persen: persenJenis(rc.ringkasan.tunai.total, rc.ringkasan.total.total),
-            warna: cs.primary,
-          ),
-          const SizedBox(height: 8),
-          JenisKartu(
-            label: 'Kredit',
-            bagian: rc.ringkasan.kredit,
-            persen: persenJenis(rc.ringkasan.kredit.total, rc.ringkasan.total.total),
-            warna: const Color(0xFFE0A100),
-          ),
-          if (rc.ringkasan.lain.jumlah > 0 || rc.ringkasan.lain.total > 0) ...[
-            const SizedBox(height: 8),
-            JenisKartu(
-              label: 'Lainnya',
-              bagian: rc.ringkasan.lain,
-              persen: persenJenis(rc.ringkasan.lain.total, rc.ringkasan.total.total),
-              warna: cs.outline,
-            ),
-          ],
-          const SizedBox(height: 10),
-          ProporsiJenis(pecahan: rc.ringkasan),
-          if (rc.harian.length > 1 && rc.harian.length <= maksHariGrafik) ...[
-            const JudulBagian('Tren harian'),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
-                child: TrenBertumpuk(harian: rc.harian),
-              ),
-            ),
-          ] else if (rc.harian.length > maksHariGrafik)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('Grafik harian ditampilkan untuk rentang ≤ $maksHariGrafik hari.', style: Theme.of(context).textTheme.bodySmall),
-            ),
-          const JudulBagian('Per kasir'),
+        else
           for (final k in rc.perKasir) ...[
-            KasirRincianKartu(judul: k.nama.isEmpty ? k.kasir : k.nama, subjudul: k.nama.isEmpty ? null : k.kasir, pecahan: k.pecahan),
+            KasirRincianKartu(
+              judul: k.nama.isEmpty ? k.kasir : k.nama,
+              subjudul: k.nama.isEmpty ? null : k.kasir,
+              pecahan: k.pecahan,
+            ),
             const SizedBox(height: 8),
           ],
-          KasirRincianKartu(judul: 'Semua kasir', pecahan: rc.ringkasan, total: true),
-          if (rc.perKasir.length >= 50)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('Menampilkan 50 kasir dengan penjualan terbesar.', style: Theme.of(context).textTheme.bodySmall),
-            ),
-        ],
+        if (rc.perKasir.length >= 50)
+          Text(
+            'Menampilkan 50 kasir dengan penjualan terbesar.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       ],
+    ];
+  }
+
+  List<Widget> _trenRincian(RincianPenjualan? rincian) {
+    if (rincian == null ||
+        rincian.ringkasan.total.jumlah == 0 ||
+        rincian.harian.length <= 1) {
+      return const [];
+    }
+    return [
+      const JudulBagian('Tren harian pada rentang terpilih'),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: rincian.harian.length > maksHariGrafik
+              ? Text(
+                  'Grafik harian tersedia untuk rentang hingga $maksHariGrafik hari.',
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ProporsiJenis(pecahan: rincian.ringkasan),
+                    const SizedBox(height: 8),
+                    TrenBertumpuk(harian: rincian.harian),
+                  ],
+                ),
+        ),
+      ),
     ];
   }
 
@@ -263,6 +316,25 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
           onTap: () => _buka(adminTabProduk, subTabProduk: 1),
         ),
     ];
+    if (_stokMemuat || (_stokHabis == null && _stokError == null)) {
+      item.add(
+        const BannerBeranda(
+          tingkat: Tingkat.ok,
+          judul: 'Memeriksa stok habis…',
+        ),
+      );
+    }
+    if (_stokError case final pesan?) {
+      item.add(
+        GalatBeranda(
+          judul: _stokHabis == null
+              ? 'Status stok habis belum tersedia'
+              : 'Status stok habis gagal diperbarui',
+          pesan: pesan,
+          cobaLagi: _muatStok,
+        ),
+      );
+    }
     if (item.isEmpty) {
       return const [
         BannerBeranda(
@@ -279,123 +351,85 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final d = _data;
+    final warna = Theme.of(context).colorScheme;
     final profil = ref.watch(authProvider).profil;
-    return TropicalScaffold(
-      title: 'Beranda',
+    return BerandaScaffold(
       actions: [
-        const ProfilAksi(),
+        const ProfilAksi(warnaTema: null),
         IconButton(
           tooltip: 'Keluar',
-          icon: const Icon(Icons.logout, color: Colors.white),
+          icon: const Icon(Icons.logout),
           onPressed: () => ref.read(authProvider.notifier).logout(),
         ),
       ],
-      body: RefreshIndicator(
-        onRefresh: _muat,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            if (_loading && d == null)
-              const Padding(padding: EdgeInsets.all(40), child: LoadingKopkar()),
-            if (_error != null)
-              Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Text(_error!),
-                      TextButton(onPressed: _muat, child: const Text('Coba lagi')),
-                    ],
-                  ),
-                ),
+      onRefresh: _muat,
+      memuat: _loading,
+      adaData: d != null,
+      galat: _error,
+      children: [
+        if (d != null) ...[
+          BerandaHeader(
+            nama: profil?.nama.trim().split(' ').first,
+            tanggal: d.tanggal,
+            chip: ChipPeriode(
+              kode: d.periodeKode,
+              periode: d.periode,
+              dari: d.periodeDari,
+              sampai: d.periodeSampai,
+            ),
+          ),
+          const JudulBagian('Perlu perhatian'),
+          ..._perhatian(d),
+          const JudulBagian('Penjualan hari ini'),
+          RingkasanPenjualan(
+            label: 'Total penjualan (semua kasir)',
+            total: d.total,
+            jumlah: d.jumlah,
+            kemarin: d.kemarin,
+          ),
+          ..._bagianRincian(d),
+          ..._trenRincian(_rincian),
+          if (d.tren.isNotEmpty) ...[
+            const JudulBagian('Tren penjualan 7 hari'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
+                child: TrenBatang(tren: d.tren),
               ),
-            if (d != null) ...[
-              BerandaHeader(
-                leading: const ProfilAvatar(radius: 24),
-                nama: (profil?.nama ?? '').split(' ').first,
-                tanggal: d.tanggal,
-                chip: ChipPeriode(
-                  kode: d.periodeKode,
-                  periode: d.periode,
-                  dari: d.periodeDari,
-                  sampai: d.periodeSampai,
-                ),
-              ),
-              const JudulBagian('Perlu perhatian'),
-              ..._perhatian(d),
-              const JudulBagian('Hari ini'),
-              KpiKartu(
-                label: 'Total penjualan (semua kasir)',
-                nilai: rupiah(d.total),
-                hero: true,
-                delta: d.kemarin == null ? null : hitungDelta(d.total, d.kemarin!.total),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: KpiKartu(
-                      label: 'Transaksi',
-                      nilai: '${d.jumlah}',
-                      delta: d.kemarin == null ? null : hitungDelta(d.jumlah, d.kemarin!.jumlah),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: KpiKartu(
-                      label: 'Rata-rata/transaksi',
-                      nilai: rupiah(d.jumlah == 0 ? 0 : (d.total / d.jumlah).round()),
-                    ),
-                  ),
-                ],
-              ),
-              if (d.tren.isNotEmpty) ...[
-                const JudulBagian('Tren penjualan 7 hari'),
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
-                    child: TrenBatang(tren: d.tren),
-                  ),
-                ),
-              ],
-              ..._bagianRincian(d),
-              const JudulBagian('Barang terlaris hari ini'),
-              if (d.terlaris.isEmpty)
-                const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Belum ada penjualan hari ini.'))),
+            ),
+          ],
+          const JudulBagian('Barang terlaris hari ini'),
+          DaftarBeranda(
+            kosong: 'Belum ada penjualan hari ini.',
+            baris: [
               for (final t in d.terlaris)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(
-                      t.nama.isEmpty ? t.kode : t.nama,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text('${t.kode} · terjual ${formatQty(t.qty, '')}'),
-                    trailing: Text(rupiah(t.total), style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ),
+                BarisBeranda(
+                  judul: t.nama.isEmpty ? t.kode : t.nama,
+                  detail: '${t.kode} · terjual ${formatQty(t.qty, '')}',
+                  nilai: rupiah(t.total),
                 ),
-              const JudulBagian('User mobile'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  StatePill(text: 'Admin ${d.userAdmin}'),
-                  StatePill(text: 'Kasir ${d.userKasir}'),
-                  StatePill(text: 'Anggota ${d.userAnggota}'),
-                  StatePill(text: 'Nonaktif ${d.userNonaktif}', color: const Color(0xFF78817B)),
-                  StatePill(text: 'Terkunci ${d.userTerkunci}', color: const Color(0xFFD68A00)),
-                ],
+            ],
+          ),
+          const JudulBagian('User mobile'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              StatePill(text: 'Admin ${d.userAdmin}'),
+              StatePill(text: 'Kasir ${d.userKasir}'),
+              StatePill(text: 'Anggota ${d.userAnggota}'),
+              StatePill(
+                text: 'Nonaktif ${d.userNonaktif}',
+                color: warna.onSurfaceVariant,
+              ),
+              StatePill(
+                text: 'Terkunci ${d.userTerkunci}',
+                color: warna.error,
               ),
             ],
-          ],
-        ),
-      ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -484,8 +518,4 @@ class _AdminShellState extends State<AdminShell> {
             ],
           ),
   );
-}
-
-extension _Let<T> on T {
-  R let<R>(R Function(T it) f) => f(this);
 }

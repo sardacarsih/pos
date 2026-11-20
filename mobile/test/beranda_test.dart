@@ -68,6 +68,8 @@ void main() {
       expect(tanggalPanjang('2026-11-18'), 'Rabu, 18 November 2026');
       expect(tanggalPanjang('salah'), '');
       expect(hariSingkat('2026-11-18'), 'Rab');
+      expect(labelRentang('2026-11-18', '2026-11-18'), 'Rabu, 18 November 2026');
+      expect(labelRentang('2026-11-12', '2026-11-18'), '12 Nov 2026 – 18 Nov 2026');
     });
   });
 
@@ -233,19 +235,12 @@ void main() {
       final r = RincianPenjualan.fromJson(json);
       await t.pumpWidget(_host(KasirRincianKartu(judul: 'Rina', subjudul: 'k1', pecahan: r.perKasir.single.pecahan)));
       expect(find.text('Rina'), findsOneWidget);
-      expect(find.text('Tunai'), findsOneWidget);
-      expect(find.text('Kredit'), findsOneWidget);
-      expect(find.text('Lainnya'), findsNothing);
-      expect(find.textContaining('Total · 3 trx'), findsOneWidget);
+      expect(find.textContaining('Tunai '), findsOneWidget);
+      expect(find.textContaining('Kredit '), findsOneWidget);
+      expect(find.textContaining('Lainnya '), findsNothing);
+      expect(find.text('Total · 3 transaksi'), findsOneWidget);
       await t.pumpWidget(_host(KasirRincianKartu(judul: 'Semua kasir', pecahan: r.ringkasan, total: true)));
-      expect(find.text('Lainnya'), findsOneWidget);
-    });
-
-    testWidgets('JenisKartu menampilkan total, jumlah transaksi, dan persen', (t) async {
-      final r = RincianPenjualan.fromJson(json);
-      await t.pumpWidget(_host(JenisKartu(label: 'Tunai', bagian: r.ringkasan.tunai, persen: 56, warna: Colors.green)));
-      expect(find.text('Tunai'), findsOneWidget);
-      expect(find.text('2 transaksi · 56%'), findsOneWidget);
+      expect(find.textContaining('Lainnya '), findsOneWidget);
     });
 
     testWidgets('TrenBertumpuk menyediakan ringkasan tunai/kredit untuk pembaca layar', (t) async {
