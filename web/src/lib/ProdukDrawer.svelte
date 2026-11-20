@@ -14,6 +14,10 @@
 
   export let edit: Data;
   export let categories: Data[];
+  export let masterSatuan: Data[] = [];
+  // Nilai terpilih yang belum ada di master (produk warisan) tetap ditampilkan agar tidak hilang diam-diam.
+  $: opsiDasar = opsiSatuan(masterSatuan, edit.satuan);
+  const opsiSatuan = (m: Data[], cur?: string) => { const n = m.map(x => x.nama as string); return cur && !n.includes(cur) ? [cur, ...n] : n; };
   export let satuanList: SatuanBaris[];
   export let satuanSiap: boolean;
   export let saving: boolean;
@@ -103,7 +107,7 @@
         <label>Barcode<input name="barcode" bind:value={edit.barcode} inputmode="numeric" autocomplete="off" /></label>
         <label>Nama<input name="nama" bind:value={edit.nama} required autocomplete="off" /></label>
         <div class="form-grid">
-          <label>Satuan dasar<input bind:value={edit.satuan} required maxlength="20" /></label>
+          <label>Satuan dasar<select bind:value={edit.satuan} required><option value="" disabled>Pilih satuan</option>{#each opsiDasar as n}<option value={n}>{n}</option>{/each}</select></label>
           <label>Kategori<select bind:value={edit.kategori_id}>{#each categories as c}<option value={c.id}>{c.nama}</option>{/each}</select></label>
         </div>
       </fieldset>
@@ -129,7 +133,7 @@
         {#if baru || satuanSiap}
           {#each satuanList as s, i (s)}
             <div class="pd-satuan form-grid" role="group" aria-label="Satuan tambahan {i + 1}">
-              <label>Satuan<input bind:value={s.satuan} maxlength="20" required /></label>
+              <label>Satuan<select bind:value={s.satuan} required><option value="" disabled>Pilih satuan</option>{#each opsiSatuan(masterSatuan, s.satuan) as n}<option value={n}>{n}</option>{/each}</select></label>
               <label>Isi<input type="number" bind:value={s.isi} min="1.0001" max="1000000" step="0.0001" required /></label>
               <label>Harga jual<input type="number" bind:value={s.harga} min="0.01" step="0.01" required /></label>
               <label>Barcode (opsional)<input bind:value={s.barcode} maxlength="50" /></label>

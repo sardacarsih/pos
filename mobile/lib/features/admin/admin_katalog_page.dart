@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../profil/profil_aksi.dart';
 import 'admin_kategori_page.dart';
+import 'admin_satuan_page.dart';
 import 'admin_opname_page.dart';
 import 'admin_produk_page.dart';
 import 'admin_stok_page.dart';
@@ -22,7 +23,7 @@ class AdminKatalogPage extends ConsumerStatefulWidget {
 
 class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 5, vsync: this)
+  late final TabController _tab = TabController(length: 6, vsync: this)
     ..addListener(() {
       if (!_tab.indexIsChanging) setState(() {});
     });
@@ -71,6 +72,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
             Tab(text: 'Harga ≤ HPP'),
             Tab(text: 'Opname'),
             Tab(text: 'Kategori'),
+            Tab(text: 'Satuan'),
           ],
         ),
         // IndexedStack: kedua tab tetap hidup (pencarian/filter dan perubahan kategori yang belum disimpan tidak hilang).
@@ -83,6 +85,7 @@ class _AdminKatalogPageState extends ConsumerState<AdminKatalogPage>
               AdminProdukPage(hargaRendah: true),
               AdminOpnamePage(),
               AdminKategoriPage(),
+              AdminSatuanPage(),
             ],
           ),
         ),

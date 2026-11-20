@@ -2,7 +2,11 @@ int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
 String _s(dynamic v) => (v as String?) ?? '';
 
 /// Angka dari JSON; API mengirim kolom Decimal tertentu sebagai string (mis. stok, isi satuan).
-double? _dn(dynamic v) => v is num ? v.toDouble() : v is String ? double.tryParse(v) : null;
+double? _dn(dynamic v) => v is num
+    ? v.toDouble()
+    : v is String
+    ? double.tryParse(v)
+    : null;
 
 class Profil {
   Profil({
@@ -91,6 +95,13 @@ class SatuanJual {
 
 class Kategori {
   Kategori.fromJson(Map<String, dynamic> j)
+    : id = _s(j['id']),
+      nama = _s(j['nama']);
+  final String id, nama;
+}
+
+class Satuan {
+  Satuan.fromJson(Map<String, dynamic> j)
     : id = _s(j['id']),
       nama = _s(j['nama']);
   final String id, nama;

@@ -16,6 +16,11 @@ class _ApiProduk extends ApiClient {
     '/api/v1/admin/kategori' => [
       {'id': '1', 'nama': 'Minuman'},
     ],
+    '/api/v1/admin/satuan' => [
+      {'id': '1', 'nama': 'PCS'},
+      {'id': '2', 'nama': 'BOX'},
+      {'id': '3', 'nama': 'PAK'},
+    ],
     _ => throw StateError('GET tidak diharapkan: $p'),
   };
 
@@ -67,6 +72,15 @@ void main() {
         await tester.pumpAndSettle();
       }
 
+      Future<void> pilih(String label, String nilai, {int index = 0}) async {
+        final dd = find.widgetWithText(DropdownButtonFormField<String>, label);
+        await tester.ensureVisible(dd.at(index));
+        await tester.tap(dd.at(index));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(nilai).last);
+        await tester.pumpAndSettle();
+      }
+
       Future<void> tombol(String label) async {
         final button = find.text(label);
         await tester.ensureVisible(button);
@@ -78,28 +92,23 @@ void main() {
       await isi('Harga jual (Rp)', '5000');
       await isi('Harga beli (Rp)', '4000');
       await tombol('Tambah satuan');
-      await isi('Satuan tambahan', 'BOX');
+      await pilih('Satuan tambahan', 'BOX');
       await isi('Isi per satuan', '12');
       await isi('Harga jual satuan (Rp)', '55000');
       await isi('Barcode satuan (opsional)', '899012');
       await tombol('Tambah satuan');
-      await isi('Satuan tambahan', 'PAK', index: 1);
+      await pilih('Satuan tambahan', 'PAK', index: 1);
       await isi('Isi per satuan', '6,5', index: 1);
       await isi('Harga jual satuan (Rp)', '30000,25', index: 1);
       await tombol('Simpan');
     expect(find.text('Koneksi terputus'), findsOneWidget);
-      expect(
-        tester
-            .widget<TextField>(field('Satuan tambahan').first)
-            .controller!
-            .text,
-        'BOX',
-      );
+      expect(find.text('BOX'), findsWidgets);
       await tombol('Simpan');
       expect(api.kiriman, hasLength(2));
       expect(api.kiriman.first.key, isNotEmpty);
       expect(api.kiriman.first.key, api.kiriman.last.key);
       expect(api.kiriman.first.body, api.kiriman.last.body);
+      expect((api.kiriman.last.body as Map)['satuan'], 'PCS');
       expect((api.kiriman.last.body as Map)['satuan_lain'], [
         {'satuan': 'BOX', 'isi': 12, 'harga': 55000, 'barcode': '899012'},
         {'satuan': 'PAK', 'isi': 6.5, 'harga': 30000.25, 'barcode': null},

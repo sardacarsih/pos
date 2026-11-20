@@ -622,6 +622,144 @@ pub fn kategori_hapus(c: &Connection, id: &str) -> AppResult<()> {
     hasil
 }
 
+#[derive(Debug, Serialize)]
+pub struct Satuan {
+    pub id: String,
+    pub nama: String,
+}
+
+pub fn semua_satuan(c: &Connection) -> AppResult<Vec<Satuan>> {
+    let mut out = Vec::new();
+    for r in c.query("SELECT TO_CHAR(ID), SATUAN FROM POS_SATUAN ORDER BY SATUAN", &[])? {
+        let r = r?;
+        out.push(Satuan { id: r.get(0)?, nama: r.get::<_, Option<String>>(1)?.unwrap_or_default() });
+    }
+    Ok(out)
+}
+
+fn nama_satuan_valid(nama: &str) -> AppResult<String> {
+    let nama = nama.trim();
+    if nama.is_empty() || nama.chars().count() > 20 {
+        return Err(AppError::validation("Nama satuan 1-20 karakter"));
+    }
+    if nama.chars().any(char::is_control) {
+        return Err(AppError::validation("Nama satuan mengandung karakter kontrol"));
+    }
+    Ok(nama.to_uppercase())
+}
+
+fn satuan_ada(c: &Connection, id: &str) -> AppResult<Satuan> {
+    opt(c.query_row_named(
+        "SELECT TO_CHAR(ID), SATUAN FROM POS_SATUAN WHERE TO_CHAR(ID) = :id",
+        &[("id", &id)],
+    ))?
+    .map(|r| -> AppResult<Satuan> {
+        Ok(Satuan { id: r.get(0)?, nama: r.get::<_, Option<String>>(1)?.unwrap_or_default() })
+    })
+    .transpose()?
+    .ok_or_else(|| AppError::NotFound("Satuan tidak ditemukan".into()))
+}
+
+fn satuan_jumlah_produk(c: &Connection, nama: &str) -> AppResult<i64> {
+    Ok(c.query_row_named(
+        "SELECT (SELECT COUNT(*) FROM POS_PRODUCT WHERE UPPER(TRIM(SATUAN)) = UPPER(:n)) \
+              + (SELECT COUNT(*) FROM POS_PRODUCT_SATUAN WHERE UPPER(TRIM(SATUAN)) = UPPER(:n)) FROM DUAL",
+        &[("n", &nama)],
+    )?
+    .get(0)?)
+}
+
+fn satuan_nama_dipakai(c: &Connection, nama: &str, kecuali: Option<&str>) -> AppResult<bool> {
+    let id = kecuali.unwrap_or("");
+    let n: i64 = c
+        .query_row_named(
+            "SELECT COUNT(*) FROM POS_SATUAN WHERE UPPER(TRIM(SATUAN)) = UPPER(:nama) AND TO_CHAR(ID) <> :id",
+            &[("nama", &nama), ("id", &id)],
+        )?
+        .get(0)?;
+    Ok(n > 0)
+}
+
+/// Satuan harus ada di master `POS_SATUAN` (tanpa beda huruf); mengembalikan nama persis seperti di master.
+pub fn pastikan_satuan_master(c: &Connection, nama: &str) -> AppResult<String> {
+    let nama = nama.trim();
+    opt(c.query_row_as_named::<String>(
+        "SELECT TRIM(SATUAN) FROM POS_SATUAN WHERE UPPER(TRIM(SATUAN)) = UPPER(:n) FETCH FIRST 1 ROWS ONLY",
+        &[("n", &nama)],
+    ))?
+    .ok_or_else(|| AppError::validation(format!("Satuan \"{nama}\" tidak ada di master Satuan")))
+}
+
+pub fn satuan_buat(c: &Connection, nama: &str) -> AppResult<Satuan> {
+    let nama = nama_satuan_valid(nama)?;
+    if satuan_nama_dipakai(c, &nama, None)? {
+        return Err(AppError::Conflict("Satuan sudah ada".into()));
+    }
+    let id: i64 = c.query_row_as("SELECT NVL(MAX(ID), 0) + 1 FROM POS_SATUAN", &[])?;
+    c.execute_named("INSERT INTO POS_SATUAN (ID, SATUAN) VALUES (:id, :nama)", &[("id", &id), ("nama", &nama)])
+        .map_err(|e| {
+            if e.oci_code() == Some(1) {
+                AppError::Conflict("ID satuan bentrok, coba lagi".into())
+            } else {
+                e.into()
+            }
+        })?;
+    c.commit()?;
+    Ok(Satuan { id: id.to_string(), nama })
+}
+
+/// Ubah nama satuan; produk yang memakainya ikut berganti nama. Riwayat transaksi tetap memakai nama lama.
+pub fn satuan_ubah(c: &Connection, id: &str, nama: &str) -> AppResult<()> {
+    let nama = nama_satuan_valid(nama)?;
+    let lama = satuan_ada(c, id)?;
+    if satuan_nama_dipakai(c, &nama, Some(id))? {
+        return Err(AppError::Conflict("Satuan sudah ada".into()));
+    }
+    let hasil = (|| -> AppResult<()> {
+        let lama_nama = lama.nama.trim().to_string();
+        c.execute_named("UPDATE POS_SATUAN SET SATUAN = :nama WHERE TO_CHAR(ID) = :id", &[("nama", &nama), ("id", &id)])?;
+        c.execute_named(
+            "UPDATE POS_PRODUCT SET SATUAN = :nama WHERE UPPER(TRIM(SATUAN)) = UPPER(:lama)",
+            &[("nama", &nama), ("lama", &lama_nama)],
+        )?;
+        c.execute_named(
+            "UPDATE POS_PRODUCT_SATUAN SET SATUAN = :nama WHERE UPPER(TRIM(SATUAN)) = UPPER(:lama)",
+            &[("nama", &nama), ("lama", &lama_nama)],
+        )?;
+        c.commit()?;
+        Ok(())
+    })();
+    if hasil.is_err() {
+        let _ = c.rollback();
+    }
+    hasil
+}
+
+pub fn satuan_jejak(c: &Connection, id: &str) -> AppResult<(Satuan, i64)> {
+    let s = satuan_ada(c, id)?;
+    let n = satuan_jumlah_produk(c, s.nama.trim())?;
+    Ok((s, n))
+}
+
+pub fn satuan_hapus(c: &Connection, id: &str) -> AppResult<()> {
+    let s = satuan_ada(c, id)?;
+    let n = satuan_jumlah_produk(c, s.nama.trim())?;
+    if n > 0 {
+        return Err(AppError::Conflict(format!(
+            "Satuan masih dipakai {n} produk. Ganti satuan produk itu dulu."
+        )));
+    }
+    let hasil = (|| -> AppResult<()> {
+        c.execute_named("DELETE FROM POS_SATUAN WHERE TO_CHAR(ID) = :id", &[("id", &id)])?;
+        c.commit()?;
+        Ok(())
+    })();
+    if hasil.is_err() {
+        let _ = c.rollback();
+    }
+    hasil
+}
+
 #[cfg(test)]
 mod tests_kategori {
     use super::nama_kategori_valid;
@@ -1129,6 +1267,9 @@ pub fn ganti_satuan(conn: &Connection, id: i64, daftar: &[SatuanJual]) -> AppRes
             &[("id", &id)],
         ))?.ok_or_else(|| AppError::NotFound("Produk tidak ditemukan".into()))?;
         validasi_satuan(dasar.as_deref().unwrap_or_default(), daftar)?;
+        for s in daftar {
+            pastikan_satuan_master(conn, &s.satuan)?;
+        }
         pastikan_barcode_satuan(conn, daftar, Some(id))?;
         conn.execute_named("DELETE FROM POS_PRODUCT_SATUAN WHERE PRODUCT_ID = :id", &[("id", &id)])?;
         sisipkan_satuan(conn, id, daftar)?;
@@ -1187,6 +1328,12 @@ pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64
         if barcode != lama.barcode.trim() && !barcode_tersedia(conn, barcode, Some(id), None)? {
             return Err(AppError::Conflict("Barcode sudah dipakai produk lain".into()));
         }
+        // Satuan lama yang tidak diubah tidak diperiksa ulang, supaya produk warisan tetap bisa disunting.
+        let satuan_master = if p.satuan.trim() == lama.satuan.trim() {
+            lama.satuan.trim().to_string()
+        } else {
+            pastikan_satuan_master(conn, &p.satuan)?
+        };
         let kat = p.kategori_id.trim();
         let n: i64 = conn.query_row_as_named(
             "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
@@ -1202,7 +1349,7 @@ pub fn ubah_produk(conn: &Connection, id: i64, p: &UbahProduk) -> AppResult<(i64
                 ("nama", &p.nama.trim()),
                 ("barcode", &barcode),
                 ("harga", &p.harga),
-                ("satuan", &p.satuan.trim()),
+                ("satuan", &satuan_master),
                 ("kat", &kat),
                 ("beli", &p.beli),
                 ("aktif", &if p.aktif { "Y" } else { "N" }),
@@ -1306,6 +1453,10 @@ pub fn buat_produk(
             return produk_admin_by_id(conn, id)?
                 .ok_or_else(|| AppError::NotFound("Produk hasil permintaan ini sudah dihapus".into()));
         }
+        let satuan_master = pastikan_satuan_master(conn, &p.satuan)?;
+        for s in daftar {
+            pastikan_satuan_master(conn, &s.satuan)?;
+        }
         let kat = p.kategori_id.trim();
         let n: i64 = conn.query_row_as_named(
             "SELECT COUNT(*) FROM POS_KATEGORI WHERE TO_CHAR(KODE) = :k",
@@ -1355,7 +1506,7 @@ pub fn buat_produk(
                 ("barcode", &barcode),
                 ("beli", &p.beli),
                 ("harga", &p.harga),
-                ("satuan", &p.satuan.trim()),
+                ("satuan", &satuan_master),
                 ("kat", &kat),
             ],
         )

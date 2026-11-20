@@ -101,10 +101,10 @@ fn migrasi_idempotent_dan_user_roundtrip() {
     }
 }
 
-const TABEL_POS: [&str; 14] = [
+const TABEL_POS: [&str; 15] = [
     "POS_PRODUCT", "POS_KATEGORI", "POS_STOCK", "POS_PEMBELIAN", "POS_PEMBELIANDETAIL", "POS_PENJUALAN",
     "POS_PENJUALAN_DETAIL", "POS_BARANGRUSAK", "POS_STOCKOPNAME", "POS_TRANSACTION_COUNTER", "NOMOR_TRANSAKSI",
-    "POS_PENDING_DETAIL", "POS_POTONGANBERDASARKANQTY", "POS_PRODUCT_SATUAN",
+    "POS_PENDING_DETAIL", "POS_POTONGANBERDASARKANQTY", "POS_PRODUCT_SATUAN", "POS_SATUAN",
 ];
 
 /// Membuat tabel POS_* minimal untuk uji stok/opname dan menghapusnya lagi (juga bila uji panik).
@@ -137,6 +137,7 @@ impl<'a> SkemaPos<'a> {
             "CREATE TABLE POS_PENDING_DETAIL (NO_TRANSAKSI VARCHAR2(30), KODE_BARANG VARCHAR2(30), JUMLAH_BARANG NUMBER, ISI NUMBER DEFAULT 1 NOT NULL)",
             "CREATE TABLE POS_POTONGANBERDASARKANQTY (KODE_ITEM VARCHAR2(30), QTY NUMBER)",
             "CREATE TABLE POS_PRODUCT_SATUAN (PRODUCT_ID NUMBER, SATUAN VARCHAR2(20), ISI NUMBER, HARGA NUMBER, BARCODE VARCHAR2(50))",
+            "CREATE TABLE POS_SATUAN (ID NUMBER PRIMARY KEY, SATUAN VARCHAR2(20) NOT NULL)",
         ] {
             c.execute(ddl, &[]).unwrap();
         }
@@ -746,6 +747,9 @@ fn buat_produk_kode_berurutan_duplikat_dan_idempoten() {
     };
     let Some(_skema) = SkemaPos::buat(&c) else { return };
     db::migrate(&c).unwrap();
+    for n in ["PCS", "BOX", "PAK"] {
+        katalog::satuan_buat(&c, n).unwrap();
+    }
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     for ddl in [
         "ALTER TABLE POS_PENJUALAN ADD (JAM VARCHAR2(10), ID_PELANGGAN NUMBER, NAMA_PELANGGAN VARCHAR2(100),
@@ -1248,4 +1252,28 @@ fn valuasi_dan_stok_minimum() {
     bersihkan_user(&c, 0);
     c.execute("DELETE FROM MOB_STOK_SESUAI", &[]).unwrap();
     c.commit().unwrap();
+}
+
+#[test]
+fn master_satuan_crud_dan_produk_wajib_dari_master() {
+    use pos_api::{db::katalog, error::AppError};
+
+    let Some(c) = koneksi() else {
+        eprintln!("dilewati: POS_TEST_ORACLE tidak diset");
+        return;
+    };
+    let Some(_skema) = SkemaPos::buat(&c) else { return };
+    db::migrate(&c).unwrap();
+    let pcs = katalog::satuan_buat(&c, " pcs ").unwrap();
+    assert_eq!(pcs.nama, "PCS");
+    assert!(matches!(katalog::satuan_buat(&c, "Pcs"), Err(AppError::Conflict(_))));
+    assert!(matches!(katalog::satuan_buat(&c, "  "), Err(AppError::Validation(_))));
+    assert_eq!(katalog::pastikan_satuan_master(&c, "pcs").unwrap(), "PCS");
+    assert!(matches!(katalog::pastikan_satuan_master(&c, "DUS"), Err(AppError::Validation(_))));
+    katalog::satuan_ubah(&c, &pcs.id, "BUAH").unwrap();
+    assert!(katalog::pastikan_satuan_master(&c, "PCS").is_err());
+    let (_, dipakai) = katalog::satuan_jejak(&c, &pcs.id).unwrap();
+    assert_eq!(dipakai, 0);
+    katalog::satuan_hapus(&c, &pcs.id).unwrap();
+    assert!(matches!(katalog::satuan_hapus(&c, &pcs.id), Err(AppError::NotFound(_))));
 }

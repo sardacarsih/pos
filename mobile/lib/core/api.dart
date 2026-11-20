@@ -208,6 +208,7 @@ class ApiClient {
   );
   Future<dynamic> put(String p, {Object? body}) =>
       _call(() => _dio.put<dynamic>(p, data: body));
+  Future<dynamic> delete(String p) => _call(() => _dio.delete<dynamic>(p));
 
   Future<void> daftarPush(String token) async {
     await put(
@@ -625,6 +626,28 @@ class ApiClient {
     for (final k in await get('/api/v1/admin/kategori') as List)
       Kategori.fromJson(k as Map<String, dynamic>),
   ];
+
+  // ---- master satuan ----
+  Future<List<Satuan>> semuaSatuan() async => [
+    for (final k in await get('/api/v1/admin/satuan') as List)
+      Satuan.fromJson(k as Map<String, dynamic>),
+  ];
+
+  Future<void> buatSatuan(String nama) async =>
+      post('/api/v1/admin/satuan', body: {'nama': nama});
+
+  Future<void> ubahSatuan(String id, String nama) async =>
+      put('/api/v1/admin/satuan/$id', body: {'nama': nama});
+
+  /// Jumlah produk yang memakai satuan ini (hapus hanya boleh bila 0).
+  Future<int> jumlahProdukSatuan(String id) async =>
+      ((await get('/api/v1/admin/satuan/$id/jejak')
+                  as Map<String, dynamic>)['jumlah_produk']
+              as num)
+          .toInt();
+
+  Future<void> hapusSatuan(String id) async =>
+      delete('/api/v1/admin/satuan/$id');
 
   Future<DashboardAdmin> dashboardAdmin() async => DashboardAdmin.fromJson(
     await get('/api/v1/admin/dashboard') as Map<String, dynamic>,
