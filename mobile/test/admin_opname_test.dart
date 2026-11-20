@@ -68,7 +68,7 @@ class _ApiOpname extends ApiClient {
           'nomor_so': nomorSo,
           'tanggal': '2026-11-18',
           'jumlah_item': 1,
-          'nilai_selisih': -500,
+          'nilai_selisih': '-500.00',
         }),
       );
       throw ApiException('Koneksi terputus', offline: true);
@@ -84,9 +84,9 @@ class _ApiOpname extends ApiClient {
       {
         'kode': 'P001',
         'nama': 'Minyak goreng',
-        'jumlah_sistem': 5,
-        'qty_fisik': 0,
-        'selisih': -5,
+        'jumlah_sistem': '5.0000',
+        'qty_fisik': '0',
+        'selisih': '-5.0000',
       },
     ],
   });
@@ -169,9 +169,12 @@ void main() {
     expect(api.kiriman.last.items.single.hitungan.single.qty, '0');
     expect(api.riwayatSo, hasLength(1));
     expect(find.text('Dokumen SO-26-000001 tersimpan.'), findsOneWidget);
+    expect(find.text(_ApiOpname.nomorSo), findsOneWidget);
     await t.tap(find.text('Buka dokumen'));
     await t.pumpAndSettle();
     expect(find.text('Minyak goreng'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
     expect(find.text('-5'), findsOneWidget);
     expect(t.takeException(), isNull);
   });

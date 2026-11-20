@@ -410,7 +410,7 @@ class StokItem {
   final List<SatuanJual> satuanTambahan;
 }
 
-double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
+double _d(dynamic v) => _dn(v) ?? 0;
 
 /// Ringkasan dokumen stock opname (riwayat SO).
 class SoRingkas {

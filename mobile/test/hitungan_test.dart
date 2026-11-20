@@ -165,5 +165,25 @@ void main() {
       expect(b.satuanTambahan.single.isi, 12);
       expect(b.satuanTambahan.single.barcode, 'B12');
     });
+
+    test('stok dan isi bertipe string dari API tetap terparse (regresi 1.0.10)', () {
+      final b = StokItem.fromJson({
+        'id': 1,
+        'kode': 'P001',
+        'barcode': '',
+        'nama': 'Gula',
+        'satuan': 'PCS',
+        'stok': '-13.5',
+        'satuan_tambahan': [
+          {'satuan': 'DUS', 'isi': '12', 'barcode': ''},
+        ],
+      });
+      expect(b.stok, -13.5);
+      expect(b.satuanTambahan.single.isi, 12);
+      final kolom = kolomHitungan(b);
+      kolom[0].qty = '3';
+      kolom[1].qty = '2';
+      expect(statusHitungan(kolom).nilai, 27);
+    });
   });
 }
