@@ -1,7 +1,9 @@
 //! Akses Oracle. Driver `oracle` bersifat blocking: semua kerja DB lewat `run` (spawn_blocking).
 pub mod anggota;
+pub mod barang_rusak;
 pub mod dashboard;
 pub mod desktop_migrations;
+pub mod dokumen_stok;
 pub mod faktur;
 pub mod foto;
 pub mod kas;

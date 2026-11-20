@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{Binds, dec, katalog, num, opt, tm};
+use super::{Binds, dec, dokumen_stok, katalog, num, opt, tm};
 use crate::error::{AppError, AppResult};
 
 const KODE: &str = "STOCK_OPNAME";
@@ -210,8 +210,28 @@ pub struct BarisSo {
 pub struct DokumenSo {
     pub nomor_so: String,
     pub tanggal: String,
+    /// Sidik isi dokumen; dikirim balik pada ubah/hapus agar data yang sudah berubah ditolak (409).
+    pub versi: String,
     pub items: Vec<BarisSo>,
     pub ulang: bool,
+}
+
+/// Sidik isi dokumen, tidak bergantung urutan baris.
+fn versi_so(items: &[BarisSo]) -> String {
+    let mut v: Vec<String> = items
+        .iter()
+        .map(|b| {
+            format!(
+                "{}|{}|{}|{}",
+                b.kode,
+                b.jumlah_sistem.normalize(),
+                b.qty_fisik.normalize(),
+                b.selisih.normalize()
+            )
+        })
+        .collect();
+    v.sort();
+    dokumen_stok::sidik_versi(&v)
 }
 
 #[derive(Debug, Serialize)]
@@ -289,7 +309,7 @@ fn hash_dokumen(items: &[BarisReq], fisik: &[Fisik]) -> String {
 
 /// Alokasi nomor berikutnya (UPDATE mengunci baris counter sampai commit, jadi paralel aman).
 /// Fallback INSERT + ORA-00001 meniru `AllocateTransactionNumber` desktop.
-fn alokasi_nomor(conn: &Connection, tahun: i32) -> AppResult<String> {
+pub(crate) fn alokasi_nomor(conn: &Connection, tahun: i32) -> AppResult<String> {
     let upd = "UPDATE POS_TRANSACTION_COUNTER SET LAST_NUMBER = LAST_NUMBER + 1 WHERE TRANSACTION_CODE = :c AND TRANSACTION_YEAR = :y";
     let mut n = conn.execute_named(upd, &[("c", &KODE), ("y", &tahun)])?.row_count()?;
     if n == 0 {
@@ -376,7 +396,7 @@ fn tulis_baris(
 }
 
 /// Cermin nomor terakhir untuk pembaca lama (sama seperti MergeLegacyNumberSql desktop) + tandai kunci selesai.
-fn selesai(conn: &Connection, user_id: i64, operasi: &str, key: &str, nomor: &str) -> AppResult<()> {
+pub(crate) fn selesai(conn: &Connection, user_id: i64, operasi: &str, key: &str, nomor: &str) -> AppResult<()> {
     conn.execute_named(
         "MERGE INTO nomor_transaksi t USING (SELECT 'STOCK_OPNAME' kode, :no nomor FROM dual) s ON (t.kode = s.kode) \
          WHEN MATCHED THEN UPDATE SET t.nomor = s.nomor \
@@ -594,19 +614,21 @@ fn dokumen_inner(
         tulis_baris(conn, &nomor, hari, &p.kode, *sistem, *fisik, *selisih, p.hpp)?;
     }
     selesai(conn, user_id, OPERASI_DOK, key, &nomor)?;
+    let items: Vec<BarisSo> = baris
+        .into_iter()
+        .map(|(p, sistem, fisik, selisih)| BarisSo {
+            kode: p.kode.clone(),
+            nama: p.nama.clone(),
+            jumlah_sistem: sistem,
+            qty_fisik: fisik,
+            selisih,
+        })
+        .collect();
     Ok(DokumenSo {
         nomor_so: nomor,
         tanggal: hari.format("%Y-%m-%d").to_string(),
-        items: baris
-            .into_iter()
-            .map(|(p, sistem, fisik, selisih)| BarisSo {
-                kode: p.kode.clone(),
-                nama: p.nama.clone(),
-                jumlah_sistem: sistem,
-                qty_fisik: fisik,
-                selisih,
-            })
-            .collect(),
+        versi: versi_so(&items),
+        items,
         ulang: false,
     })
 }
@@ -672,9 +694,290 @@ pub fn detail_so(conn: &Connection, nomor: &str) -> AppResult<DokumenSo> {
     Ok(DokumenSo {
         nomor_so: nomor.to_string(),
         tanggal,
+        versi: versi_so(&items),
         items,
         ulang: false,
     })
+}
+
+// ---------------------------------------------------------------- ubah dan hapus dokumen
+
+const OPERASI_UBAH: &str = "OPNAME_UBH";
+const OPERASI_HAPUS: &str = "OPNAME_HPS";
+
+/// Baris dokumen apa adanya di DB (dikunci FOR UPDATE).
+struct BarisLama {
+    sistem: Decimal,
+    hpp: Decimal,
+    selisih: Decimal,
+}
+
+/// Kunci semua baris dokumen, cocokkan `versi`, dan kembalikan tanggal + peta kode -> baris. NotFound bila kosong.
+fn kunci_dokumen(
+    conn: &Connection,
+    nomor: &str,
+    versi: &str,
+) -> AppResult<(NaiveDate, std::collections::HashMap<String, BarisLama>)> {
+    let sql = format!(
+        "SELECT KODE_BARANG, {}, {}, {}, TRUNC(TANGGAL) FROM POS_STOCKOPNAME WHERE NOMOR_SO = :n FOR UPDATE",
+        tm("NVL(JUMLAHSISTEM, 0)"),
+        tm("NVL(HPP, 0)"),
+        tm("NVL(SELISIH, 0)")
+    );
+    let mut peta = std::collections::HashMap::new();
+    let mut tanggal: Option<NaiveDate> = None;
+    for r in conn.query_named(&sql, &[("n", &nomor)])? {
+        let r = r?;
+        tanggal = Some(r.get::<_, chrono::NaiveDateTime>(4)?.date());
+        peta.insert(
+            r.get::<_, String>(0)?,
+            BarisLama {
+                sistem: dec(&r.get::<_, String>(1)?)?,
+                hpp: dec(&r.get::<_, String>(2)?)?,
+                selisih: dec(&r.get::<_, String>(3)?)?,
+            },
+        );
+    }
+    let tanggal = tanggal.ok_or_else(|| AppError::NotFound("Dokumen SO tidak ditemukan".into()))?;
+    // Dibaca setelah dikunci: bila `versi` cocok, isi dokumen tidak berubah sejak klien membacanya.
+    if detail_so(conn, nomor)?.versi != versi {
+        return Err(AppError::Conflict(
+            "Dokumen SO sudah berubah sejak dibuka; muat ulang lalu ulangi".into(),
+        ));
+    }
+    Ok((tanggal, peta))
+}
+
+/// Ubah dokumen SO (nomor dan tanggal tetap): ubah fisik, tambah, atau hapus barang.
+/// Baris lama: `selisih = fisik baru - JUMLAHSISTEM lama` dengan HPP lama (stok bergeser tepat sebesar delta
+/// selisih); baris baru memakai stok dan HPP sekarang. Semua-atau-tidak-sama-sekali, tercatat di log.
+#[allow(clippy::too_many_arguments)]
+pub fn ubah_dokumen(
+    conn: &Connection,
+    user_id: i64,
+    user_nama: &str,
+    key: &str,
+    nomor: &str,
+    versi: &str,
+    alasan: Option<&str>,
+    items: &[BarisReq],
+    hari: NaiveDate,
+) -> AppResult<DokumenSo> {
+    validasi_dokumen(items)?;
+    let alasan = dokumen_stok::alasan_valid(alasan)?;
+    let fisik: Vec<Fisik> = items.iter().map(baca_fisik).collect::<AppResult<_>>()?;
+    let r = ubah_inner(conn, user_id, user_nama, key, nomor, versi, &alasan, items, &fisik, hari);
+    if r.is_err() {
+        let _ = conn.rollback();
+    }
+    r
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ubah_inner(
+    conn: &Connection,
+    user_id: i64,
+    user_nama: &str,
+    key: &str,
+    nomor: &str,
+    versi: &str,
+    alasan: &str,
+    items: &[BarisReq],
+    fisik: &[Fisik],
+    hari: NaiveDate,
+) -> AppResult<DokumenSo> {
+    let hash = hex(Sha256::digest(
+        format!("{nomor}|{versi}|{}", hash_dokumen(items, fisik)).as_bytes(),
+    ));
+    if let Some(n) = klaim_kunci(conn, user_id, OPERASI_UBAH, key, &hash)? {
+        let mut d = detail_so(conn, &n)?;
+        d.ulang = true;
+        return Ok(d);
+    }
+    let (tanggal, lama) = kunci_dokumen(conn, nomor, versi)?;
+
+    // Kunci produk yang diminta dan yang sudah ada di dokumen (urut PRODUCTID: tanpa deadlock antar admin).
+    let mut ids: Vec<i64> = items.iter().map(|i| i.produk_id).collect();
+    ids.sort_unstable();
+    let mut b = Binds::default();
+    let id_names: Vec<String> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            b.add(format!("p{i}"), id);
+            format!("TO_NUMBER(:p{i})")
+        })
+        .collect();
+    let kode_names: Vec<String> = lama
+        .keys()
+        .enumerate()
+        .map(|(i, k)| {
+            b.add(format!("k{i}"), k);
+            format!(":k{i}")
+        })
+        .collect();
+    let sql = format!(
+        "SELECT PRODUCTID, KODE_ITEM, NVL(PRODUCTNAME, KODE_ITEM), {}, AKTIF, SATUAN FROM POS_PRODUCT \
+         WHERE PRODUCTID IN ({}) OR KODE_ITEM IN ({}) ORDER BY PRODUCTID FOR UPDATE",
+        tm("NVL(BELI, 0)"),
+        id_names.join(","),
+        kode_names.join(",")
+    );
+    struct Prod {
+        kode: String,
+        nama: String,
+        hpp: Decimal,
+        aktif: bool,
+        dasar: String,
+    }
+    let mut prod = std::collections::HashMap::new();
+    b.with(|p| -> AppResult<()> {
+        for r in conn.query_named(&sql, p)? {
+            let r = r?;
+            let kode: String = r.get(1)?;
+            prod.insert(
+                r.get::<_, i64>(0)?,
+                Prod {
+                    nama: r.get(2)?,
+                    hpp: dec(&r.get::<_, String>(3)?)?,
+                    aktif: r
+                        .get::<_, Option<String>>(4)?
+                        .is_some_and(|a| a.trim().eq_ignore_ascii_case("Y")),
+                    dasar: r.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                    kode,
+                },
+            );
+        }
+        Ok(())
+    })?;
+    if ids.iter().any(|id| !prod.contains_key(id)) {
+        return Err(AppError::NotFound("Ada produk yang tidak ditemukan".into()));
+    }
+
+    // Kode yang terpengaruh = kode di permintaan + kode lama yang dihapus.
+    let kode_baru: HashSet<&str> = ids.iter().map(|id| prod[id].kode.as_str()).collect();
+    let mut terpengaruh: Vec<String> = kode_baru.iter().map(|k| k.to_string()).collect();
+    terpengaruh.extend(lama.keys().filter(|k| !kode_baru.contains(k.as_str())).cloned());
+    dokumen_stok::cek_boleh_ubah(conn, nomor, tanggal, &terpengaruh)?;
+
+    // Baris dihapus.
+    for kode in lama.keys().filter(|k| !kode_baru.contains(k.as_str())) {
+        conn.execute_named(
+            "DELETE FROM POS_STOCKOPNAME WHERE NOMOR_SO = :n AND KODE_BARANG = :k",
+            &[("n", &nomor), ("k", kode)],
+        )?;
+    }
+    let awal = NaiveDate::from_ymd_opt(hari.year(), 1, 1).expect("1 Jan");
+    let kodes: Vec<String> = prod.values().map(|p| p.kode.clone()).collect();
+    let stok = katalog::stok_map(conn, &kodes, awal, hari)?;
+    let mut total = Decimal::ZERO;
+    for (i, f) in items.iter().zip(fisik) {
+        let p = &prod[&i.produk_id];
+        let qty_fisik = resolve_fisik(conn, i.produk_id, &p.dasar, &p.nama, f)?;
+        match lama.get(&p.kode) {
+            Some(l) => {
+                let selisih = qty_fisik - l.sistem;
+                if selisih > l.selisih && selisih > Decimal::ZERO && l.hpp.is_zero() {
+                    return Err(harga_nol_ditolak(&p.nama));
+                }
+                conn.execute_named(
+                    &format!(
+                        "UPDATE POS_STOCKOPNAME SET JUMLAHFISIK = {}, SELISIH = {}, TOTAL = {} \
+                         WHERE NOMOR_SO = :n AND KODE_BARANG = :k",
+                        num("fis"),
+                        num("sel"),
+                        num("tot")
+                    ),
+                    &[
+                        ("fis", &qty_fisik.to_string()),
+                        ("sel", &selisih.to_string()),
+                        ("tot", &(selisih * l.hpp).to_string()),
+                        ("n", &nomor),
+                        ("k", &p.kode),
+                    ],
+                )?;
+                total += selisih * l.hpp;
+            }
+            None => {
+                if !p.aktif {
+                    return Err(AppError::validation(format!("Produk \"{}\" tidak aktif", p.nama)));
+                }
+                let sistem = stok.get(&p.kode).copied().unwrap_or_default();
+                let selisih = qty_fisik - sistem;
+                if selisih > Decimal::ZERO && p.hpp.is_zero() {
+                    return Err(harga_nol_ditolak(&p.nama));
+                }
+                tulis_baris(conn, nomor, tanggal, &p.kode, sistem, qty_fisik, selisih, p.hpp)?;
+                total += selisih * p.hpp;
+            }
+        }
+    }
+    dokumen_stok::catat_log(
+        conn,
+        dokumen_stok::Jenis::So,
+        nomor,
+        "UBAH",
+        user_id,
+        user_nama,
+        Some(alasan),
+        items.len(),
+        total,
+    )?;
+    dokumen_stok::tandai_selesai(conn, user_id, OPERASI_UBAH, key, nomor)?;
+    conn.commit()?;
+    detail_so(conn, nomor)
+}
+
+/// Hapus permanen satu dokumen SO (nomor tidak dipakai ulang). Pengaman sama dengan `ubah_dokumen`.
+pub fn hapus_dokumen(
+    conn: &Connection,
+    user_id: i64,
+    user_nama: &str,
+    key: &str,
+    nomor: &str,
+    versi: &str,
+    alasan: Option<&str>,
+) -> AppResult<()> {
+    let alasan = dokumen_stok::alasan_valid(alasan)?;
+    let r = hapus_inner(conn, user_id, user_nama, key, nomor, versi, &alasan);
+    if r.is_err() {
+        let _ = conn.rollback();
+    }
+    r
+}
+
+fn hapus_inner(
+    conn: &Connection,
+    user_id: i64,
+    user_nama: &str,
+    key: &str,
+    nomor: &str,
+    versi: &str,
+    alasan: &str,
+) -> AppResult<()> {
+    let hash = hex(Sha256::digest(format!("{nomor}|{versi}").as_bytes()));
+    if klaim_kunci(conn, user_id, OPERASI_HAPUS, key, &hash)?.is_some() {
+        return Ok(()); // permintaan ulang: dokumen sudah terhapus
+    }
+    let (tanggal, lama) = kunci_dokumen(conn, nomor, versi)?;
+    let kodes: Vec<String> = lama.keys().cloned().collect();
+    dokumen_stok::cek_boleh_ubah(conn, nomor, tanggal, &kodes)?;
+    let total: Decimal = lama.values().map(|l| l.selisih * l.hpp).sum();
+    conn.execute_named("DELETE FROM POS_STOCKOPNAME WHERE NOMOR_SO = :n", &[("n", &nomor)])?;
+    dokumen_stok::catat_log(
+        conn,
+        dokumen_stok::Jenis::So,
+        nomor,
+        "HAPUS",
+        user_id,
+        user_nama,
+        Some(alasan),
+        lama.len(),
+        total,
+    )?;
+    dokumen_stok::tandai_selesai(conn, user_id, OPERASI_HAPUS, key, nomor)?;
+    conn.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]

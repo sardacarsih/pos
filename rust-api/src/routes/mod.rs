@@ -271,7 +271,22 @@ pub fn router(state: AppState) -> Router {
             post(admin::stok_opname).get(admin::stok_opname_riwayat),
         )
         .route("/api/v1/admin/stok-opname/dokumen", post(admin::stok_opname_dokumen))
-        .route("/api/v1/admin/stok-opname/{nomor}", get(admin::stok_opname_detail))
+        .route(
+            "/api/v1/admin/barang-rusak",
+            post(admin::barang_rusak_baru).get(admin::barang_rusak_riwayat),
+        )
+        .route(
+            "/api/v1/admin/barang-rusak/{nomor}",
+            get(admin::barang_rusak_detail)
+                .put(admin::barang_rusak_ubah)
+                .delete(admin::barang_rusak_hapus),
+        )
+        .route(
+            "/api/v1/admin/stok-opname/{nomor}",
+            get(admin::stok_opname_detail)
+                .put(admin::stok_opname_ubah)
+                .delete(admin::stok_opname_hapus),
+        )
         // persediaan (ADMIN-only)
         .route("/api/v1/admin/persediaan/kartu", get(persediaan::kartu))
         .route(

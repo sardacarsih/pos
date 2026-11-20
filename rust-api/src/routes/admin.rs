@@ -868,6 +868,7 @@ pub async fn stok_opname(
         db::opname::simpan(c, uid, &key, &req, hari)
     })
     .await?;
+    clear_stok_habis_cache();
     tracing::info!(admin = %admin, produk = produk_id, nomor_so = %h.nomor_so, selisih = %h.selisih, ulang = h.ulang, "stok opname");
     Ok(Json(h))
 }
@@ -895,8 +896,204 @@ pub async fn stok_opname_dokumen(
         db::opname::simpan_dokumen(c, uid, &key, &req.items, hari)
     })
     .await?;
+    clear_stok_habis_cache();
     tracing::info!(admin = %admin, nomor_so = %h.nomor_so, baris = h.items.len(), ulang = h.ulang, "stok opname dokumen");
     Ok(Json(h))
+}
+
+#[derive(Deserialize)]
+pub struct UbahDokumenReq {
+    versi: String,
+    alasan: Option<String>,
+    items: Vec<db::opname::BarisReq>,
+}
+
+/// Ubah dokumen SO (fisik, tambah/hapus barang). Ditolak bila periode tutup, ada dokumen lebih baru
+/// untuk barang yang sama, atau `versi` sudah basi.
+pub async fn stok_opname_ubah(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Path(nomor): Path<String>,
+    Json(req): Json<UbahDokumenReq>,
+) -> AppResult<Json<db::opname::DokumenSo>> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor SO tidak valid"));
+    }
+    let key = super::idempotency_key(&headers)?;
+    db::opname::validasi_dokumen(&req.items)?;
+    let adm = admin.clone();
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        db::opname::ubah_dokumen(c, uid, &adm, &key, &nomor, &req.versi, req.alasan.as_deref(), &req.items, hari)
+    })
+    .await?;
+    clear_stok_habis_cache();
+    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, baris = h.items.len(), ulang = h.ulang, "stok opname ubah");
+    Ok(Json(h))
+}
+
+#[derive(Deserialize)]
+pub struct HapusDokumenReq {
+    versi: String,
+    alasan: Option<String>,
+}
+
+/// Hapus permanen dokumen SO dengan pengaman yang sama seperti ubah; tercatat di `POS_DOKUMEN_STOK_LOG`.
+pub async fn stok_opname_hapus(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Path(nomor): Path<String>,
+    Json(req): Json<HapusDokumenReq>,
+) -> AppResult<StatusCode> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor SO tidak valid"));
+    }
+    let key = super::idempotency_key(&headers)?;
+    let (adm, no) = (admin.clone(), nomor.clone());
+    db::run(&s.pool, move |c| {
+        db::opname::hapus_dokumen(c, uid, &adm, &key, &no, &req.versi, req.alasan.as_deref())
+    })
+    .await?;
+    clear_stok_habis_cache();
+    tracing::info!(admin = %admin, nomor_so = %nomor, "stok opname hapus");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ------------------------------------------------------------------ barang rusak
+
+#[derive(Deserialize)]
+pub struct RusakBaruReq {
+    items: Vec<db::barang_rusak::BarisReq>,
+}
+
+/// Dokumen barang rusak baru (mengurangi stok sistem; ditolak bila stok tidak cukup).
+pub async fn barang_rusak_baru(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<RusakBaruReq>,
+) -> AppResult<Json<db::barang_rusak::DokumenRusak>> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    let key = super::idempotency_key(&headers)?;
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        db::barang_rusak::simpan(c, uid, &key, &req.items, hari)
+    })
+    .await?;
+    clear_stok_habis_cache();
+    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, baris = h.items.len(), ulang = h.ulang, "barang rusak baru");
+    Ok(Json(h))
+}
+
+pub async fn barang_rusak_riwayat(
+    State(s): State<AppState>,
+    a: Auth,
+    axum::extract::Query(q): axum::extract::Query<RiwayatQuery>,
+) -> AppResult<Json<Value>> {
+    a.peran(ADMIN)?;
+    let pg = super::Paging { q: None, page: q.page, size: q.size };
+    let (page, size) = (pg.page(), pg.size());
+    let tahun = q.tahun;
+    if tahun.is_some_and(|t| !(2000..=2100).contains(&t)) {
+        return Err(AppError::validation("Tahun tidak valid"));
+    }
+    let (items, lagi, tahun) = db::run(&s.pool, move |c| {
+        let tahun = match tahun {
+            Some(t) => t,
+            None => chrono::Datelike::year(&db::faktur::sekarang(c)?.0),
+        };
+        let (items, lagi) = db::barang_rusak::daftar(c, tahun, page, size)?;
+        Ok((items, lagi, tahun))
+    })
+    .await?;
+    Ok(Json(json!({ "items": items, "ada_lagi": lagi, "page": page, "tahun": tahun })))
+}
+
+pub async fn barang_rusak_detail(
+    State(s): State<AppState>,
+    a: Auth,
+    Path(nomor): Path<String>,
+) -> AppResult<Json<db::barang_rusak::DokumenRusak>> {
+    a.peran(ADMIN)?;
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor dokumen tidak valid"));
+    }
+    Ok(Json(db::run(&s.pool, move |c| db::barang_rusak::detail(c, &nomor)).await?))
+}
+
+#[derive(Deserialize)]
+pub struct RusakUbahReq {
+    versi: String,
+    alasan: Option<String>,
+    items: Vec<db::barang_rusak::BarisReq>,
+}
+
+pub async fn barang_rusak_ubah(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Path(nomor): Path<String>,
+    Json(req): Json<RusakUbahReq>,
+) -> AppResult<Json<db::barang_rusak::DokumenRusak>> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor dokumen tidak valid"));
+    }
+    let key = super::idempotency_key(&headers)?;
+    let adm = admin.clone();
+    let h = db::run(&s.pool, move |c| {
+        let (hari, _) = db::faktur::sekarang(c)?;
+        db::barang_rusak::ubah(c, uid, &adm, &key, &nomor, &req.versi, req.alasan.as_deref(), &req.items, hari)
+    })
+    .await?;
+    clear_stok_habis_cache();
+    tracing::info!(admin = %admin, nomor_so = %h.nomor_so, baris = h.items.len(), ulang = h.ulang, "barang rusak ubah");
+    Ok(Json(h))
+}
+
+pub async fn barang_rusak_hapus(
+    State(s): State<AppState>,
+    a: Auth,
+    headers: axum::http::HeaderMap,
+    Path(nomor): Path<String>,
+    Json(req): Json<HapusDokumenReq>,
+) -> AppResult<StatusCode> {
+    let (admin, uid) = {
+        let c = a.peran(ADMIN)?;
+        (c.usr.clone(), c.sub)
+    };
+    if !db::opname::nomor_valid(&nomor) {
+        return Err(AppError::validation("Nomor dokumen tidak valid"));
+    }
+    let key = super::idempotency_key(&headers)?;
+    let (adm, no) = (admin.clone(), nomor.clone());
+    db::run(&s.pool, move |c| db::barang_rusak::hapus(c, uid, &adm, &key, &no, &req.versi, req.alasan.as_deref())).await?;
+    clear_stok_habis_cache();
+    tracing::info!(admin = %admin, nomor_so = %nomor, "barang rusak hapus");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Stok berubah: buang cache jumlah stok habis (TTL 60 dtk) agar dashboard tidak basi.
+pub(crate) fn clear_stok_habis_cache() {
+    if let Ok(mut g) = STOK_HABIS_CACHE.lock() {
+        *g = None;
+    }
 }
 
 #[derive(Deserialize)]
