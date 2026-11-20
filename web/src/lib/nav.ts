@@ -21,7 +21,7 @@ export type Badge = Partial<Record<JenisBadge, number>>;
 export const MAKS_BOTTOM_NAV = 5;
 
 /** Semua id view yang dikenali router di +page.svelte. */
-export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'produk', 'stok', 'opname', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas', 'pinjaman'] as const;
+export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'produk', 'persediaan', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas', 'pinjaman'] as const;
 
 const AKUN: Kelompok = { judul: 'Akun', item: [{ id: 'profil', label: 'Profil', ikon: 'profil' }] };
 const PINJAMAN: ItemMenu = { id: 'pinjaman', label: 'Pinjaman', ikon: 'pinjaman' };
@@ -48,14 +48,14 @@ const MENU: Record<Role, Menu> = {
   ADMIN: {
     kelompok: [
       { judul: 'Ringkasan', item: [{ id: 'dashboard', label: 'Beranda', ikon: 'beranda' }] },
-      { judul: 'Pantau', item: [{ id: 'stok', label: 'Stok habis', ikon: 'stokHabis', badge: 'stok_habis' }, { id: 'harga', label: 'Harga ≤ HPP', ikon: 'hargaRendah', badge: 'harga_rendah' }] },
-      { judul: 'Katalog & stok', item: [{ id: 'opname', label: 'Stock opname', pendek: 'Opname', ikon: 'opname' }, { id: 'produk', label: 'Katalog produk', ikon: 'produk' }] },
+      { judul: 'Pantau', item: [{ id: 'persediaan', label: 'Persediaan', pendek: 'Stok', ikon: 'stokHabis', badge: 'stok_habis' }, { id: 'harga', label: 'Harga ≤ HPP', ikon: 'hargaRendah', badge: 'harga_rendah' }] },
+      { judul: 'Katalog', item: [{ id: 'produk', label: 'Katalog produk', ikon: 'produk' }] },
       { judul: 'Pengadaan', item: [PEMBELIAN] },
       { judul: 'Anggota & keuangan', item: [{ id: 'rekap', label: 'Rekap anggota', pendek: 'Rekap', ikon: 'rekap' }, { id: 'tagihan-rekap', label: 'Tagihan vs Rekap', ikon: 'tagihan' }, { id: 'kas', label: 'Kas & Bank', pendek: 'Kas', ikon: 'kas' }, PINJAMAN] },
       { judul: 'Pengelolaan', item: [{ id: 'users', label: 'Pengguna', ikon: 'pengguna' }] },
       AKUN
     ],
-    utama: ['dashboard', 'stok', 'opname', 'rekap']
+    utama: ['dashboard', 'persediaan', 'rekap']
   }
 };
 

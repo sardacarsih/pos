@@ -4,7 +4,8 @@
   import Plus from '@lucide/svelte/icons/plus';
   import X from '@lucide/svelte/icons/x';
   import { api, query } from './api';
-  import { MAKS_BARANG, bedaStok, hasilSimpanBelumPasti, jumlahFisik } from './opname';
+  import { MAKS_BARANG, bedaStok, hasilSimpanBelumPasti, jumlahFisik, kolomHitungan, payloadHitungan, statusHitungan } from './opname';
+  import type { KolomHitung, SatuanTambahan } from './opname';
 
   interface Barang {
     id: number;
@@ -13,8 +14,9 @@
     barcode: string | null;
     stok: number;
     satuan: string;
+    satuan_tambahan?: SatuanTambahan[];
   }
-  interface Hitungan extends Barang { qty: string }
+  interface Hitungan extends Barang { kolom: KolomHitung[] }
   interface Halaman<T> { items: T[]; ada_lagi: boolean; tahun?: number }
   interface Ringkasan {
     nomor_so: string;
@@ -30,7 +32,7 @@
     }[];
   }
   type Filter = 'Semua' | 'Belum dihitung' | 'Berselisih';
-  type Permintaan = { key: string; items: { produk_id: number; qty_fisik: number }[] };
+  type Permintaan = { key: string; items: { produk_id: number; hitungan: { satuan: string; qty: string; isi: string }[] }[] };
 
   const angka = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 4 });
   const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
@@ -45,15 +47,15 @@
   let draf: Hitungan[] = [], filter: Filter = 'Semua', aktif: number | null = null;
   let teksCari = '', kueriHasil = '', hasil: Barang[] = [], halamanCari = 1, lebihCari = false;
   let mencari = false, sudahCari = false, galatCari = '';
-  let galatHitung = '', galatSimpan = '', tersimpan = '';
-  let menyimpan = false, tertunda: Permintaan | null = null;
+  let galatHitung = '', galatSimpan = '', tersimpan = '', infoSatuan = '';
+  let menyimpan = false, memuatSatuan = false, tertunda: Permintaan | null = null;
   let kolomCari: HTMLInputElement, daftarHitung: HTMLElement, judulTinjau: HTMLElement;
   let kolomTahun: HTMLInputElement, tombolBaru: HTMLButtonElement;
   let hidup = false;
 
-  $: dihitung = draf.filter((b) => jumlahFisik(b.qty) !== null).length;
+  $: dihitung = draf.filter((b) => statusHitungan(b.kolom).nilai !== null).length;
   $: berselisih = draf.filter((b) => {
-    const fisik = jumlahFisik(b.qty);
+    const fisik = statusHitungan(b.kolom).nilai;
     return fisik !== null && bedaStok(fisik, b.stok) !== 0;
   }).length;
 
@@ -135,6 +137,7 @@
     tersimpan = '';
     galatHitung = '';
     galatSimpan = '';
+    infoSatuan = '';
     filter = 'Semua';
     tahap = 'hitung';
     await tick();
@@ -166,11 +169,17 @@
     mencari = true;
     galatCari = '';
     try {
-      const r = await api<Halaman<Barang>>('/admin/stok' + query({ q, page: p, size: 20 }));
+      const r = await api<Halaman<Barang>>('/admin/stok' + query({ q, page: p, size: 20, multi_satuan: 1 }));
       if (!hidup || id !== cariId) return;
-      const persis = r.items.filter((b) => b.barcode === q);
-      if (!lanjut && !r.ada_lagi && persis.length === 1) {
-        await pilihBarang(persis[0]);
+      // Barcode dasar atau satuan tambahan yang persis: buka produknya, fokus ke kolom satuan itu.
+      // Hasil ambigu (lebih dari satu kecocokan) tetap ditampilkan sebagai daftar pilih.
+      const cocok: { b: Barang; satuan?: string }[] = [];
+      for (const b of r.items) {
+        if (b.barcode === q) cocok.push({ b });
+        for (const s of b.satuan_tambahan ?? []) if (s.barcode === q) cocok.push({ b, satuan: s.satuan });
+      }
+      if (!lanjut && !r.ada_lagi && cocok.length === 1) {
+        await pilihBarang(cocok[0].b, cocok[0].satuan);
         return;
       }
       kueriHasil = q;
@@ -185,38 +194,49 @@
     }
   }
 
-  async function fokusJumlah(id: number) {
+  async function fokusJumlah(id: number, kolom = 0) {
     aktif = id;
     await tick();
-    const kolom = daftarHitung?.querySelector<HTMLInputElement>('#so-fisik-' + id);
-    kolom?.focus();
-    kolom?.select();
+    const input = daftarHitung?.querySelector<HTMLInputElement>('#so-fisik-' + id + '-' + kolom);
+    input?.focus();
+    input?.select();
   }
 
-  async function pilihBarang(b: Barang) {
-    if (!draf.some((item) => item.id === b.id)) {
+  async function pilihBarang(b: Barang, fokusSatuan?: string) {
+    let entri = draf.find((item) => item.id === b.id);
+    if (!entri) {
       if (draf.length >= MAKS_BARANG) {
         galatHitung = 'Maksimal 200 barang per dokumen.';
         return;
       }
-      draf = [{ ...b, qty: '' }, ...draf];
+      entri = { ...b, kolom: kolomHitungan(b) };
+      draf = [entri, ...draf];
     }
+    // Scan ulang tidak menambah jumlah dan tidak membuat baris duplikat; hanya pindah fokus.
     resetCari();
     galatHitung = '';
     filter = 'Semua';
-    await fokusJumlah(b.id);
+    const idx = fokusSatuan
+      ? Math.max(0, entri.kolom.findIndex((k) => k.satuan.trim().toUpperCase() === fokusSatuan.trim().toUpperCase()))
+      : 0;
+    await fokusJumlah(b.id, idx);
   }
 
   function tampil(b: Hitungan, pilihan: Filter, id: number | null) {
     if (pilihan === 'Semua' || b.id === id) return true;
-    const fisik = jumlahFisik(b.qty);
+    const fisik = statusHitungan(b.kolom).nilai;
     return pilihan === 'Belum dihitung' ? fisik === null : fisik !== null && bedaStok(fisik, b.stok) !== 0;
   }
 
   function lanjutHitung(event: KeyboardEvent, b: Hitungan) {
     if (event.key !== 'Enter' || event.isComposing) return;
     event.preventDefault();
-    if (jumlahFisik(b.qty) === null) {
+    const st = statusHitungan(b.kolom);
+    if (st.galat) {
+      galatHitung = st.galat;
+      return;
+    }
+    if (st.terisi === 0) {
       galatHitung = 'Isi jumlah fisik yang valid untuk ' + b.nama + '.';
       return;
     }
@@ -232,12 +252,14 @@
   }
 
   async function tinjau() {
-    const invalid = draf.find((b) => jumlahFisik(b.qty) === null);
-    if (invalid) {
-      galatHitung = 'Isi jumlah fisik yang valid untuk ' + invalid.nama + '.';
-      filter = 'Semua';
-      await fokusJumlah(invalid.id);
-      return;
+    for (const b of draf) {
+      const st = statusHitungan(b.kolom);
+      if (st.nilai === null) {
+        galatHitung = st.galat ?? 'Isi jumlah fisik yang valid untuk ' + b.nama + '.';
+        filter = 'Semua';
+        await fokusJumlah(b.id, 0);
+        return;
+      }
     }
     resetCari();
     galatSimpan = '';
@@ -246,14 +268,46 @@
     judulTinjau?.focus();
   }
 
+  function rincian(b: Hitungan): string {
+    return b.kolom
+      .filter((k) => k.qty.trim() !== '')
+      .map((k) => angka.format(jumlahFisik(k.qty)!) + ' ' + k.satuan + (k.isi !== 1 ? ' × ' + angka.format(k.isi) : ''))
+      .join(' + ');
+  }
+
+  /// Satuan produk dimuat ulang setelah server menolak faktor lama/satuan terhapus; isian per nama satuan dipertahankan.
+  async function muatUlangSatuan() {
+    if (memuatSatuan) return;
+    memuatSatuan = true;
+    galatSimpan = '';
+    infoSatuan = '';
+    try {
+      for (const b of draf) {
+        const r = await api<Halaman<Barang>>('/admin/stok' + query({ q: b.kode, size: 20, multi_satuan: 1 }));
+        const baru = r.items.find((x) => x.id === b.id);
+        if (!baru) throw new Error('Produk ' + b.nama + ' tidak ditemukan saat memuat ulang satuan.');
+        const lama = new Map(b.kolom.map((k) => [k.satuan.trim().toUpperCase(), k.qty]));
+        b.kolom = kolomHitungan(baru, lama);
+        b.satuan_tambahan = baru.satuan_tambahan;
+      }
+      draf = draf;
+      infoSatuan = 'Satuan produk dimuat ulang. Periksa hitungan lalu simpan kembali.';
+    } catch (e) {
+      if (hidup) galatSimpan = (e as Error).message;
+    } finally {
+      if (hidup) memuatSatuan = false;
+    }
+  }
+
   async function simpan() {
     if (menyimpan || !draf.length || dihitung !== draf.length) return;
     const request = tertunda ?? {
       key: crypto.randomUUID(),
-      items: draf.map((b) => ({ produk_id: b.id, qty_fisik: jumlahFisik(b.qty)! }))
+      items: draf.map((b) => ({ produk_id: b.id, hitungan: payloadHitungan(b.kolom) }))
     };
     menyimpan = true;
     galatSimpan = '';
+    infoSatuan = '';
     try {
       const r = await api<Dokumen>('/admin/stok-opname/dokumen', {
         method: 'POST', headers: { 'Idempotency-Key': request.key }, body: { items: request.items }
@@ -368,16 +422,24 @@
         <thead><tr><th scope="col">Barang</th><th scope="col" class="angka">Sistem</th><th scope="col">Fisik</th><th scope="col" class="angka">Selisih</th><th scope="col"><span class="sr-only">Aksi</span></th></tr></thead>
         <tbody>
           {#each draf.filter((b) => tampil(b, filter, aktif)) as b (b.id)}
-            {@const fisik = jumlahFisik(b.qty)}
-            {@const beda = fisik === null ? null : bedaStok(fisik, b.stok)}
+            {@const st = statusHitungan(b.kolom)}
+            {@const beda = st.nilai === null ? null : bedaStok(st.nilai, b.stok)}
             <tr class:aktif={aktif === b.id}>
               <th scope="row">{b.nama}<small>{b.kode} · {b.satuan}</small></th>
               <td class="angka" data-label="Sistem">{angka.format(b.stok)}</td>
               <td data-label="Fisik">
-                <input id={'so-fisik-' + b.id} aria-label={'Jumlah fisik ' + b.nama} inputmode="decimal" autocomplete="off"
-                  aria-invalid={b.qty.trim() !== '' && fisik === null}
-                  bind:value={b.qty} on:focus={() => aktif = b.id} on:blur={() => aktif = null}
-                  on:input={() => galatHitung = ''} on:keydown={(e) => lanjutHitung(e, b)}/>
+                <div class="kolom-satuan">
+                  {#each b.kolom as k, i (k.satuan)}
+                    <label class="satuan-input">
+                      <span>{k.satuan}{#if k.isi !== 1} <small>×{angka.format(k.isi)}</small>{/if}</span>
+                      <input id={'so-fisik-' + b.id + '-' + i} aria-label={'Jumlah ' + k.satuan + ' ' + b.nama} inputmode="decimal" autocomplete="off"
+                        aria-invalid={k.qty.trim() !== '' && jumlahFisik(k.qty) === null}
+                        bind:value={k.qty} on:focus={() => aktif = b.id} on:blur={() => aktif = null}
+                        on:input={() => galatHitung = ''} on:keydown={(e) => lanjutHitung(e, b)}/>
+                    </label>
+                  {/each}
+                  {#if st.nilai !== null}<small class="total-fisik">= {angka.format(st.nilai)} {b.satuan}</small>{/if}
+                </div>
               </td>
               <td class="angka" data-label="Selisih"><span class:beda={beda !== null && beda !== 0}>{beda === null ? '—' : tanda(beda)}</span></td>
               <td class="aksi"><button class="ikon" aria-label={'Hapus ' + b.nama} on:click={() => hapus(b.id)}><X size={18} aria-hidden="true"/></button></td>
@@ -398,15 +460,17 @@
       <button class="secondary" disabled={menyimpan || !!tertunda} on:click={mulai}>Kembali ke hitungan</button>
     </header>
     <p class="status">Selisih masih perkiraan. Menyimpan dokumen akan memperbarui stok sistem.</p>
+    {#if infoSatuan}<p class="status" role="status">{infoSatuan}</p>{/if}
     <table class="tinjau" aria-label="Tinjauan hasil hitung">
       <thead><tr><th scope="col">Barang</th><th scope="col" class="angka">Sistem</th><th scope="col" class="angka">Fisik</th><th scope="col" class="angka">Selisih</th></tr></thead>
       <tbody>
         {#each draf as b (b.id)}
-          {@const beda = bedaStok(jumlahFisik(b.qty)!, b.stok)}
+          {@const st = statusHitungan(b.kolom)}
+          {@const beda = bedaStok(st.nilai!, b.stok)}
           <tr>
-            <th scope="row">{b.nama}<small>{b.kode} · {b.satuan}</small></th>
+            <th scope="row">{b.nama}<small>{b.kode} · {rincian(b)} = {angka.format(st.nilai!)} {b.satuan}</small></th>
             <td class="angka" data-label="Sistem">{angka.format(b.stok)}</td>
-            <td class="angka" data-label="Fisik">{angka.format(jumlahFisik(b.qty)!)}</td>
+            <td class="angka" data-label="Fisik">{angka.format(st.nilai!)}</td>
             <td class="angka" data-label="Selisih"><span class:beda={beda !== 0}>{tanda(beda)}</span></td>
           </tr>
         {/each}
@@ -416,6 +480,9 @@
       {#if galatSimpan}
         <div role="alert" class="error galat-simpan">
           {#if tertunda}<strong>Hasil simpan belum terkonfirmasi.</strong> Coba simpan lagi untuk memeriksa dokumen yang sama. {/if}{galatSimpan}
+          {#if galatSimpan.includes('muat ulang satuan')}
+            <button class="secondary" disabled={memuatSatuan} on:click={muatUlangSatuan}>{memuatSatuan ? 'Memuat satuan…' : 'Muat ulang satuan produk'}</button>
+          {/if}
         </div>
       {/if}
       <button class="secondary" disabled={menyimpan} on:click={batal}>Batalkan opname</button>
@@ -509,7 +576,12 @@
   .angka { text-align: right; }
   td input { min-width: 0; width: min(100%, 8rem); text-align: right; padding: 10px; }
   input[aria-invalid='true'] { border-color: var(--so-beda); }
-  .hitungan th:nth-child(3) { width: 9rem; }
+  .kolom-satuan { display: flex; flex-direction: column; gap: 6px; }
+  .satuan-input { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+  .satuan-input span { font-size: .75rem; color: var(--so-muted); }
+  .satuan-input input { width: 100%; }
+  .total-fisik { color: var(--so-muted); font-variant-numeric: tabular-nums; }
+  .hitungan th:nth-child(3) { width: 10rem; }
   .aksi { width: 44px; }
   .ikon { min-width: 44px; display: inline-grid; place-items: center; border-radius: 8px; }
   .ikon:hover { background: var(--so-subtle); }

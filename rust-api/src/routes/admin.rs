@@ -539,6 +539,7 @@ pub async fn produk_list(
             harga_rendah,
             page,
             size,
+            false,
         )?;
         let jumlah = if harga_rendah && page <= 1 {
             Some(katalog::jumlah_harga_rendah(c)?)
@@ -746,15 +747,26 @@ pub struct StokQuery {
     kategori: Option<String>,
     page: Option<u32>,
     size: Option<u32>,
+    /// `1` = sertakan satuan_tambahan (opname multi-satuan) dan cocokkan barcode tambahan saat mencari.
+    multi_satuan: Option<String>,
+    urut: Option<String>,
 }
 
-/// Produk aktif dengan stok sistem <= 0. `jumlah` (total seluruh halaman) hanya ada di halaman 1.
+impl StokQuery {
+    fn multi(&self) -> bool {
+        self.multi_satuan.as_deref() == Some("1")
+    }
+}
+
+/// Produk aktif dengan stok sistem <= 0. `urut=qty` mengurutkan dari stok terendah.
+/// `jumlah` (total seluruh halaman) hanya ada di halaman 1.
 pub async fn stok_habis(
     State(s): State<AppState>,
     a: Auth,
     axum::extract::Query(q): axum::extract::Query<StokQuery>,
 ) -> AppResult<Json<Value>> {
     a.peran(ADMIN)?;
+    let multi = q.multi();
     let pg = super::Paging {
         q: q.q,
         page: q.page,
@@ -763,10 +775,21 @@ pub async fn stok_habis(
     let (page, size) = (pg.page(), pg.size());
     let teks = pg.q;
     let kategori = q.kategori;
+    let urutan = match q.urut.as_deref() {
+        Some("qty") => katalog::UrutanStokHabis::Qty,
+        _ => katalog::UrutanStokHabis::Nama,
+    };
     let (h, jumlah, kontrol) = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
         let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
-        let (h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size)?;
+        let (mut h, jumlah) = katalog::stok_habis(c, teks.as_deref(), kategori.as_deref(), awal, hari, page, size, multi, urutan)?;
+        if multi {
+            let ids: Vec<i64> = h.items.iter().map(|p| p.id).collect();
+            let mut satuan = katalog::satuan_tambahan(c, &ids)?;
+            for p in &mut h.items {
+                p.satuan_tambahan = Some(satuan.remove(&p.id).unwrap_or_default());
+            }
+        }
         // Kontrol stok kasir mati = kasir menjual tanpa cek stok; daftar ini lalu bisa memuat barang yang tidak dilacak.
         let kontrol = katalog::setting(c, "KONTROL_SALDO_QTY")?
             .is_some_and(|v| v.trunc() > rust_decimal::Decimal::ZERO);
@@ -776,30 +799,25 @@ pub async fn stok_habis(
     Ok(Json(json!({ "items": h.items, "ada_lagi": h.ada_lagi, "page": page, "jumlah": jumlah, "kontrol_stok": kontrol })))
 }
 
-#[derive(Deserialize)]
-pub struct OpnameReq {
-    produk_id: i64,
-    qty_fisik: rust_decimal::Decimal,
-}
-
 /// Koreksi stok satu barang lewat dokumen SO (berbagi tabel/nomor dengan desktop).
 pub async fn stok_opname(
     State(s): State<AppState>,
     a: Auth,
     headers: axum::http::HeaderMap,
-    Json(req): Json<OpnameReq>,
+    Json(req): Json<db::opname::BarisReq>,
 ) -> AppResult<Json<db::opname::HasilOpname>> {
     let (admin, uid) = {
         let c = a.peran(ADMIN)?;
         (c.usr.clone(), c.sub)
     };
     let key = super::idempotency_key(&headers)?;
+    let produk_id = req.produk_id;
     let h = db::run(&s.pool, move |c| {
         let (hari, _) = db::faktur::sekarang(c)?;
-        db::opname::simpan(c, uid, &key, req.produk_id, req.qty_fisik, hari)
+        db::opname::simpan(c, uid, &key, &req, hari)
     })
     .await?;
-    tracing::info!(admin = %admin, produk = req.produk_id, nomor_so = %h.nomor_so, selisih = %h.selisih, ulang = h.ulang, "stok opname");
+    tracing::info!(admin = %admin, produk = produk_id, nomor_so = %h.nomor_so, selisih = %h.selisih, ulang = h.ulang, "stok opname");
     Ok(Json(h))
 }
 
@@ -887,6 +905,8 @@ struct StokCari {
     satuan: String,
     kategori: String,
     stok: rust_decimal::Decimal,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    satuan_tambahan: Option<Vec<katalog::SatuanTambahan>>,
 }
 
 /// Cari barang aktif untuk dihitung (nama/kode/barcode), lengkap dengan stok sistem hari ini.
@@ -896,6 +916,7 @@ pub async fn stok_cari(
     axum::extract::Query(q): axum::extract::Query<StokQuery>,
 ) -> AppResult<Json<Value>> {
     a.peran(ADMIN)?;
+    let multi = q.multi();
     let pg = super::Paging {
         q: q.q,
         page: q.page,
@@ -905,16 +926,23 @@ pub async fn stok_cari(
     let teks = pg.q;
     let kategori = q.kategori;
     let (items, lagi) = db::run(&s.pool, move |c| {
-        let h = katalog::daftar_produk_admin(c, teks.as_deref(), kategori.as_deref(), Some("Y"), false, page, size)?;
+        let h = katalog::daftar_produk_admin(c, teks.as_deref(), kategori.as_deref(), Some("Y"), false, page, size, multi)?;
         let (hari, _) = db::faktur::sekarang(c)?;
         let awal = chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&hari), 1, 1).expect("1 Jan");
         let kodes: Vec<String> = h.items.iter().map(|p| p.kode.clone()).collect();
         let stok = katalog::stok_map(c, &kodes, awal, hari)?;
+        let mut satuan = if multi {
+            let ids: Vec<i64> = h.items.iter().map(|p| p.id).collect();
+            katalog::satuan_tambahan(c, &ids)?
+        } else {
+            std::collections::HashMap::new()
+        };
         let items: Vec<StokCari> = h
             .items
             .into_iter()
             .map(|p| StokCari {
                 stok: stok.get(&p.kode).copied().unwrap_or_default(),
+                satuan_tambahan: multi.then(|| satuan.remove(&p.id).unwrap_or_default()),
                 id: p.id,
                 kode: p.kode,
                 barcode: p.barcode,
@@ -935,10 +963,23 @@ mod opname_tests {
 
     #[test]
     fn opname_req_menerima_angka_json() {
-        let r: OpnameReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":12.5}"#).unwrap();
-        assert_eq!((r.produk_id, r.qty_fisik.to_string()), (7, "12.5".into()));
-        let r: OpnameReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":0}"#).unwrap();
-        assert!(r.qty_fisik.is_zero());
+        let r: db::opname::BarisReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":12.5}"#).unwrap();
+        assert_eq!((r.produk_id, r.qty_fisik.unwrap().to_string()), (7, "12.5".into()));
+        assert!(r.hitungan.is_none());
+        let r: db::opname::BarisReq = serde_json::from_str(r#"{"produk_id":7,"qty_fisik":0}"#).unwrap();
+        assert!(r.qty_fisik.unwrap().is_zero());
+    }
+
+    #[test]
+    fn opname_req_menerima_hitungan_string() {
+        let r: db::opname::BarisReq = serde_json::from_str(
+            r#"{"produk_id":7,"hitungan":[{"satuan":"DUS","qty":"2","isi":"12"},{"satuan":"PCS","qty":"3","isi":"1"}]}"#,
+        )
+        .unwrap();
+        assert!(r.qty_fisik.is_none());
+        let h = r.hitungan.unwrap();
+        assert_eq!((h[0].satuan.as_str(), h[0].qty.as_str(), h[0].isi.as_str()), ("DUS", "2", "12"));
+        assert_eq!((h[1].satuan.as_str(), h[1].qty.as_str(), h[1].isi.as_str()), ("PCS", "3", "1"));
     }
 
     #[test]
@@ -946,6 +987,11 @@ mod opname_tests {
         let r: DokumenReq =
             serde_json::from_str(r#"{"items":[{"produk_id":7,"qty_fisik":12.5},{"produk_id":8,"qty_fisik":0}]}"#).unwrap();
         assert_eq!(r.items.len(), 2);
+        let r: DokumenReq = serde_json::from_str(
+            r#"{"items":[{"produk_id":7,"hitungan":[{"satuan":"PCS","qty":"0","isi":"1"}]}]}"#,
+        )
+        .unwrap();
+        assert!(r.items[0].qty_fisik.is_none());
         let uri: axum::http::Uri = "/api/v1/admin/stok-opname?tahun=2026&page=2&size=20".parse().unwrap();
         let q = axum::extract::Query::<RiwayatQuery>::try_from_uri(&uri).expect("query valid");
         assert_eq!((q.0.tahun, q.0.page, q.0.size), (Some(2026), Some(2), Some(20)));
@@ -956,6 +1002,15 @@ mod opname_tests {
         let uri: axum::http::Uri = "/api/v1/admin/stok-habis?q=gula&page=2&size=30&kategori=14".parse().unwrap();
         let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
         assert_eq!((q.0.page, q.0.size), (Some(2), Some(30)));
+        assert!(!q.0.multi());
+        let uri: axum::http::Uri = "/api/v1/admin/stok?q=gula&multi_satuan=1".parse().unwrap();
+        let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
+        assert!(q.0.multi());
+        assert_eq!(q.0.urut, None);
+
+        let uri = "/api/v1/admin/stok-habis?urut=qty".parse().unwrap();
+        let q = axum::extract::Query::<StokQuery>::try_from_uri(&uri).expect("query valid");
+        assert_eq!(q.0.urut.as_deref(), Some("qty"));
     }
 }
 

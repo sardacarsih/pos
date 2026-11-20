@@ -4,6 +4,7 @@ pub mod auth;
 pub mod kasir;
 pub mod kas;
 pub mod pembelian;
+pub mod persediaan;
 pub mod pinjaman;
 pub mod profil;
 pub mod push;
@@ -262,6 +263,17 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/v1/admin/stok-opname/dokumen", post(admin::stok_opname_dokumen))
         .route("/api/v1/admin/stok-opname/{nomor}", get(admin::stok_opname_detail))
+        // persediaan (ADMIN-only)
+        .route("/api/v1/admin/persediaan/kartu", get(persediaan::kartu))
+        .route(
+            "/api/v1/admin/persediaan/sesuaikan",
+            get(persediaan::daftar).post(persediaan::buat),
+        )
+        .route("/api/v1/admin/persediaan/sesuaikan/{id}/balik", post(persediaan::balik))
+        .route("/api/v1/admin/persediaan/valuasi", get(persediaan::valuasi))
+        .route("/api/v1/admin/persediaan/valuasi-item", get(persediaan::valuasi_item))
+        .route("/api/v1/admin/persediaan/stok-minimum", get(persediaan::stok_minimum))
+        .route("/api/v1/admin/persediaan/stok-min/{produk_id}", put(persediaan::set_stok_min))
         .route(
             "/api/v1/admin/produk/{id}/foto",
             put(admin::foto_ubah)

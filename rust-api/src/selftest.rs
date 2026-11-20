@@ -9,7 +9,7 @@ use oracle::Connection;
 
 use crate::{
     auth::Role,
-    db::{dashboard, faktur, katalog, opname, opt, pembelian, supplier, user},
+    db::{dashboard, faktur, katalog, opname, opt, pembelian, persediaan, supplier, user},
     error::{AppError, AppResult},
 };
 
@@ -74,9 +74,9 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
 
     // Skema yang dibutuhkan fitur baru, termasuk jalur TULIS opname (diverifikasi lewat metadata, tanpa menulis).
     let skema: &[(&str, &[&str])] = &[
-        ("POS_PRODUCT", &["PRODUCTID", "KODE_ITEM", "BARCODE", "PRODUCTNAME", "SATUAN", "PRICE", "BELI", "KATEGORI_ID", "AKTIF"]),
+        ("POS_PRODUCT", &["PRODUCTID", "KODE_ITEM", "BARCODE", "PRODUCTNAME", "SATUAN", "PRICE", "BELI", "KATEGORI_ID", "AKTIF", "STOK_MIN"]),
         ("POS_KATEGORI", &["KODE", "KATEGORI"]),
-        ("POS_STOCK", &["KODE_BARANG", "TANGGAL", "QUANTITY"]),
+        ("POS_STOCK", &["PRODUCT_ID", "KODE_BARANG", "TANGGAL", "QUANTITY", "HPP"]),
         ("POS_SUPPLIER", &["KODE", "NAMA", "AKTIF"]),
         ("POS_PEMBELIAN", &["PURCHASE_ID", "NO_TRANSAKSI", "TANGGAL", "SUPPLIER_ID", "BRUTO", "POTONGAN", "TOTAL", "TERMIN", "USERID", "NAMA_USER"]),
         ("POS_PEMBELIANDETAIL", &["PURCHASE_ID", "NO_TRANSAKSI", "BARIS", "PRODUCT_ID", "KODE_BARANG", "NAMA_BARANG", "SATUAN", "QUANTITY", "HARGA_BELI", "BRUTO", "POTONGAN", "TOTAL"]),
@@ -95,6 +95,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         ("MOB_PRODUK_FOTO", &["PRODUCT_ID"]),
         ("MOB_PRODUK_URUT", &["PRODUCT_ID"]),
         ("MOB_IDEMPOTENCY", &["USER_ID", "OPERASI", "IDEMPOTENCY_KEY", "RESOURCE_ID", "PAYLOAD_HASH"]),
+        ("MOB_STOK_SESUAI", &["ID", "KODE_BARANG", "TANGGAL", "QTY", "ALASAN", "USER_ID", "USER_NAMA", "BALIK_ID", "CREATED_AT"]),
     ];
     for (tabel, kolom) in skema {
         h.push(cek(format!("skema {tabel}"), || cek_kolom(conn, tabel, kolom)));
@@ -194,14 +195,20 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         }));
     }
     h.push(cek("jumlah stok habis", || Ok(katalog::jumlah_stok_habis(conn, awal, hari)?.to_string())));
-    h.push(cek("daftar stok habis (cari + paginasi)", || {
-        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5)?;
-        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5)?;
+    h.push(cek("daftar stok habis (cari + paginasi + urut qty)", || {
+        use katalog::UrutanStokHabis::{Nama, Qty};
+
+        let (a, jumlah) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false, Nama)?;
+        let (b, _) = katalog::stok_habis(conn, Some("a"), Some("1"), awal, hari, 1, 5, false, Nama)?;
+        let (urut, _) = katalog::stok_habis(conn, None, None, awal, hari, 1, 5, false, Qty)?;
+        if urut.items.windows(2).any(|pasang| pasang[0].stok > pasang[1].stok) {
+            return Err(AppError::Internal("Urutan qty stok habis tidak menaik".into()));
+        }
         Ok(format!("{} baris, total {:?}, dengan filter {} baris", a.items.len(), jumlah, b.items.len()))
     }));
     h.push(cek("harga jual <= HPP (hitung + daftar)", || {
         let n = katalog::jumlah_harga_rendah(conn)?;
-        let d = katalog::daftar_produk_admin(conn, None, None, None, true, 1, 5)?;
+        let d = katalog::daftar_produk_admin(conn, None, None, None, true, 1, 5, false)?;
         // Daftar tidak boleh memuat produk untung (BELI > 0 dan harga jual > BELI); yang tampil hanya rugi/impas atau tanpa HPP.
         if let Some(p) = d.items.iter().find(|p| p.beli > 0 && p.harga > p.beli) {
             return Err(AppError::Internal(format!("produk untung ikut tampil: {} (jual {} > beli {})", p.kode, p.harga, p.beli)));
@@ -223,7 +230,7 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
             None => Ok("tidak ada produk".into()),
         }
     }));
-    h.push(cek("daftar produk admin", || Ok(format!("{} baris", katalog::daftar_produk_admin(conn, None, None, None, false, 1, 5)?.items.len()))));
+    h.push(cek("daftar produk admin", || Ok(format!("{} baris", katalog::daftar_produk_admin(conn, None, None, None, false, 1, 5, false)?.items.len()))));
     h.push(cek("stok sistem (stok_map) satu produk", || {
         let kode: Option<String> = conn
             .query_row_as::<(String,)>("SELECT KODE_ITEM FROM POS_PRODUCT WHERE AKTIF = 'Y' AND ROWNUM = 1", &[])
@@ -245,6 +252,43 @@ pub fn jalankan(conn: &Connection) -> AppResult<Vec<Hasil>> {
         }
     }));
     h.push(cek("pengaturan KONTROL_SALDO_QTY", || Ok(format!("{:?}", katalog::setting(conn, "KONTROL_SALDO_QTY")?))));
+    h.push(cek("daftar penyesuaian stok (audit)", || {
+        let h = persediaan::daftar_sesuai(conn, None, 1, 5)?;
+        Ok(format!("{} baris tampil", h.items.len()))
+    }));
+    h.push(cek("kartu stok rekonsiliasi dengan stok sistem", || {
+        let p: Option<(i64, String)> = conn
+            .query_row_as::<(i64, String)>("SELECT PRODUCTID, KODE_ITEM FROM POS_PRODUCT WHERE AKTIF = 'Y' AND ROWNUM = 1", &[])
+            .ok();
+        match p {
+            Some((id, kode)) => {
+                let k = persediaan::kartu_stok(conn, id, None, None, hari, 1, 5)?;
+                let sistem = katalog::stok_map(conn, std::slice::from_ref(&kode), awal, hari)?
+                    .get(&kode).copied().unwrap_or_default();
+                if k.saldo_akhir != sistem {
+                    return Err(AppError::Internal(format!("saldo akhir kartu {} != stok sistem {sistem}", k.saldo_akhir)));
+                }
+                Ok(format!("{kode}: awal {}, akhir {}, {} mutasi tampil", k.saldo_awal, k.saldo_akhir, k.items.len()))
+            }
+            None => Ok("tidak ada produk aktif".into()),
+        }
+    }));
+    h.push(cek("valuasi persediaan per kategori", || {
+        let v = persediaan::valuasi(conn, None, awal, hari)?;
+        Ok(format!("{} produk, nilai {}, tanpa HPP {}, {} kategori", v.total_produk, v.total_nilai, v.tanpa_hpp, v.per_kategori.len()))
+    }));
+    h.push(cek("valuasi persediaan per item", || {
+        let h = persediaan::valuasi_item(conn, None, awal, hari, 1, 50)?;
+        Ok(format!("{} item pada halaman pertama, ada_lagi={}", h.items.len(), h.ada_lagi))
+    }));
+    h.push(cek("stok minimum (daftar + jumlah)", || {
+        let (h, jumlah) = persediaan::stok_minimum(conn, None, None, awal, hari, 1, 5)?;
+        let n = persediaan::jumlah_stok_minimum(conn, awal, hari)?;
+        if jumlah != Some(n) {
+            return Err(AppError::Internal(format!("jumlah daftar {jumlah:?} != hitungan {n}")));
+        }
+        Ok(format!("{n} produk di bawah ambang, {} baris tampil", h.items.len()))
+    }));
     h.push(cek("daftar user", || Ok(format!("{} akun", user::list_users(conn)?.len()))));
     Ok(h)
 }

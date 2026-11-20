@@ -229,12 +229,52 @@ pub fn produk_by_barcode_satuan(conn: &Connection, barcode: &str) -> AppResult<O
     Ok(Some((r.get(0)?, r.get(1)?)))
 }
 
+/// Satuan tambahan untuk opname multi-satuan: nama, faktor konversi, barcode (tanpa harga jual).
+#[derive(Debug, Serialize)]
+pub struct SatuanTambahan {
+    pub satuan: String,
+    pub isi: Decimal,
+    pub barcode: String,
+}
+
+/// Batch per halaman untuk `multi_satuan=1` di /admin/stok dan /admin/stok-habis.
+pub fn satuan_tambahan(conn: &Connection, ids: &[i64]) -> AppResult<HashMap<i64, Vec<SatuanTambahan>>> {
+    Ok(satuan_map(conn, ids)?
+        .into_iter()
+        .map(|(id, v)| {
+            (
+                id,
+                v.into_iter()
+                    .map(|s| SatuanTambahan { satuan: s.satuan, isi: s.isi, barcode: s.barcode })
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+/// Kondisi pencarian nama/kode/barcode; `barcode_satuan` ikut mencocokkan barcode satuan tambahan
+/// sebelum paginasi (opt-in opname multi-satuan).
+fn kondisi_cari(b: &mut Binds, q: &str, barcode_satuan: bool) -> String {
+    b.add("q", like(q));
+    b.add("qraw", q.trim());
+    let mut s = String::from(
+        "(UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw",
+    );
+    if barcode_satuan {
+        s.push_str(
+            " OR EXISTS (SELECT 1 FROM POS_PRODUCT_SATUAN s WHERE s.PRODUCT_ID = p.PRODUCTID AND s.BARCODE = :qraw)",
+        );
+    }
+    s.push(')');
+    s
+}
+
 /// Ekspresi stok sistem (alias join dari `stok_join`): stok awal tahun + pembelian + selisih opname - penjualan - rusak.
-const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
+pub(crate) const STOK_EXPR: &str = "NVL(st.q,0) + NVL(pb.q,0) + NVL(so.q,0) - (NVL(pj.q,0) + NVL(rs.q,0))";
 
 /// Join agregat stok per KODE_ITEM untuk `POS_PRODUCT p` (bind `:dari`/`:sampai`).
 /// `inl` = daftar bind IN untuk membatasi kode (satu halaman); None = semua produk.
-fn stok_join(inl: Option<&str>) -> String {
+pub(crate) fn stok_join(inl: Option<&str>) -> String {
     let rng = "TO_DATE(:dari,'YYYY-MM-DD') AND TO_DATE(:sampai,'YYYY-MM-DD')";
     let batas = |kcol: &str| inl.map(|i| format!(" AND {kcol} IN ({i})")).unwrap_or_default();
     let sub = |t: &str, kcol: &str, qcol: &str, tgl: &str| {
@@ -309,10 +349,19 @@ pub struct StokHabis {
     pub satuan: String,
     pub kategori: String,
     pub stok: Decimal,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satuan_tambahan: Option<Vec<SatuanTambahan>>,
 }
 
-/// Produk aktif dengan stok sistem <= 0 (1 Jan tahun berjalan s/d `sampai`), urut nama.
+#[derive(Clone, Copy)]
+pub enum UrutanStokHabis {
+    Nama,
+    Qty,
+}
+
+/// Produk aktif dengan stok sistem <= 0 (1 Jan tahun berjalan s/d `sampai`).
 /// `jumlah` (total seluruh halaman) hanya dihitung pada halaman pertama.
+#[allow(clippy::too_many_arguments)]
 pub fn stok_habis(
     conn: &Connection,
     q: Option<&str>,
@@ -321,27 +370,31 @@ pub fn stok_habis(
     sampai: NaiveDate,
     page: u32,
     size: u32,
+    barcode_satuan: bool,
+    urutan: UrutanStokHabis,
 ) -> AppResult<(Halaman<StokHabis>, Option<i64>)> {
     let mut b = Binds::default();
     b.add("dari", dari.format("%Y-%m-%d"));
     b.add("sampai", sampai.format("%Y-%m-%d"));
     let mut where_sql = format!("WHERE p.AKTIF = 'Y' AND {STOK_EXPR} <= 0");
     if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
-        b.add("q", like(q));
-        b.add("qraw", q.trim());
-        where_sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw)");
+        where_sql.push_str(&format!(" AND {}", kondisi_cari(&mut b, q, barcode_satuan)));
     }
     if let Some(k) = kategori.filter(|k| !k.trim().is_empty()) {
         b.add("kat", k.trim());
         where_sql.push_str(" AND TO_CHAR(p.KATEGORI_ID) = :kat");
     }
-    b.add("off", (page.saturating_sub(1) * size).to_string());
+    b.add("off", (u64::from(page.saturating_sub(1)) * u64::from(size)).to_string());
     b.add("lim", (size + 1).to_string());
+    let urutan_qty = match urutan {
+        UrutanStokHabis::Nama => String::new(),
+        UrutanStokHabis::Qty => format!("({STOK_EXPR}) ASC, "),
+    };
     // COUNT(*) OVER () memberi total seluruh hasil dari agregasi yang sama (satu pemindaian, bukan dua).
     let sql = format!(
         "SELECT p.PRODUCTID, p.KODE_ITEM, p.PRODUCTNAME, p.SATUAN, k.KATEGORI, {}, COUNT(*) OVER () \
          FROM POS_PRODUCT p LEFT JOIN POS_KATEGORI k ON TO_CHAR(k.KODE) = TO_CHAR(p.KATEGORI_ID) {} {where_sql} \
-         ORDER BY p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
+         ORDER BY {urutan_qty}p.PRODUCTNAME, p.PRODUCTID OFFSET TO_NUMBER(:off) ROWS FETCH NEXT TO_NUMBER(:lim) ROWS ONLY",
         tm(STOK_EXPR),
         stok_join(None)
     );
@@ -358,6 +411,7 @@ pub fn stok_habis(
                 satuan: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
                 kategori: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
                 stok: dec(&r.get::<_, String>(5)?)?,
+                satuan_tambahan: None,
             });
         }
         Ok(())
@@ -754,6 +808,7 @@ fn map_admin(r: &oracle::Row) -> AppResult<ProdukAdmin> {
 }
 
 /// Daftar produk untuk admin: termasuk nonaktif, tanpa batas kategori. `aktif` = "Y" | "N" | None (semua).
+#[allow(clippy::too_many_arguments)]
 pub fn daftar_produk_admin(
     conn: &Connection,
     q: Option<&str>,
@@ -762,13 +817,12 @@ pub fn daftar_produk_admin(
     harga_rendah: bool,
     page: u32,
     size: u32,
+    barcode_satuan: bool,
 ) -> AppResult<Halaman<ProdukAdmin>> {
     let mut b = Binds::default();
     let mut sql = format!("SELECT {COLS_ADMIN} {FROM} WHERE 1 = 1");
     if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
-        b.add("q", like(q));
-        b.add("qraw", q.trim());
-        sql.push_str(" AND (UPPER(p.PRODUCTNAME) LIKE :q ESCAPE '\\' OR UPPER(p.KODE_ITEM) LIKE :q ESCAPE '\\' OR p.BARCODE = :qraw)");
+        sql.push_str(&format!(" AND {}", kondisi_cari(&mut b, q, barcode_satuan)));
     }
     if let Some(k) = kategori.filter(|k| !k.trim().is_empty()) {
         b.add("kat", k.trim());
