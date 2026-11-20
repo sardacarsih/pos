@@ -3,6 +3,7 @@
   import type { IsianProduk } from './katalog';
   import { badanProduk, badanToggleAktif, cekProdukBaru, inisial, paramKatalog, produkBaru } from './katalog';
   import IconButton from './IconButton.svelte';
+  import ProdukDrawer from './ProdukDrawer.svelte';
   import Photo from './Photo.svelte';
   import Search from '@lucide/svelte/icons/search';
   import Pencil from '@lucide/svelte/icons/pencil';
@@ -37,7 +38,6 @@
     if (katHapus && !katHapus.proses) katHapus = null;
     else if (katEdit && !katSaving) katEdit = null;
     else if (hapus && !hapus.proses) hapus = null;
-    else if (edit && !saving) edit = null;
     else if (invoice) invoice = null;
     else if (member) member = null;
   }
@@ -63,24 +63,14 @@
     try {
       const r = await api<{ satuan: { satuan: string; isi: string; harga: string; barcode: string }[] }>('/admin/produk/' + id + '/satuan');
       if (edit !== produk) return;
-      satuanList = r.satuan.map(s => ({ ...s, isi: Number(s.isi), harga: Number(s.harga) }));
+      satuanList = r.satuan.map(s => ({ ...s, isi: Number(s.isi), harga: Number(s.harga), barcode: s.barcode ?? '' }));
       satuanSiap = true;
     } catch (e) {
       if (edit === produk) error = (e as Error).message;
     }
   }
   function badanSatuan() {
-    return satuanList.map(s => ({ satuan: s.satuan.trim(), isi: s.isi, harga: s.harga, barcode: s.barcode.trim() || null }));
-  }
-  async function simpanSatuan() {
-    if (!edit?.id || !satuanSiap || saving) return;
-    const id = edit.id;
-    saving = true;
-    try {
-      await run(() => api('/admin/produk/' + id + '/satuan', { method: 'PUT', body: { satuan: badanSatuan() } }), 'Satuan disimpan.');
-    } finally {
-      saving = false;
-    }
+    return satuanList.map(s => ({ satuan: s.satuan.trim(), isi: s.isi, harga: s.harga, barcode: (s.barcode ?? '').trim() || null }));
   }
   async function saveProduct() { if (!edit || saving) return; const p = edit;
     if (!p.id) {
@@ -101,7 +91,24 @@
       }
       return;
     }
-    await run(() => api('/admin/produk/' + p.id, { method:'PUT', body: { nama:p.nama, barcode:p.barcode, satuan:p.satuan, kategori_id:p.kategori_id, harga:Number(p.harga), beli:Number(p.beli), aktif:p.aktif } })); if (!error) { edit = null; satuanFor = 0; } }
+    saving = true; error = '';
+    try {
+      await api('/admin/produk/' + p.id, { method: 'PUT', body: { nama: p.nama, barcode: p.barcode, satuan: p.satuan, kategori_id: p.kategori_id, harga: Number(p.harga), beli: Number(p.beli), aktif: p.aktif } });
+      if (satuanSiap) {
+        try { await api('/admin/produk/' + p.id + '/satuan', { method: 'PUT', body: { satuan: badanSatuan() } }); }
+        catch (e) { error = 'Data produk tersimpan, tetapi satuan gagal disimpan: ' + (e as Error).message; await load(); return; }
+      }
+      message = 'Produk ' + p.nama.trim() + ' disimpan.';
+      tutupProduk();
+      await load();
+    } catch (e) { error = (e as Error).message; }
+    finally { saving = false; }
+  }
+  function tutupProduk() { edit = null; satuanFor = 0; }
+  async function unggahFoto(file: File) {
+    if (!edit) return;
+    await run(() => api('/admin/produk/' + edit!.id + '/foto', { method: 'PUT', body: file, headers: { 'Content-Type': 'application/octet-stream' } }), 'Foto disimpan.');
+  }
   async function bukaHapus(p: Data) { hapus = { id: p.id, nama: p.nama, kode: p.kode, memuat: true, bisa: false, rincian: '', galat: '', proses: false }; try { const j = await api<Data>('/admin/produk/' + p.id + '/jejak'); hapus = { ...hapus, memuat: false, bisa: j.bisa_hapus, rincian: j.rincian }; } catch (e) { hapus = { ...hapus, memuat: false, galat: (e as Error).message }; } }
   async function konfirmHapus() { if (!hapus) return; const h = hapus; hapus = { ...h, proses: true, galat: '' }; try { await api('/admin/produk/' + h.id, { method: 'DELETE' }); products = products.filter(x => x.id !== h.id); message = `Produk "${h.nama}" dihapus permanen.`; hapus = null; } catch (e) { hapus = { ...h, proses: false, galat: (e as Error).message }; } }
   let katEdit: { id?: string; nama: string } | null = null, katSaving = false, katError = '';
@@ -151,71 +158,13 @@
 {:else if sub === 'harga'}<form class="search" on:submit|preventDefault={() => load()}><input bind:value={search} placeholder="Cari produk"/><button>Cari</button></form><p class="muted">{hargaRugi} produk harga jual ≤ HPP · {hargaTanpa} produk belum ada harga beli (HPP belum diisi). Yang rugi tampil lebih dulu.</p>{#each products as p}{@const sh = statusHarga(p.harga, p.beli)}<div class="admin-row"><div><strong>{p.nama}</strong><small>{p.kode} · {p.kategori} · jual {rp(p.harga)} · {#if sh.tipe === 'tanpa-hpp'}<span class="tanpa-hpp" style="color: #8a5a00; font-weight: 700">HPP belum diisi</span>{:else}beli {rp(p.beli)} · margin <span class="margin-neg" style="color: var(--danger, #b3261e)">{rp(sh.margin)}</span>{/if}</small></div><div class="actions"><button on:click={() => edit = {...p}}>Ubah</button></div></div>{:else}{#if !loading}<p class="muted">Tidak ada produk dengan harga jual ≤ HPP.</p>{/if}{/each}{#if more}<button class="secondary" on:click={() => load(true)}>Muat lebih banyak</button>{/if}
 {:else if sub === 'kategori'}<div id="kt-panel-kategori" role="tabpanel" aria-labelledby="kt-tab-kategori"><div class="kt-bar"><p class="muted" style="margin:0">Kelola kategori produk. Kategori yang masih dipakai produk tidak dapat dihapus.</p><button type="button" class="primary" style="min-height:44px" on:click={tambahKategori}><Plus size={18} aria-hidden="true"/> Tambah kategori</button></div>{#each categories as c (c.id)}<div class="admin-row"><div><strong>{c.nama}</strong><small>Kode {c.id}</small></div><div style="display:flex;gap:5px"><IconButton icon={Pencil} label="Ubah {c.nama}" hint="Ubah" on:click={() => { katError = ''; katEdit = { id: c.id, nama: c.nama }; }}/><IconButton icon={Trash2} danger label="Hapus {c.nama}" hint="Hapus" on:click={() => bukaHapusKategori(c)}/></div></div>{:else}{#if !loading}<p class="muted">Belum ada kategori.</p>{/if}{/each}<h3>Kategori tampil di kasir</h3><p class="muted">Jika tidak ada kategori yang dipilih, semua kategori ditampilkan.</p>{#each categories as c}<label class="check"><input type="checkbox" value={c.id} bind:group={chosen}/>{c.nama}</label>{/each}<button class="primary" on:click={() => run(() => api('/admin/kategori-tampil',{method:'PUT',body:{kategori_ids:chosen}}))}>Simpan kategori tampil</button></div>
 {:else if sub === 'rekap'}<label>Periode<select bind:value={period} on:change={() => load()}>{#each periods as p}<option value={String(p.periode)}>{p.periode} · {p.dari} – {p.sampai}</option>{/each}</select></label><p>Total: <strong>{rp(report.total)}</strong> · {report.jumlah_transaksi || 0} transaksi</p>{#each report.items || [] as m}<button class="list-button horizontal" on:click={() => openMember(m)}><span><strong>{m.nama}</strong><small>{m.nik} · {m.unit} · {m.jumlah} transaksi</small></span><strong>{rp(m.total)} <ChevronRight size={16} class="chev" aria-hidden="true"/></strong></button>{/each}{/if}</section>
-{#snippet satuanTambahan(dasar: string)}
-  <fieldset class="kt-satuan" disabled={saving}>
-    <legend>Satuan jual tambahan</legend>
-    <p class="muted">Isi adalah jumlah {dasar || 'satuan dasar'} per satuan jual. Stok dihitung dalam satuan dasar.</p>
-    {#each satuanList as s, i (s)}
-      <div class="form-grid kt-satuan-baris" role="group" aria-label="Satuan tambahan {i + 1}">
-        <label>Satuan<input bind:value={s.satuan} maxlength="20" required /></label>
-        <label>Isi<input type="number" bind:value={s.isi} min="1.0001" max="1000000" step="0.0001" required /></label>
-        <label>Harga jual<input type="number" bind:value={s.harga} min="0.01" step="0.01" required /></label>
-        <label>Barcode (opsional)<input bind:value={s.barcode} maxlength="50" /></label>
-        <button type="button" class="secondary" on:click={() => satuanList = satuanList.filter((_, j) => j !== i)}>Hapus satuan</button>
-      </div>
-    {/each}
-    <button type="button" class="secondary" disabled={satuanList.length >= 10}
-      on:click={() => satuanList = [...satuanList, { satuan: '', barcode: '' }]}>Tambah satuan</button>
-  </fieldset>
-{/snippet}
-
 {#if edit}
-  <div class="overlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="judul-produk">
-      <div class="row">
-        <h2 id="judul-produk">{edit.id ? 'Ubah produk' : 'Tambah produk'}</h2>
-        <button type="button" aria-label="Tutup" class="icon" disabled={saving}
-          on:click={() => { edit = null; satuanFor = 0; }}><X size={20} aria-hidden="true" /></button>
-      </div>
-      {#if error}<div class="error" role="alert">{error}</div>{/if}
-      <form on:submit|preventDefault={saveProduct}>
-        <fieldset class="kt-produk-fields" disabled={saving}>
-          <label>Nama<input bind:value={edit.nama} required /></label>
-          <label>Barcode<input bind:value={edit.barcode} /></label>
-          <label>Satuan dasar<input bind:value={edit.satuan} required /></label>
-          <label>Kategori<select bind:value={edit.kategori_id}>{#each categories as c}<option value={c.id}>{c.nama}</option>{/each}</select></label>
-          <label>Harga jual<input type="number" bind:value={edit.harga} min="0" required /></label>
-          <label>Harga beli<input type="number" bind:value={edit.beli} min="0" required /></label>
-          {#if edit.id}<label class="check"><input type="checkbox" bind:checked={edit.aktif} /> Aktif</label>{/if}
-        </fieldset>
-        {#if !edit.id}{@render satuanTambahan(edit.satuan)}{/if}
-        <button class="primary" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</button>
-      </form>
-      {#if edit.id}
-        {#if satuanSiap}
-          <form on:submit|preventDefault={simpanSatuan}>
-            {@render satuanTambahan(edit.satuan)}
-            <button class="primary" disabled={saving}>Simpan satuan</button>
-          </form>
-        {:else if error}
-          <button type="button" class="secondary" on:click={() => edit && muatSatuan(edit.id)}>Muat ulang satuan</button>
-        {/if}
-        <label>Foto produk (JPEG/PNG, maks. 1 MB)<input type="file" accept="image/jpeg,image/png" on:change={(e) => upload(e, edit!.id)} /></label>
-        <IconButton icon={Trash2} danger label="Hapus permanen" on:click={() => bukaHapus(edit!)} />
-      {/if}
-    </div>
-  </div>
+  <ProdukDrawer {edit} {categories} bind:satuanList {satuanSiap} {saving} {error} terkunci={!!hapus}
+    onSimpan={saveProduct} onTutup={tutupProduk} onHapus={() => edit && bukaHapus(edit)}
+    onFoto={unggahFoto} onMuatUlangSatuan={() => edit && muatSatuan(edit.id)} />
 {/if}
 {#if hapus}<div class="overlay" role="presentation"><div class="modal kt-dlg" role="alertdialog" aria-modal="true" aria-labelledby="kt-hapus-judul"><h2 id="kt-hapus-judul">Hapus permanen?</h2><p><strong>{hapus.nama}</strong><small>{hapus.kode}</small></p>{#if hapus.memuat}<p class="muted">Memeriksa riwayat produk…</p>{:else if hapus.galat}<div class="error" role="alert">{hapus.galat}</div>{:else if !hapus.bisa}<div class="error" role="alert">Tidak bisa dihapus: produk sudah punya riwayat ({hapus.rincian}). Nonaktifkan saja agar tidak muncul di kasir.</div>{:else}<p>Produk belum pernah dipakai di transaksi. Data dihapus dan <strong>tidak dapat dibatalkan</strong>.</p>{/if}<div class="acts"><button type="button" class="secondary" style="min-height:44px" on:click={() => hapus = null}>{hapus.bisa && !hapus.galat ? 'Batal' : 'Tutup'}</button>{#if hapus.bisa && !hapus.memuat}<button type="button" class="btn-danger" disabled={hapus.proses} on:click={konfirmHapus}>{hapus.proses ? 'Menghapus…' : 'Hapus permanen'}</button>{/if}</div></div></div>{/if}
 {#if katEdit}<div class="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="judul-kategori"><div class="row"><h2 id="judul-kategori">{katEdit.id ? 'Ubah kategori' : 'Tambah kategori'}</h2><button type="button" aria-label="Tutup" class="icon" disabled={katSaving} on:click={() => katEdit = null}><X size={20} aria-hidden="true"/></button></div>{#if katError}<div class="error" role="alert">{katError}</div>{/if}<form on:submit|preventDefault={simpanKategori}><label>Nama kategori<input bind:value={katEdit.nama} maxlength={50} required/></label><button class="primary" disabled={katSaving}>{katSaving ? 'Menyimpan…' : 'Simpan'}</button></form></div></div>{/if}
 {#if katHapus}<div class="overlay" role="presentation"><div class="modal kt-dlg" role="alertdialog" aria-modal="true" aria-labelledby="kt-hapus-kategori-judul"><h2 id="kt-hapus-kategori-judul">Hapus kategori?</h2><p><strong>{katHapus.nama}</strong><small>Kode {katHapus.id}</small></p>{#if katHapus.memuat}<p class="muted">Memeriksa pemakaian kategori…</p>{:else if katHapus.galat}<div class="error" role="alert">{katHapus.galat}</div>{:else if !katHapus.bisa}<div class="error" role="alert">Tidak bisa dihapus: kategori masih dipakai {katHapus.jumlah} produk. Pindahkan produk ke kategori lain dulu.</div>{:else}<p>Kategori belum dipakai produk. Data dihapus dan <strong>tidak dapat dibatalkan</strong>.</p>{/if}<div class="acts"><button type="button" class="secondary" style="min-height:44px" on:click={() => katHapus = null}>{katHapus.bisa && !katHapus.galat ? 'Batal' : 'Tutup'}</button>{#if katHapus.bisa && !katHapus.memuat}<button type="button" class="btn-danger" disabled={katHapus.proses} on:click={konfirmHapusKategori}>{katHapus.proses ? 'Menghapus…' : 'Hapus kategori'}</button>{/if}</div></div></div>{/if}
 {#if member}<div class="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="judul-member"><div class="row"><h2 id="judul-member">{member.nama}</h2><button aria-label="Tutup" class="icon" on:click={() => member = null}><X size={20} aria-hidden="true"/></button></div><p>{member.nik} · {rp(member.total)}</p>{#each memberItems as t}<button class="list-button horizontal" on:click={() => showInvoice(t.no_transaksi)}><span>{t.no_transaksi}<small>{t.tanggal}</small></span><strong>{rp(t.total)} <ChevronRight size={16} class="chev" aria-hidden="true"/></strong></button>{:else}<p class="empty">Tidak ada transaksi.</p>{/each}{#if memberMore}<button class="secondary wide" on:click={() => openMember(member!, true)}>Muat lebih banyak</button>{/if}</div></div>{/if}
 {#if invoice}<Receipt {invoice} close={() => invoice = null}/>{/if}
-
-<style>
-  .kt-produk-fields, .kt-satuan { min-width: 0; padding: 0; margin: 0 0 1rem; border: 0; }
-  .kt-satuan legend { font-weight: 650; padding: 0; }
-  .kt-satuan-baris { margin-bottom: .75rem; }
-  .kt-satuan-baris label { min-width: 0; }
-  .kt-satuan-baris button { justify-self: start; }
-</style>

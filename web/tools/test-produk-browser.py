@@ -87,6 +87,34 @@ def test_produk(url):
         box = edit.get_by_role("group", name="Satuan tambahan 1")
         expect(box.get_by_label("Isi")).to_have_value("12")
         expect(box.get_by_label("Barcode (opsional)")).to_have_value("899012")
+
+        # Redesign: margin langsung, penanda belum disimpan, konfirmasi buang, Ctrl+Enter menyimpan.
+        harga = edit.get_by_role("group", name="Harga", exact=True)
+        expect(edit.get_by_text("Belum disimpan")).to_have_count(0)
+        expect(edit.get_by_role("status").filter(has_text="Margin")).to_be_visible()
+        harga.get_by_label("Harga jual", exact=True).fill("3000")
+        expect(edit.get_by_text("Rugi")).to_be_visible()
+        expect(edit.get_by_text("Belum disimpan")).to_be_visible()
+        harga.get_by_label("Harga beli", exact=True).fill("")
+        expect(edit.get_by_text("HPP belum diisi")).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(edit.get_by_text("Buang perubahan yang belum disimpan?")).to_be_visible()
+        edit.get_by_role("button", name="Lanjut mengedit").click()
+        expect(edit).to_be_visible()
+        harga.get_by_label("Harga jual", exact=True).fill("6000")
+        harga.get_by_label("Harga beli", exact=True).fill("4500")
+        expect(edit.get_by_text("Margin Rp")).to_be_visible()
+        n_tulis = len(writes)
+        edit.get_by_label("Nama", exact=True).press("Control+Enter")
+        expect(edit).to_be_hidden()
+        assert len(writes) > n_tulis and writes[n_tulis][0] == "PUT", writes
+
+        # Tanpa perubahan, Esc langsung menutup.
+        page.get_by_role("button", name="Ubah Teh Kotak").click()
+        edit = page.get_by_role("dialog", name="Ubah produk")
+        expect(edit).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(edit).to_be_hidden()
         browser.close()
 
 
