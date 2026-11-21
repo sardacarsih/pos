@@ -79,14 +79,21 @@ impl FromRequestParts<AppState> for Auth {
             let iat = klaim.iat;
             let tersedia = crate::db::run(&state.pool, move |c| {
                 Ok(c.query_row_as::<i64>(
-                    "SELECT COUNT(*) FROM MOB_USER U JOIN FIN_ANGGOTA A ON A.NIK = U.NIK
+                    "SELECT COUNT(*) FROM MOB_USER U LEFT JOIN FIN_ANGGOTA A ON A.NIK = U.NIK
                      WHERE U.USER_ID = :1 AND U.NIK = :2 AND U.ROLE = 'ANGGOTA'
-                       AND U.IS_ACTIVE = 1 AND A.ANGGOTA = 'Y'
+                       AND U.IS_ACTIVE = 1
                        AND NOT EXISTS (
                          SELECT 1 FROM MOB_ANGGOTA_RIWAYAT R
                          WHERE R.ID_PELANGGAN = A.ID_PELANGGAN AND R.JENIS = 'BERHENTI'
-                           AND SYS_EXTRACT_UTC(FROM_TZ(R.WAKTU, 'Asia/Jakarta')) >=
+                           AND (
+                             SYS_EXTRACT_UTC(FROM_TZ(R.WAKTU, 'Asia/Jakarta')) >=
                                TIMESTAMP '1970-01-01 00:00:00' + NUMTODSINTERVAL(:3, 'SECOND')
+                             OR NOT EXISTS (
+                               SELECT 1 FROM MOB_ANGGOTA_RIWAYAT G
+                               WHERE G.ID_PELANGGAN = R.ID_PELANGGAN
+                                 AND G.JENIS = 'GABUNG_KEMBALI' AND G.ID > R.ID
+                             )
+                           )
                        )",
                     &[&id, &nik, &iat],
                 )? == 1)
