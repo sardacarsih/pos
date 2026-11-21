@@ -35,6 +35,7 @@ fn uji_http_web(
         default_nik: "NIK-UJI".into(),
         trust_proxy: false,
         default_max_tenor: 12,
+        registrasi_anggota_web: false,
         belanja_demo: true,
     });
     let pool = db::connect(&cfg).unwrap();

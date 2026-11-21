@@ -3,6 +3,9 @@ pub mod anggota;
 pub mod auth;
 pub mod kasir;
 pub mod kas;
+mod anggota_admin;
+mod riwayat_anggota;
+mod unit_kerja_admin;
 pub mod pembelian;
 pub mod persediaan;
 pub mod pinjaman;
@@ -69,7 +72,30 @@ impl FromRequestParts<AppState> for Auth {
             .and_then(|v| v.to_str().ok())
             .ok_or(AppError::Unauthorized)?;
         let t = h.strip_prefix("Bearer ").ok_or(AppError::Unauthorized)?;
-        Ok(Auth(token::verify(&state.cfg.jwt_secret, t)?))
+        let klaim = token::verify(&state.cfg.jwt_secret, t)?;
+        if klaim.role == Role::Anggota && riwayat_anggota::aktif() {
+            let id = klaim.sub;
+            let nik = klaim.nik.clone().ok_or(AppError::Unauthorized)?;
+            let iat = klaim.iat;
+            let tersedia = crate::db::run(&state.pool, move |c| {
+                Ok(c.query_row_as::<i64>(
+                    "SELECT COUNT(*) FROM MOB_USER U JOIN FIN_ANGGOTA A ON A.NIK = U.NIK
+                     WHERE U.USER_ID = :1 AND U.NIK = :2 AND U.ROLE = 'ANGGOTA'
+                       AND U.IS_ACTIVE = 1 AND A.ANGGOTA = 'Y'
+                       AND NOT EXISTS (
+                         SELECT 1 FROM MOB_ANGGOTA_RIWAYAT R
+                         WHERE R.ID_PELANGGAN = A.ID_PELANGGAN AND R.JENIS = 'BERHENTI'
+                           AND SYS_EXTRACT_UTC(FROM_TZ(R.WAKTU, 'Asia/Jakarta')) >=
+                               TIMESTAMP '1970-01-01 00:00:00' + NUMTODSINTERVAL(:3, 'SECOND')
+                       )",
+                    &[&id, &nik, &iat],
+                )? == 1)
+            }).await?;
+            if !tersedia {
+                return Err(AppError::Unauthorized);
+            }
+        }
+        Ok(Auth(klaim))
     }
 }
 
@@ -144,6 +170,13 @@ pub fn idempotency_key(headers: &HeaderMap) -> AppResult<String> {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .nest_service("/downloads", ServeDir::new("downloads"))
+        .route("/api/v1/admin/anggota", get(anggota_admin::daftar).post(anggota_admin::daftar_baru))
+        .route("/api/v1/admin/anggota/riwayat", get(riwayat_anggota::daftar))
+        .route("/api/v1/admin/anggota/{id}/mutasi", post(riwayat_anggota::ubah))
+        .route("/api/v1/admin/anggota/{id}", get(anggota_admin::lihat).patch(anggota_admin::ubah))
+        .route("/api/v1/admin/anggota/{id}/aktif", put(anggota_admin::ubah_aktif))
+        .route("/api/v1/admin/unit-kerja", get(unit_kerja_admin::daftar).post(unit_kerja_admin::buat))
+        .route("/api/v1/admin/unit-kerja/{kode}", axum::routing::patch(unit_kerja_admin::ubah).delete(unit_kerja_admin::hapus))
         .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/refresh", post(auth::refresh))

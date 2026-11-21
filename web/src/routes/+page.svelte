@@ -17,6 +17,7 @@
   import { sinkronPembelian } from '$lib/pembelianOffline';
   import type { User } from '$lib/types';
   import Shop from '$lib/Shop.svelte'; import General from '$lib/General.svelte'; import Admin from '$lib/Admin.svelte'; import Users from '$lib/Users.svelte'; import TagihanRekap from '$lib/TagihanRekap.svelte';
+  import AnggotaAdmin from '$lib/AnggotaAdmin.svelte';
   import Sidebar from '$lib/Sidebar.svelte'; import BottomNav from '$lib/BottomNav.svelte';
   import { menuUntuk, labelView, MENU_OFFLINE, type Badge } from '$lib/nav';
   import Topbar from '$lib/Topbar.svelte';
@@ -201,6 +202,7 @@
         {#key user.id}<PinjamanSaya {user}/>{/key}
       {:else if view === 'belanja'}<Shop {user}/>
       {:else if user.role === 'ADMIN' && view === 'users'}<Users currentUserId={user.id}/>
+      {:else if user.role === 'ADMIN' && view === 'anggota-admin'}<AnggotaAdmin/>
       {:else if user.role === 'ADMIN' && view === 'tagihan-rekap'}<TagihanRekap/>
       {:else if user.role === 'ADMIN' && view === 'persediaan'}<Persediaan bind:this={persediaan} {tabAwal}/>
       {:else if user.role === 'ADMIN' && ['produk','harga','rekap'].includes(view)}<Admin {view}/>

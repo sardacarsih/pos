@@ -13,6 +13,7 @@ pub struct Config {
     pub default_max_tenor: i32,
     /// Belanja mandiri anggota hanya simulasi (divalidasi penuh, tidak disimpan). Default true.
     pub belanja_demo: bool,
+    pub registrasi_anggota_web: bool,
 }
 
 /// Muat `.env` sederhana (KEY=VALUE) tanpa menimpa environment yang sudah ada.
@@ -64,7 +65,11 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(12),
-            belanja_demo: env::var("POS_BELANJA_MANDIRI_DEMO").map(|v| v != "false").unwrap_or(true),
+            registrasi_anggota_web: env::var("POS_WEB_MEMBER_REGISTRATION").as_deref()
+                == Ok("true"),
+            belanja_demo: env::var("POS_BELANJA_MANDIRI_DEMO")
+                .map(|v| v != "false")
+                .unwrap_or(true),
         })
     }
 }

@@ -21,7 +21,7 @@ export type Badge = Partial<Record<JenisBadge, number>>;
 export const MAKS_BOTTOM_NAV = 5;
 
 /** Semua id view yang dikenali router di +page.svelte. */
-export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'produk', 'persediaan', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas', 'pinjaman'] as const;
+export const VIEW_DIKENAL = ['dashboard', 'belanja', 'riwayat', 'kartu', 'profil', 'users', 'anggota-admin', 'produk', 'persediaan', 'harga', 'rekap', 'tagihan-rekap', 'pembelian', 'kas', 'pinjaman'] as const;
 
 const AKUN: Kelompok = { judul: 'Akun', item: [{ id: 'profil', label: 'Profil', ikon: 'profil' }] };
 const PINJAMAN: ItemMenu = { id: 'pinjaman', label: 'Pinjaman', ikon: 'pinjaman' };
@@ -52,7 +52,7 @@ const MENU: Record<Role, Menu> = {
       { judul: 'Katalog', item: [{ id: 'produk', label: 'Katalog produk', ikon: 'produk' }] },
       { judul: 'Pengadaan', item: [PEMBELIAN] },
       { judul: 'Anggota & keuangan', item: [{ id: 'rekap', label: 'Rekap anggota', pendek: 'Rekap', ikon: 'rekap' }, { id: 'tagihan-rekap', label: 'Tagihan vs Rekap', ikon: 'tagihan' }, { id: 'kas', label: 'Kas & Bank', pendek: 'Kas', ikon: 'kas' }, PINJAMAN] },
-      { judul: 'Pengelolaan', item: [{ id: 'users', label: 'Pengguna', ikon: 'pengguna' }] },
+      { judul: 'Pengelolaan', item: [{ id: 'users', label: 'Pengguna', ikon: 'pengguna' }, { id: 'anggota-admin', label: 'Anggota Koperasi', ikon: 'pengguna' }] },
       AKUN
     ],
     utama: ['dashboard', 'persediaan', 'rekap']
